@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Re-embedding 판단 로직 — 애니메이션 시각화</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Pretendard',-apple-system,'Segoe UI',sans-serif;background:#080c18;color:#e2e8f0;line-height:1.7}
+.wrap{max-width:1200px;margin:0 auto;padding:2rem 1.5rem 4rem}
+h1{text-align:center;font-size:2rem;font-weight:800;color:#f1f5f9;margin-bottom:.3rem}
+.subtitle{text-align:center;color:#64748b;font-size:1rem;margin-bottom:2.5rem}
+
+/* Tabs */
+.tabs{display:flex;gap:3px;overflow-x:auto;margin-bottom:0}
+.tab{padding:10px 18px;background:#111827;border:1px solid #1f2937;border-bottom:none;border-radius:10px 10px 0 0;cursor:pointer;color:#64748b;font-weight:700;font-size:.82rem;white-space:nowrap;transition:all .15s;user-select:none}
+.tab:hover{background:#1a2234;color:#94a3b8}
+.tab.active{background:#1e293b;color:#f1f5f9;border-color:#334155}
+
+/* Panel */
+.panel{display:none;background:#111827;border:1px solid #1f2937;border-radius:0 12px 12px 12px;padding:2rem;min-height:600px}
+.panel.active{display:block}
+
+/* Case Banner */
+.case-banner{margin-bottom:1.2rem}
+.case-badges{display:flex;gap:6px;margin-bottom:6px}
+.badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:.72rem;font-weight:700;letter-spacing:.5px}
+.badge-modify{background:#92400e;color:#fcd34d}
+.badge-add{background:#065f46;color:#6ee7b7}
+.badge-delete{background:#7f1d1d;color:#fca5a5}
+.badge-move{background:#1e3a5f;color:#93c5fd}
+.badge-group{background:#581c87;color:#d8b4fe}
+.badge-split{background:#312e81;color:#a5b4fc}
+.badge-nm{background:linear-gradient(135deg,#581c87,#1e3a5f);color:#c4b5fd;border:1px solid rgba(196,181,253,.3)}
+.case-title{font-size:1.25rem;font-weight:800;color:#f1f5f9;margin-bottom:4px}
+.case-desc{font-size:.88rem;color:#94a3b8}
+
+/* Controls */
+.controls{display:flex;align-items:center;gap:10px;margin:1.2rem 0;padding:12px 16px;background:#0a0e1a;border:1px solid #1a2233;border-radius:10px}
+.btn{padding:8px 20px;border:none;border-radius:8px;font-weight:700;font-size:.82rem;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px}
+.btn-play{background:#3b82f6;color:#fff}
+.btn-play:hover{background:#2563eb}
+.btn-play:disabled{background:#1e3a5f;color:#64748b;cursor:not-allowed}
+.btn-step{background:#1e293b;color:#94a3b8;border:1px solid #334155}
+.btn-step:hover{background:#334155;color:#f1f5f9}
+.btn-step:disabled{opacity:.4;cursor:not-allowed}
+.btn-reset{background:#1e293b;color:#94a3b8;border:1px solid #334155}
+.btn-reset:hover{background:#334155;color:#f1f5f9}
+.progress-bar{flex:1;height:6px;background:#1e293b;border-radius:3px;overflow:hidden;margin:0 8px}
+.progress-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:3px;transition:width .4s ease;width:0}
+.step-label{font-size:.75rem;color:#64748b;min-width:80px;text-align:right}
+
+/* Block Diagram */
+.diagram{position:relative;padding:30px 20px 20px;background:#0a0e1a;border:1px solid #1a2233;border-radius:12px;margin:1rem 0;overflow-x:auto}
+.diagram-label{position:absolute;top:8px;left:16px;font-size:.65rem;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:1.5px}
+.block-row{display:flex;gap:0;align-items:flex-start;min-height:80px;position:relative;flex-wrap:wrap}
+
+/* Chunk Group in Diagram */
+.chunk-group{display:flex;gap:3px;padding:8px 8px 0;border-radius:8px;position:relative;margin:0 4px;transition:all .5s ease;border:2px solid transparent;flex-direction:column;align-items:center}
+.chunk-group .chunk-blocks{display:flex;gap:3px}
+.chunk-group .chunk-label{font-size:.6rem;font-weight:800;text-align:center;margin-top:4px;padding:2px 4px;line-height:1.2;transition:all .4s ease;word-break:keep-all}
+
+/* Block in Diagram */
+.block{width:52px;min-height:44px;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.6rem;font-weight:800;transition:all .5s ease;position:relative;overflow:hidden}
+.block .block-id{font-size:.65rem;font-weight:900}
+.block .block-hint{font-size:.5rem;opacity:.7;max-width:46px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.block-short{min-height:28px}
+.block-tall{min-height:60px}
+
+/* Block Colors */
+.blk-normal{background:#1e293b;color:#64748b}
+.blk-modified{background:#f59e0b;color:#1e293b}
+.blk-added{background:#10b981;color:#1e293b}
+.blk-deleted{background:#ef4444;color:#fff}
+.blk-heading{background:#0ea5e9;color:#fff}
+.blk-moved{background:#3b82f6;color:#fff}
+.blk-target{border:2px solid #f59e0b;background:rgba(245,158,11,.15);color:#f59e0b}
+
+/* Chunk Group Colors */
+.cg-keep{background:rgba(59,130,246,.06);border-color:rgba(59,130,246,.2)}
+.cg-keep .chunk-label{color:#3b82f6}
+.cg-affected{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.3)}
+.cg-affected .chunk-label{color:#f59e0b}
+.cg-rebuild{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.3)}
+.cg-rebuild .chunk-label{color:#8b5cf6}
+.cg-new{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.3)}
+.cg-new .chunk-label{color:#10b981}
+.cg-delete{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3)}
+.cg-delete .chunk-label{color:#ef4444}
+.cg-dimmed{opacity:.3}
+
+/* Animations */
+@keyframes scanner{
+  0%{left:-60px;opacity:0}
+  10%{opacity:1}
+  90%{opacity:1}
+  100%{left:calc(100% + 60px);opacity:0}
+}
+@keyframes pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}
+  50%{box-shadow:0 0 20px 6px rgba(245,158,11,.3)}
+}
+@keyframes pulse-red{
+  0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}
+  50%{box-shadow:0 0 20px 6px rgba(239,68,68,.3)}
+}
+@keyframes pulse-green{
+  0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.5)}
+  50%{box-shadow:0 0 20px 6px rgba(16,185,129,.3)}
+}
+@keyframes pulse-purple{
+  0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.5)}
+  50%{box-shadow:0 0 20px 6px rgba(139,92,246,.3)}
+}
+@keyframes pulse-blue{
+  0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.5)}
+  50%{box-shadow:0 0 20px 6px rgba(59,130,246,.3)}
+}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-3px)}
+  40%{transform:translateX(3px)}
+  60%{transform:translateX(-2px)}
+  80%{transform:translateX(2px)}
+}
+@keyframes dissolve{
+  0%{opacity:1;transform:scale(1);filter:blur(0)}
+  50%{opacity:.5;transform:scale(.95);filter:blur(1px)}
+  100%{opacity:0;transform:scale(.85);filter:blur(4px)}
+}
+@keyframes materialize{
+  0%{opacity:0;transform:scale(.8) translateY(10px);filter:blur(4px)}
+  50%{opacity:.6;transform:scale(.95) translateY(3px);filter:blur(1px)}
+  100%{opacity:1;transform:scale(1) translateY(0);filter:blur(0)}
+}
+@keyframes slideIn{
+  0%{opacity:0;transform:translateY(-20px)}
+  100%{opacity:1;transform:translateY(0)}
+}
+@keyframes moveBlock{
+  0%{transform:translateY(0)}
+  30%{transform:translateY(-40px)}
+  70%{transform:translateY(-40px) translateX(var(--move-x,100px))}
+  100%{transform:translateY(0) translateX(var(--move-x,100px))}
+}
+@keyframes glow-border{
+  0%,100%{border-color:rgba(245,158,11,.3)}
+  50%{border-color:rgba(245,158,11,.8)}
+}
+@keyframes scanline{
+  0%{left:-4px}
+  100%{left:calc(100% + 4px)}
+}
+@keyframes fadeInUp{
+  0%{opacity:0;transform:translateY(12px)}
+  100%{opacity:1;transform:translateY(0)}
+}
+@keyframes checkmark{
+  0%{transform:scale(0) rotate(-45deg);opacity:0}
+  50%{transform:scale(1.3) rotate(0);opacity:1}
+  100%{transform:scale(1) rotate(0);opacity:1}
+}
+
+.scanning .block-row::after{
+  content:'';position:absolute;top:0;bottom:0;width:4px;
+  background:linear-gradient(180deg,transparent,#3b82f6,transparent);
+  border-radius:2px;box-shadow:0 0 20px 4px rgba(59,130,246,.4);
+  animation:scanline 1.2s ease-in-out;z-index:10;
+}
+.anim-pulse{animation:pulse .8s ease-in-out 2}
+.anim-pulse-red{animation:pulse-red .8s ease-in-out 2}
+.anim-pulse-green{animation:pulse-green .8s ease-in-out 2}
+.anim-pulse-purple{animation:pulse-purple .8s ease-in-out 2}
+.anim-pulse-blue{animation:pulse-blue .8s ease-in-out 2}
+.anim-shake{animation:shake .4s ease-in-out}
+.anim-dissolve{animation:dissolve .8s ease-out forwards}
+.anim-materialize{animation:materialize .7s ease-out forwards}
+.anim-slideIn{animation:slideIn .5s ease-out}
+.anim-glow{animation:glow-border 1s ease-in-out 2}
+
+/* Step Log */
+.step-log{margin:1rem 0;min-height:200px}
+.step-entry{display:flex;gap:10px;margin:6px 0;font-size:.84rem;align-items:flex-start;opacity:0;transform:translateY(8px);transition:all .4s ease}
+.step-entry.visible{opacity:1;transform:translateY(0)}
+.step-num{min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:.7rem;font-weight:800;flex-shrink:0}
+.sn-scan{background:#1e3a5f;color:#60a5fa}
+.sn-detect{background:#78350f;color:#fcd34d}
+.sn-action{background:#3b0764;color:#d8b4fe}
+.sn-result{background:#064e3b;color:#6ee7b7}
+.sn-delete{background:#450a0a;color:#fca5a5}
+.step-text{color:#94a3b8;padding-top:2px}
+.step-text em{font-style:normal;font-weight:700}
+.step-text .t-mod{color:#fbbf24}
+.step-text .t-add{color:#34d399}
+.step-text .t-del{color:#f87171}
+.step-text .t-reb{color:#a78bfa}
+.step-text .t-keep{color:#60a5fa}
+.step-text .t-imp{color:#f59e0b;font-weight:700}
+
+/* Change Event */
+.change-event{padding:14px 18px;margin:12px 0;background:rgba(245,158,11,.06);border:1px dashed rgba(245,158,11,.25);border-radius:10px;font-size:.85rem;opacity:0;transform:translateY(-10px);transition:all .5s ease}
+.change-event.visible{opacity:1;transform:translateY(0)}
+.change-icon{font-size:1.3rem;margin-right:10px}
+.change-title{color:#fbbf24;font-weight:700}
+.change-payload{font-size:.78rem;color:#94a3b8;margin-top:3px;font-family:'Fira Code','Cascadia Code',monospace}
+.cp-mod{color:#fbbf24}.cp-add{color:#34d399}.cp-del{color:#f87171}.cp-blk{color:#60a5fa}.cp-sep{color:#334155;margin:0 2px}
+
+/* Transition Map (animated) */
+.tmap{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;padding:14px 18px;background:#0a0e1a;border-radius:10px;margin:14px 0;border:1px solid #1a2233;opacity:0;transform:translateY(8px);transition:all .5s ease}
+.tmap.visible{opacity:1;transform:translateY(0)}
+.tmap-title{font-size:.72rem;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:1.5px;width:100%;margin-bottom:4px}
+.tflow{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;opacity:0;transform:scale(.9);transition:all .4s ease}
+.tflow.visible{opacity:1;transform:scale(1)}
+.tbadge{padding:3px 10px;border-radius:14px;font-size:.72rem;font-weight:700}
+.tb-from{background:#1e293b;color:#94a3b8}
+.tb-keep{background:#1e3a5f;color:#93c5fd}
+.tb-rebuild{background:#3b0764;color:#d8b4fe}
+.tb-new{background:#064e3b;color:#6ee7b7}
+.tb-delete{background:#450a0a;color:#fca5a5}
+.tarrow{color:#475569}
+
+/* Summary */
+.summary{background:linear-gradient(135deg,#0f172a,#162032);border:1px solid #1e3a5f;border-radius:12px;padding:18px 22px;margin-top:16px;opacity:0;transform:translateY(10px);transition:all .6s ease}
+.summary.visible{opacity:1;transform:translateY(0)}
+.summary-title{font-size:.85rem;font-weight:800;color:#f1f5f9;margin-bottom:8px}
+.summary-text{font-size:.85rem;color:#94a3b8;margin-bottom:4px}
+.summary-cost{font-size:.9rem;font-weight:700;margin-top:8px}
+.cost-low{color:#10b981}.cost-mid{color:#f59e0b}.cost-high{color:#ef4444}.cost-zero{color:#10b981}
+.summary-key{margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;font-size:.82rem;color:#f59e0b;font-weight:600}
+
+/* Arrow between diagrams */
+.arrow-separator{text-align:center;font-size:2rem;color:#475569;margin:8px 0;opacity:0;transition:all .4s ease}
+.arrow-separator.visible{opacity:1}
+
+/* Split wrap */
+.split-wrap{display:flex;gap:0;border:2px dashed rgba(139,92,246,.35);border-radius:10px;padding:4px;margin:0 4px}
+.split-wrap .chunk-group{margin:0 2px}
+
+/* Speed selector */
+.speed-sel{display:flex;align-items:center;gap:4px;margin-left:auto;font-size:.72rem;color:#64748b}
+.speed-sel select{background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:2px 6px;font-size:.72rem;cursor:pointer}
+
+/* Delete chunk strikethrough */
+.cg-delete .block{opacity:.5;text-decoration:line-through}
+.cg-delete .chunk-label{text-decoration:line-through}
+
+/* Dim keep chunks when others are highlighted */
+.chunk-group.cg-dimmed{opacity:.25;transition:opacity .5s ease}
+
+/* Speed control highlight */
+.speed-sel select:focus{outline:1px solid #3b82f6}
+
+/* Smooth scroll for step log */
+.step-log{scroll-behavior:smooth}
+
+/* Tooltip-like label for blocks on hover */
+.block{cursor:default}
+.block:hover{transform:scale(1.08);z-index:5}
+
+/* Legend inline for quick reference */
+.legend-inline{display:flex;gap:12px;flex-wrap:wrap;padding:8px 14px;margin:8px 0;background:#0a0e1a;border-radius:8px;border:1px solid #1a2233;font-size:.7rem}
+.legend-inline .li-item{display:flex;align-items:center;gap:4px}
+.legend-inline .li-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+@media(max-width:700px){
+  .wrap{padding:1rem}
+  .tabs{gap:2px}
+  .tab{padding:8px 12px;font-size:.72rem}
+  .panel{padding:1rem}
+  .block{width:40px;min-height:36px}
+  .controls{flex-wrap:wrap;gap:6px}
+  .btn{padding:6px 14px;font-size:.75rem}
+  .speed-sel{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Re-embedding 판단 로직 시각화</h1>
+<p class="subtitle">retrieval-service가 변경을 감지하고 임베딩 범위를 결정하는 과정 — 애니메이션</p>
+
+<div class="legend-inline">
+  <div class="li-item"><div class="li-swatch" style="background:#1e293b"></div>일반 블록</div>
+  <div class="li-item"><div class="li-swatch" style="background:#f59e0b"></div>수정됨</div>
+  <div class="li-item"><div class="li-swatch" style="background:#10b981"></div>추가</div>
+  <div class="li-item"><div class="li-swatch" style="background:#ef4444"></div>삭제</div>
+  <div class="li-item"><div class="li-swatch" style="background:#3b82f6"></div>이동</div>
+  <div class="li-item"><div class="li-swatch" style="background:#0ea5e9"></div>헤딩</div>
+  <div class="li-item"><div class="li-swatch" style="border:2px solid #f59e0b;background:transparent"></div>변경 대상</div>
+  <div class="li-item">|</div>
+  <div class="li-item" style="color:#3b82f6">■ 유지</div>
+  <div class="li-item" style="color:#f59e0b">■ 영향</div>
+  <div class="li-item" style="color:#8b5cf6">■ 재생성</div>
+  <div class="li-item" style="color:#10b981">■ 신규</div>
+  <div class="li-item" style="color:#ef4444">■ 삭제</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="c1">Case 1: 수정</div>
+  <div class="tab" data-tab="c2">Case 2: 추가</div>
+  <div class="tab" data-tab="c3">Case 3: 삭제</div>
+  <div class="tab" data-tab="c4">Case 4: 이동</div>
+  <div class="tab" data-tab="c5">Case 5: 그룹 영향</div>
+  <div class="tab" data-tab="c6">Case 6: 복합</div>
+  <div class="tab" data-tab="c7">Case 7: 블록 분할</div>
+  <div class="tab" data-tab="c8">Case 8: N:M 매핑</div>
+</div>
+
+<div id="c1" class="panel active"></div>
+<div id="c2" class="panel"></div>
+<div id="c3" class="panel"></div>
+<div id="c4" class="panel"></div>
+<div id="c5" class="panel"></div>
+<div id="c6" class="panel"></div>
+<div id="c7" class="panel"></div>
+<div id="c8" class="panel"></div>
+</div>
+
+<script>
+const CASES = {
+  c1: {
+    badges: [{t:'MODIFY',c:'badge-modify'}],
+    title: '블록 1개 텍스트 수정 (토씨 수정)',
+    desc: 'B5 블록의 텍스트가 소폭 변경 → B5가 속한 청크(C3)만 재생성하는 최소 비용 시나리오',
+    beforeBlocks: [
+      {id:'B1',hint:'계좌개설 안내',type:'normal'},
+      {id:'B2',hint:'영업점/모바일',type:'normal'},
+      {id:'B3',hint:'필요서류',type:'normal'},
+      {id:'B4',hint:'미성년자 동의',type:'normal'},
+      {id:'B5',hint:'비대면 인증',type:'target'},
+      {id:'B6',hint:'상품종류',type:'normal'},
+      {id:'B7',hint:'계좌한도',type:'normal'},
+      {id:'B8',hint:'외국인 서류',type:'normal'},
+      {id:'B9',hint:'법인 서류',type:'normal'},
+      {id:'B10',hint:'고객센터',type:'normal'}
+    ],
+    beforeChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep'},
+      {id:'C2',blockIds:['B3'],status:'keep'},
+      {id:'C3',blockIds:['B4','B5'],status:'affected'},
+      {id:'C4',blockIds:['B6','B7'],status:'keep'},
+      {id:'C5',blockIds:['B8','B9','B10'],status:'keep'}
+    ],
+    changeEvent: {
+      title: 'B5의 content_hash 변경 감지',
+      payload: '<span class="cp-mod">modified: ["B5"]</span><span class="cp-sep"> · </span><span class="cp-add">added: []</span><span class="cp-sep"> · </span><span class="cp-del">removed: []</span>'
+    },
+    afterChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep'},
+      {id:'C2',blockIds:['B3'],status:'keep'},
+      {id:"C3'",blockIds:['B4','B5'],status:'rebuild',blockOverrides:{B5:{type:'modified',hint:'수정됨!'}}},
+      {id:'C4',blockIds:['B6','B7'],status:'keep'},
+      {id:'C5',blockIds:['B8','B9','B10'],status:'keep'}
+    ],
+    steps: [
+      {icon:'sn-scan',text:'전체 블록 목록을 <em class="t-keep">스캔</em>합니다... 10개 블록 수신',anim:'scan'},
+      {icon:'sn-detect',text:'B5 → <em class="t-mod">modified_block_ids</em>에 존재! 내용이 수정되었습니다',anim:'detect',targets:{blocks:['B5']}},
+      {icon:'sn-scan',text:'B5가 속한 기존 청크를 찾습니다 → <em class="t-imp">C3 (B4+B5)</em>',anim:'highlight-chunk',targets:{chunks:['C3']}},
+      {icon:'sn-action',text:'C3의 구성 블록(B4, B5)으로 <em class="t-reb">재청킹 → C3\' 생성</em>',anim:'rebuild',targets:{oldChunks:['C3'],newChunks:["C3'"]}},
+      {icon:'sn-result',text:'나머지 C1, C2, C4, C5: 구성 블록 변경 없음 → <em class="t-keep">유지 ✓</em>',anim:'keep-rest'}
+    ],
+    transitionMap: [
+      {from:'C1',to:'C1 ✓',type:'keep'},
+      {from:'C2',to:'C2 ✓',type:'keep'},
+      {from:'C3',mid:'🗑️',to:"C3' 🔄",type:'rebuild'},
+      {from:'C4',to:'C4 ✓',type:'keep'},
+      {from:'C5',to:'C5 ✓',type:'keep'}
+    ],
+    summary: {
+      text: 'B5가 속한 청크(C3)만 재생성. B4는 B5와 같은 그룹이므로 함께 재청킹됨.',
+      cost: '💰 임베딩 비용: 청크 1개분 (전체 5개 중 1개)',
+      costClass: 'cost-low',
+      key: ''
+    }
+  },
+
+  c2: {
+    badges: [{t:'ADD',c:'badge-add'}],
+    title: '문서 가운데에 3개 블록 추가',
+    desc: 'B5 뒤에 이벤트 안내 블록 3개 삽입 → 기존 그룹은 유지하고 새 청크 1개만 생성',
+    beforeBlocks: [
+      {id:'B1',hint:'계좌개설 안내',type:'normal'},
+      {id:'B2',hint:'영업점/모바일',type:'normal'},
+      {id:'B3',hint:'필요서류',type:'normal'},
+      {id:'B4',hint:'미성년자 동의',type:'normal'},
+      {id:'B5',hint:'비대면 인증',type:'normal'},
+      {id:'B6',hint:'상품종류',type:'normal'},
+      {id:'B7',hint:'계좌한도',type:'normal'},
+      {id:'B8',hint:'외국인 서류',type:'normal'},
+      {id:'B9',hint:'법인 서류',type:'normal'},
+      {id:'B10',hint:'고객센터',type:'normal'}
+    ],
+    beforeChunks: [
+      {id:'C1',blockIds:['B1','B2','B3'],status:'keep'},
+      {id:'C2',blockIds:['B4','B5'],status:'keep'},
+      {id:'C3',blockIds:['B6','B7','B8'],status:'keep'},
+      {id:'C4',blockIds:['B9','B10'],status:'keep'}
+    ],
+    changeEvent: {
+      title: 'B5 뒤에 이벤트 안내 블록 3개(N1, N2, N3) 삽입',
+      payload: '<span class="cp-mod">modified: []</span><span class="cp-sep"> · </span><span class="cp-add">added: ["N1","N2","N3"]</span><span class="cp-sep"> · </span><span class="cp-del">removed: []</span>'
+    },
+    afterChunks: [
+      {id:'C1',blockIds:['B1','B2','B3'],status:'keep'},
+      {id:'C2',blockIds:['B4','B5'],status:'keep'},
+      {id:'C5',blockIds:['N1','N2','N3'],status:'new',blockOverrides:{N1:{type:'added',hint:'수수료면제'},N2:{type:'added',hint:'이벤트기간'},N3:{type:'added',hint:'혜택안내'}}},
+      {id:'C3',blockIds:['B6','B7','B8'],status:'keep'},
+      {id:'C4',blockIds:['B9','B10'],status:'keep'}
+    ],
+    steps: [
+      {icon:'sn-scan',text:'전체 블록 목록을 <em class="t-keep">스캔</em>합니다... 13개 블록 수신 (기존 10 + 신규 3)',anim:'scan'},
+      {icon:'sn-detect',text:'N1, N2, N3 → <em class="t-add">added_block_ids</em>에 존재! 신규 블록입니다',anim:'detect-add',targets:{blocks:['N1','N2','N3']}},
+      {icon:'sn-scan',text:'N1의 위치: B5 뒤 → B5는 C2 그룹 끝 → <em class="t-keep">C2 유지 가능</em>',anim:'check-neighbor'},
+      {icon:'sn-scan',text:'N3의 위치: B6 앞 → B6은 C3 그룹 시작 → <em class="t-keep">C3 유지 가능</em>',anim:'check-neighbor2'},
+      {icon:'sn-action',text:'N1+N2+N3만 새로 청킹/임베딩 → <em class="t-add">C5 신규 생성</em>',anim:'create-new',targets:{newChunks:['C5']}},
+      {icon:'sn-result',text:'기존 4개 청크 모두 <em class="t-keep">유지 ✓</em>',anim:'keep-rest'}
+    ],
+    transitionMap: [
+      {from:'C1',to:'C1 ✓',type:'keep'},
+      {from:'C2',to:'C2 ✓',type:'keep'},
+      {from:null,to:'C5 ✦ 신규',type:'new'},
+      {from:'C3',to:'C3 ✓',type:'keep'},
+      {from:'C4',to:'C4 ✓',type:'keep'}
+    ],
+    summary: {
+      text: '새 블록 3개로 청크 1개 신규 생성. 기존 4개 청크는 모두 유지.',
+      cost: '💰 임베딩 비용: 청크 1개분 (전체 5개 중 1개 신규)',
+      costClass: 'cost-low',
+      key: ''
+    }
+  },
+
+  c3: {
+    badges: [{t:'DELETE',c:'badge-delete'}],
+    title: '블록 2개 삭제',
+    desc: 'B4, B5가 삭제되어 해당 청크(C2)가 통째로 삭제됨. removed_block_ids로 삭제 대상을 명시적으로 전달',
+    beforeBlocks: [
+      {id:'B1',hint:'계좌개설 안내',type:'normal'},
+      {id:'B2',hint:'영업점/모바일',type:'normal'},
+      {id:'B3',hint:'필요서류',type:'normal'},
+      {id:'B4',hint:'미성년자 동의',type:'deleted'},
+      {id:'B5',hint:'비대면 인증',type:'deleted'},
+      {id:'B6',hint:'상품종류',type:'normal'},
+      {id:'B7',hint:'계좌한도',type:'normal'},
+      {id:'B8',hint:'외국인 서류',type:'normal'},
+      {id:'B9',hint:'법인 서류',type:'normal'},
+      {id:'B10',hint:'고객센터',type:'normal'}
+    ],
+    beforeChunks: [
+      {id:'C1',blockIds:['B1','B2','B3'],status:'keep'},
+      {id:'C2',blockIds:['B4','B5'],status:'affected'},
+      {id:'C3',blockIds:['B6','B7','B8'],status:'keep'},
+      {id:'C4',blockIds:['B9','B10'],status:'keep'}
+    ],
+    changeEvent: {
+      title: 'B4, B5가 문서에서 삭제됨',
+      payload: '<span class="cp-mod">modified: []</span><span class="cp-sep"> · </span><span class="cp-add">added: []</span><span class="cp-sep"> · </span><span class="cp-del">removed: ["B4","B5"]</span>'
+    },
+    afterChunks: [
+      {id:'C1',blockIds:['B1','B2','B3'],status:'keep'},
+      {id:'C2',blockIds:['B4','B5'],status:'delete'},
+      {id:'C3',blockIds:['B6','B7','B8'],status:'keep'},
+      {id:'C4',blockIds:['B9','B10'],status:'keep'}
+    ],
+    steps: [
+      {icon:'sn-scan',text:'전체 블록 목록을 <em class="t-keep">스캔</em>합니다... 8개 블록 수신',anim:'scan'},
+      {icon:'sn-delete',text:'<em class="t-del">removed_block_ids: ["B4","B5"]</em> → 삭제 대상이 명시적으로 전달됨!',anim:'detect-delete',targets:{blocks:['B4','B5']}},
+      {icon:'sn-scan',text:'B4, B5가 속한 청크: <em class="t-del">C2 (B4+B5)</em> → 모든 블록 삭제됨',anim:'highlight-chunk',targets:{chunks:['C2']}},
+      {icon:'sn-action',text:'C2 통째로 삭제 → <em class="t-del">Milvus/ES에서 벡터 제거</em>',anim:'dissolve-chunk',targets:{oldChunks:['C2']}},
+      {icon:'sn-scan',text:'B3(C1 끝)과 B6(C3 시작)이 이제 인접 → 각각 그룹 시작/끝이므로 <em class="t-keep">재편 불필요</em>',anim:'check-neighbor'},
+      {icon:'sn-result',text:'나머지 C1, C3, C4: <em class="t-keep">유지 ✓</em>. 새 임베딩 없음!',anim:'keep-rest'}
+    ],
+    transitionMap: [
+      {from:'C1',to:'C1 ✓',type:'keep'},
+      {from:'C2',to:'🗑️ 삭제',type:'delete'},
+      {from:'C3',to:'C3 ✓',type:'keep'},
+      {from:'C4',to:'C4 ✓',type:'keep'}
+    ],
+    summary: {
+      text: 'C2 청크 삭제 (벡터 DB에서 제거). 새로운 임베딩 없음.',
+      cost: '💰 임베딩 비용: 0 (삭제만, 새 임베딩 없음)',
+      costClass: 'cost-zero',
+      key: '💡 핵심: removed_block_ids로 삭제 대상을 명시적으로 전달하므로 서비스가 즉시 삭제 처리.'
+    }
+  },
+
+  c4: {
+    badges: [{t:'MOVE',c:'badge-move'}],
+    title: '블록 순서 변경 (드래그 앤 드롭)',
+    desc: 'B3이 맨 뒤로 이동. 내용은 동일하지만 순서가 바뀌면서 그룹 청킹이 재편되는 케이스',
+    beforeBlocks: [
+      {id:'B1',hint:'계좌개설',type:'normal'},
+      {id:'B2',hint:'영업점방문',type:'normal'},
+      {id:'B3',hint:'필요서류',type:'moved'},
+      {id:'B4',hint:'소요시간',type:'normal'},
+      {id:'B5',hint:'고객센터',type:'normal'}
+    ],
+    beforeChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep'},
+      {id:'C2',blockIds:['B3','B4'],status:'affected'},
+      {id:'C3',blockIds:['B5'],status:'affected'}
+    ],
+    changeEvent: {
+      title: 'B3을 맨 뒤로 이동 (내용 동일, 위치만 변경)',
+      payload: '<span class="cp-mod">modified: ["B3"]</span> ← 위치 변경 = contextual prefix 변경<br><span class="cp-blk">blocks 순서: [B1,B2,B4,B5,B3]</span>'
+    },
+    afterChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep'},
+      {id:"C2'",blockIds:['B4','B5'],status:'rebuild'},
+      {id:"C3'",blockIds:['B3'],status:'rebuild',blockOverrides:{B3:{type:'moved',hint:'이동됨'}}}
+    ],
+    steps: [
+      {icon:'sn-scan',text:'전체 블록 목록을 <em class="t-keep">스캔</em>합니다... 5개 블록 수신',anim:'scan'},
+      {icon:'sn-detect',text:'B3 → <em class="t-mod">modified_block_ids</em>에 존재! 위치 변경으로 contextual prefix 변경',anim:'detect',targets:{blocks:['B3']}},
+      {icon:'sn-scan',text:'<em class="t-imp">blocks 배열 순서가 바뀜!</em> 기존: [B1,B2,B3,B4,B5] → 현재: [B1,B2,B4,B5,B3]',anim:'highlight-order'},
+      {icon:'sn-action',text:'기존 C2(B3+B4) → B3이 더 이상 인접하지 않음 → <em class="t-reb">그룹 해체!</em>',anim:'dissolve-chunk',targets:{oldChunks:['C2','C3']}},
+      {icon:'sn-action',text:'새 인접 관계: B4↔B5 → <em class="t-reb">C2\'(B4+B5) 재그룹</em>, B3 단독 → <em class="t-reb">C3\'(B3)</em>',anim:'rebuild',targets:{newChunks:["C2'","C3'"]}},
+      {icon:'sn-result',text:'C1: 구성 블록 변경 없음 → <em class="t-keep">유지 ✓</em>',anim:'keep-rest'}
+    ],
+    transitionMap: [
+      {from:'C1',to:'C1 ✓',type:'keep'},
+      {from:'C2',mid:'🗑️',to:"C2' 🔄",type:'rebuild'},
+      {from:'C3',mid:'🗑️',to:"C3' 🔄",type:'rebuild'}
+    ],
+    summary: {
+      text: '내용은 안 바뀌었지만 순서가 바뀌면 그룹 청킹이 영향받음. C2, C3이 해체되고 C2\', C3\'로 재편.',
+      cost: '💰 임베딩 비용: contextual prefix 변경분만 (텍스트 동일해도 위치 맥락 변경 → 재임베딩)',
+      costClass: 'cost-low',
+      key: '💡 핵심: 이동된 블록은 content_hash가 동일하더라도 modified_block_ids에 포함! contextual prefix가 변경되므로 재임베딩 필요.'
+    }
+  },
+
+  c5: {
+    badges: [{t:'GROUP AFFECTED',c:'badge-group'}],
+    title: '블록 그룹 청킹이 깨지는 경우 (핵심 케이스)',
+    desc: '짧은 블록 3개가 하나의 청크로 병합 → 그 사이에 긴 블록 삽입 → 그룹이 깨짐. 전체 블록을 보내야 하는 이유!',
+    beforeBlocks: [
+      {id:'B1',hint:'제1장 계좌개요',type:'normal',tall:true},
+      {id:'B2',hint:'준비물 확인',type:'normal',tall:true},
+      {id:'B3',hint:'✓ 신분증',type:'normal',short:true},
+      {id:'B4',hint:'✓ 인감도장',type:'normal',short:true},
+      {id:'B5',hint:'✓ 주소확인',type:'normal',short:true},
+      {id:'B6',hint:'제2장 비대면',type:'normal',tall:true}
+    ],
+    beforeChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep'},
+      {id:'C2',blockIds:['B3','B4','B5'],status:'affected',label:'C2 (병합)'},
+      {id:'C3',blockIds:['B6'],status:'affected'}
+    ],
+    changeEvent: {
+      title: 'B4와 B5 사이에 긴 블록 NEW 삽입 → 기존 B3+B4+B5 그룹이 깨짐!',
+      payload: '<span class="cp-mod">modified: []</span><span class="cp-sep"> · </span><span class="cp-add">added: ["NEW"]</span><span class="cp-sep"> · </span><span class="cp-del">removed: []</span><br><span class="cp-blk">blocks: [B1,B2,B3,B4,NEW,B5,B6]</span>'
+    },
+    afterChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep'},
+      {id:"C2'",blockIds:['B3','B4'],status:'rebuild',blockOverrides:{B3:{short:true},B4:{short:true}}},
+      {id:'C_NEW',blockIds:['NEW'],status:'new',blockOverrides:{NEW:{type:'added',hint:'긴 블록',tall:true}}},
+      {id:"C2''",blockIds:['B5','B6'],status:'rebuild',blockOverrides:{B5:{short:true},B6:{tall:true}}},
+    ],
+    steps: [
+      {icon:'sn-scan',text:'전체 블록 목록을 <em class="t-keep">스캔</em>합니다... 7개 블록 수신',anim:'scan'},
+      {icon:'sn-detect',text:'NEW → <em class="t-add">added_block_ids</em>에 존재! 신규 블록입니다',anim:'detect-add',targets:{blocks:['NEW']}},
+      {icon:'sn-scan',text:'기존 C2는 <em class="t-reb">B3+B4+B5 병합 청크</em>였음',anim:'highlight-chunk',targets:{chunks:['C2']}},
+      {icon:'sn-detect',text:'현재 순서: …B4, <em class="t-imp">NEW</em>, B5… → NEW가 B4와 B5 사이에 끼어듦 → <em class="t-del">그룹 해체!</em>',anim:'group-break'},
+      {icon:'sn-action',text:'B3+B4 여전히 인접하고 짧음 → <em class="t-reb">C2\'(B3+B4)</em>',anim:'partial-rebuild1'},
+      {icon:'sn-action',text:'NEW → 길이가 긺 → <em class="t-add">C_NEW 단독 청크</em>',anim:'create-new',targets:{newChunks:['C_NEW']}},
+      {icon:'sn-action',text:'B5 혼자 남음 → B6과 합류 → <em class="t-reb">C2\'\'(B5+B6)</em>, 기존 C3 해체',anim:'partial-rebuild2'},
+      {icon:'sn-result',text:'C1만 <em class="t-keep">유지 ✓</em>. 나머지 전부 재편!',anim:'keep-rest'}
+    ],
+    transitionMap: [
+      {from:'C1',to:'C1 ✓',type:'keep'},
+      {from:'C2(병합)',mid:'🗑️',to:"C2' 🔄",type:'rebuild'},
+      {from:null,to:'C_NEW ✦',type:'new'},
+      {from:'C3',mid:'🗑️ ↗',to:"C2'' 🔄",type:'rebuild'}
+    ],
+    summary: {
+      text: 'added_block_ids에는 "NEW" 하나뿐이지만, 실제로는 B3, B4, B5, B6까지 영향받음.',
+      cost: '💰 임베딩 비용: 청크 3개분 (C2\', C_NEW, C2\'\' 모두 새로 임베딩)',
+      costClass: 'cost-mid',
+      key: '💡 핵심: 이것이 전체 블록을 보내야 하는 이유! NEW 블록만 보냈다면 기존 그룹 해체를 감지할 수 없었을 것.'
+    }
+  },
+
+  c6: {
+    badges: [{t:'MODIFY',c:'badge-modify'},{t:'ADD',c:'badge-add'},{t:'DELETE',c:'badge-delete'}],
+    title: '수정 + 추가 + 삭제 동시 발생',
+    desc: 'B3 수정 + B4 삭제 + N1 추가가 동시에 발생하는 복합 시나리오',
+    beforeBlocks: [
+      {id:'H1',hint:'§ 계좌개설',type:'heading'},
+      {id:'B2',hint:'절차 안내',type:'normal'},
+      {id:'B3',hint:'필요서류',type:'target'},
+      {id:'B4',hint:'미성년자',type:'deleted'},
+      {id:'H5',hint:'§ 비대면',type:'heading'},
+      {id:'B6',hint:'모바일뱅킹',type:'normal'},
+      {id:'B7',hint:'영상통화',type:'normal'},
+      {id:'B8',hint:'즉시사용',type:'normal'}
+    ],
+    beforeChunks: [
+      {id:'C1',blockIds:['H1','B2'],status:'keep'},
+      {id:'C2',blockIds:['B3','B4'],status:'affected'},
+      {id:'C3',blockIds:['H5','B6'],status:'keep'},
+      {id:'C4',blockIds:['B7','B8'],status:'keep'}
+    ],
+    changeEvent: {
+      title: 'B3 수정 + B4 삭제 + N1 추가 (B3 뒤에)',
+      payload: '<span class="cp-mod">modified: ["B3"]</span><span class="cp-sep"> · </span><span class="cp-add">added: ["N1"]</span><span class="cp-sep"> · </span><span class="cp-del">removed: ["B4"]</span>'
+    },
+    afterChunks: [
+      {id:'C1',blockIds:['H1','B2'],status:'keep'},
+      {id:"C2'",blockIds:['B3','N1'],status:'new',blockOverrides:{B3:{type:'modified',hint:'수정됨'},N1:{type:'added',hint:'2026 규정'}}},
+      {id:'C3',blockIds:['H5','B6'],status:'keep'},
+      {id:'C4',blockIds:['B7','B8'],status:'keep'}
+    ],
+    steps: [
+      {icon:'sn-scan',text:'전체 블록 목록을 <em class="t-keep">스캔</em>합니다... 8개 블록 수신',anim:'scan'},
+      {icon:'sn-detect',text:'B3 → <em class="t-mod">modified_block_ids</em> → 내용 수정(MODIFY)',anim:'detect',targets:{blocks:['B3']}},
+      {icon:'sn-detect',text:'N1 → <em class="t-add">added_block_ids</em> → 신규 추가(ADD)',anim:'detect-add',targets:{blocks:['N1']}},
+      {icon:'sn-delete',text:'B4 → <em class="t-del">removed_block_ids</em> → 삭제(DELETE)',anim:'detect-delete',targets:{blocks:['B4']}},
+      {icon:'sn-action',text:'기존 C2(B3+B4): B3 수정 + B4 삭제 → <em class="t-del">C2 완전 해체</em>',anim:'dissolve-chunk',targets:{oldChunks:['C2']}},
+      {icon:'sn-action',text:'새 그룹: B3(수정) + N1(추가) → <em class="t-add">C2\' 생성 + 임베딩</em>',anim:'create-new',targets:{newChunks:["C2'"]}},
+      {icon:'sn-result',text:'C1, C3, C4: 구성 블록 변경 없음 → <em class="t-keep">유지 ✓</em>',anim:'keep-rest'}
+    ],
+    transitionMap: [
+      {from:'C1',to:'C1 ✓',type:'keep'},
+      {from:'C2',mid:'🗑️',to:"C2' ✦",type:'new'},
+      {from:'C3',to:'C3 ✓',type:'keep'},
+      {from:'C4',to:'C4 ✓',type:'keep'}
+    ],
+    summary: {
+      text: '3가지 변경(수정+추가+삭제)이 동시에 발생해도 retrieval-service는 정확히 판단 가능.',
+      cost: '💰 임베딩 비용: 청크 1개분 (C2\' 신규 생성)',
+      costClass: 'cost-low',
+      key: '💡 핵심: modified_block_ids로 수정, added_block_ids로 추가, removed_block_ids로 삭제를 각각 감지. 전체 블록 순서로 그룹 재편 결정.'
+    }
+  },
+
+  c7: {
+    badges: [{t:'MODIFY',c:'badge-modify'},{t:'SPLIT BLOCK',c:'badge-split'}],
+    title: '긴 블록 1개가 여러 청크로 분할된 경우',
+    desc: 'B3이 매우 길어서(대형 금리표) 3개 청크로 분할. 수정 시 분할된 3개 청크 모두 재생성',
+    beforeBlocks: [
+      {id:'B1',hint:'대출상품 안내',type:'normal'},
+      {id:'B2',hint:'상품 종류',type:'normal'},
+      {id:'B3①',hint:'금리표 상단',type:'target',split:true},
+      {id:'B3②',hint:'금리표 중단',type:'target',split:true},
+      {id:'B3③',hint:'금리표 하단',type:'target',split:true},
+      {id:'B4',hint:'신청 절차',type:'normal'},
+      {id:'B5',hint:'심사 기간',type:'normal'}
+    ],
+    beforeChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep'},
+      {id:'C2',blockIds:['B3①'],status:'affected',label:'C2 (B3 1/3)'},
+      {id:'C3',blockIds:['B3②'],status:'affected',label:'C3 (B3 2/3)'},
+      {id:'C4',blockIds:['B3③'],status:'affected',label:'C4 (B3 3/3)'},
+      {id:'C5',blockIds:['B4','B5'],status:'keep'}
+    ],
+    changeEvent: {
+      title: 'B3 블록 전체의 content_hash 변경 (2026년 금리 업데이트)',
+      payload: '<span class="cp-mod">modified: ["B3"]</span><span class="cp-sep"> · </span><span class="cp-add">added: []</span><span class="cp-sep"> · </span><span class="cp-del">removed: []</span><br><span class="cp-blk">block_id 1개지만 분할 청크 3개!</span>'
+    },
+    afterChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep'},
+      {id:"C2'",blockIds:['B3①'],status:'rebuild',label:"C2' (B3 1/3)",blockOverrides:{'B3①':{type:'modified',hint:'금리↑'}}},
+      {id:"C3'",blockIds:['B3②'],status:'rebuild',label:"C3' (B3 2/3)",blockOverrides:{'B3②':{type:'modified',hint:'금리↑'}}},
+      {id:"C4'",blockIds:['B3③'],status:'rebuild',label:"C4' (B3 3/3)",blockOverrides:{'B3③':{type:'modified',hint:'날짜변경'}}},
+      {id:'C5',blockIds:['B4','B5'],status:'keep'}
+    ],
+    steps: [
+      {icon:'sn-scan',text:'전체 블록 목록을 <em class="t-keep">스캔</em>합니다... 5개 블록(block_id 기준) 수신',anim:'scan'},
+      {icon:'sn-detect',text:'B3 → <em class="t-mod">modified_block_ids</em>에 존재! 내용 수정(MODIFY)',anim:'detect',targets:{blocks:['B3①','B3②','B3③']}},
+      {icon:'sn-scan',text:'B3은 단일 block_id이지만 <em class="t-imp">청크 크기 제한(max_chunk_tokens) 초과</em> → 3개 청크로 분할!',anim:'highlight-split'},
+      {icon:'sn-action',text:'B3을 포함하는 청크 조회: <em class="t-reb">C2, C3, C4</em> → 전부 영향!',anim:'highlight-chunk',targets:{chunks:['C2','C3','C4']}},
+      {icon:'sn-action',text:'C2, C3, C4 모두 삭제 → 수정된 B3 전체를 다시 분할 청킹',anim:'dissolve-chunk',targets:{oldChunks:['C2','C3','C4']}},
+      {icon:'sn-action',text:'<em class="t-reb">C2\', C3\', C4\' 재생성 + 임베딩</em>',anim:'rebuild',targets:{newChunks:["C2'","C3'","C4'"]}},
+      {icon:'sn-result',text:'C1, C5: 구성 블록 변경 없음 → <em class="t-keep">유지 ✓</em>',anim:'keep-rest'}
+    ],
+    transitionMap: [
+      {from:'C1',to:'C1 ✓',type:'keep'},
+      {from:'C2(B3①)',mid:'🗑️',to:"C2' 🔄",type:'rebuild'},
+      {from:'C3(B3②)',mid:'🗑️',to:"C3' 🔄",type:'rebuild'},
+      {from:'C4(B3③)',mid:'🗑️',to:"C4' 🔄",type:'rebuild'},
+      {from:'C5',to:'C5 ✓',type:'keep'}
+    ],
+    summary: {
+      text: 'B3 하나만 수정되었지만, 3개 청크에 걸쳐 분할되어 있으므로 3개 청크 모두 재생성.',
+      cost: '💰 임베딩 비용: 청크 3개분 (전체 5개 중 3개 재생성)',
+      costClass: 'cost-mid',
+      key: '💡 핵심: "1 Block = 1 Chunk"가 아님! 긴 블록은 여러 청크로 분할될 수 있고, 수정 시 분할된 전체 청크가 재생성 대상.'
+    }
+  },
+
+  c8: {
+    badges: [{t:'MODIFY',c:'badge-modify'},{t:'N:M MAPPING',c:'badge-nm'}],
+    title: '다대다(N:M) 블록-청크 매핑 — 연쇄 영향 전파',
+    desc: '긴 블록 B4가 C2·C3에 걸쳐 분할되고, 긴 블록 B5도 C3·C4에 걸쳐 분할됨. C3이 B4와 B5를 동시에 품는 "교차점 청크"가 되어, B4 수정 시 C3을 통해 B5 영역(C4)까지 연쇄 전파되는 핵심 시나리오',
+    beforeBlocks: [
+      {id:'B1',hint:'대출 안내',type:'normal',short:true},
+      {id:'B2',hint:'상품 종류',type:'normal',short:true},
+      {id:'B3',hint:'주택담보 상세',type:'normal'},
+      {id:'B4①',hint:'금리표 상단',type:'target',tall:true,split:true},
+      {id:'B4②',hint:'금리표 하단',type:'target',tall:true,split:true},
+      {id:'B5①',hint:'상환방식 전반',type:'normal',tall:true,split:true},
+      {id:'B5②',hint:'상환방식 후반',type:'normal',tall:true,split:true},
+      {id:'B6',hint:'중도상환 수수료',type:'normal'},
+      {id:'B7',hint:'문의처',type:'normal',short:true},
+      {id:'B8',hint:'부록',type:'normal',short:true}
+    ],
+    beforeChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep',label:'C1'},
+      {id:'C2',blockIds:['B3','B4①'],status:'affected',label:'C2'},
+      {id:'C3',blockIds:['B4②','B5①'],status:'affected',label:'C3 ✦교차점'},
+      {id:'C4',blockIds:['B5②','B6'],status:'affected',label:'C4'},
+      {id:'C5',blockIds:['B7','B8'],status:'keep',label:'C5'}
+    ],
+    changeEvent: {
+      title: 'B4 블록의 content_hash 변경 (2026년 금리 업데이트)',
+      payload: '<span class="cp-mod">modified: ["B4"]</span><span class="cp-sep"> · </span><span class="cp-add">added: []</span><span class="cp-sep"> · </span><span class="cp-del">removed: []</span><br><span class="cp-blk">B4 → C2, C3에 분할 | B5 → C3, C4에 분할 | C3 = B4②+B5① (교차점)</span>'
+    },
+    afterChunks: [
+      {id:'C1',blockIds:['B1','B2'],status:'keep',label:'C1'},
+      {id:"C2'",blockIds:['B3','B4①'],status:'rebuild',label:"C2' 🔄",blockOverrides:{'B4①':{type:'modified',hint:'금리↑'}}},
+      {id:"C3'",blockIds:['B4②','B5①'],status:'rebuild',label:"C3' 🔄",blockOverrides:{'B4②':{type:'modified',hint:'금리↑'}}},
+      {id:"C4'",blockIds:['B5②','B6'],status:'rebuild',label:"C4' 연쇄🔄"},
+      {id:'C5',blockIds:['B7','B8'],status:'keep',label:'C5'}
+    ],
+    steps: [
+      {icon:'sn-scan',text:'전체 블록을 <em class="t-keep">스캔</em>합니다… 8개 block_id 수신 (B4, B5는 각각 2개 청크에 걸침)',anim:'scan'},
+      {icon:'sn-detect',text:'B4 → <em class="t-mod">modified_block_ids</em>에 존재! 금리 데이터 수정됨',anim:'detect',targets:{blocks:['B4①','B4②']}},
+      {icon:'sn-scan',text:'B4를 포함하는 청크 조회 → <em class="t-imp">C2 (B4①)</em>와 <em class="t-imp">C3 (B4②)</em> 발견! 직접 영향',anim:'highlight-chunk',targets:{chunks:['C2','C3']}},
+      {icon:'sn-detect',text:'C3은 <em class="t-imp">B4②와 B5①을 동시에</em> 포함하는 교차점 청크! B5는 변경 안 됐지만 같은 청크에 있음',anim:'detect',targets:{blocks:['B5①','B5②']}},
+      {icon:'sn-action',text:'C3 재청킹 시 B5①의 분할 경계가 달라질 수 있음 → B5의 나머지 청크 <em class="t-reb">C4 (B5②+B6)</em>도 연쇄 영향!',anim:'highlight-chunk',targets:{chunks:['C4']}},
+      {icon:'sn-action',text:'<em class="t-del">C2, C3, C4 모두 삭제</em> → 영향 블록 전체(B3~B6)를 재청킹 범위로 확정',anim:'dissolve-chunk',targets:{oldChunks:['C2','C3','C4']}},
+      {icon:'sn-action',text:'재청킹 실행: <em class="t-reb">C2\'(B3+B4①\'), C3\'(B4②\'+B5①), C4\'(B5②+B6)</em> 생성 + 임베딩',anim:'rebuild',targets:{newChunks:["C2'","C3'","C4'"]}},
+      {icon:'sn-result',text:'C1, C5: 구성 블록 변경 없음 → <em class="t-keep">유지 ✓</em>. B3과 B6은 내용 안 바뀌었지만 청크 동반자 변경으로 재임베딩됨',anim:'keep-rest'}
+    ],
+    transitionMap: [
+      {from:'C1',to:'C1 ✓',type:'keep'},
+      {from:'C2 [B3+B4①]',mid:'🗑️',to:"C2' 🔄",type:'rebuild'},
+      {from:'C3 [B4②+B5①]',mid:'🗑️',to:"C3' 🔄",type:'rebuild'},
+      {from:'C4 [B5②+B6]',mid:'🗑️',to:"C4' 🔄 (연쇄)",type:'rebuild'},
+      {from:'C5',to:'C5 ✓',type:'keep'}
+    ],
+    summary: {
+      text: 'modified_block_ids에는 "B4" 하나뿐이지만, N:M 매핑 구조로 인해 3개 청크(C2, C3, C4)가 모두 재생성됨. B3, B5, B6은 수정되지 않았지만 청크 동반자가 바뀌어 함께 재임베딩.',
+      cost: '💰 임베딩 비용: 청크 3개분 (전체 5개 중 3개 재생성)',
+      costClass: 'cost-high',
+      key: '💡 핵심: N:M 매핑에서는 "교차점 청크"(C3)를 통해 연쇄 전파가 발생한다! B4 수정 → C3(B4②+B5①) 영향 → B5 분할 경계 변동 가능 → C4도 재생성. 한 블록 수정이 도미노처럼 퍼지는 최악 시나리오. 이것이 retrieval-service가 전체 블록 + 전체 기존 청크 매핑을 알아야 하는 결정적 이유!'
+    }
+  }
+};
+
+class AnimEngine {
+  constructor(caseId, data) {
+    this.caseId = caseId;
+    this.data = data;
+    this.currentStep = -1;
+    this.totalSteps = data.steps.length + 2;
+    this.playing = false;
+    this.stepping = false;
+    this.speed = 1;
+    this.panel = document.getElementById(caseId);
+    this.render();
+  }
+
+  render() {
+    const d = this.data;
+    let html = '';
+
+    html += `<div class="case-banner">
+      <div class="case-badges">${d.badges.map(b => `<span class="badge ${b.c}">${b.t}</span>`).join('')}</div>
+      <div class="case-title">${d.title}</div>
+      <div class="case-desc">${d.desc}</div>
+    </div>`;
+
+    html += `<div class="controls">
+      <button class="btn btn-play" data-action="play">▶ 자동 재생</button>
+      <button class="btn btn-step" data-action="step">⏭ 다음 단계</button>
+      <button class="btn btn-reset" data-action="reset" disabled>↺ 처음부터</button>
+      <div class="progress-bar"><div class="progress-fill" data-progress></div></div>
+      <div class="step-label" data-step-label>▶ 클릭하여 시작</div>
+      <div class="speed-sel"><span>속도:</span><select data-speed>
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+      </select></div>
+    </div>`;
+
+    html += `<div class="diagram" data-diagram="before">
+      <div class="diagram-label">📄 BEFORE — 기존 임베딩 상태</div>
+      <div class="block-row" data-blockrow="before">${this.renderChunkGroups(d.beforeChunks, d.beforeBlocks, {})}</div>
+    </div>`;
+
+    html += `<div class="change-event" data-change-event>
+      <span class="change-icon">⚡</span>
+      <div><div class="change-title">${d.changeEvent.title}</div>
+      <div class="change-payload">${d.changeEvent.payload}</div></div>
+    </div>`;
+
+    html += `<div class="step-log" data-step-log>`;
+    d.steps.forEach((s, i) => {
+      html += `<div class="step-entry" data-step="${i}">
+        <span class="step-num ${s.icon}">${i + 1}</span>
+        <span class="step-text">${s.text}</span>
+      </div>`;
+    });
+    html += `</div>`;
+
+    html += `<div class="arrow-separator" data-arrow>▼ 처리 결과 ▼</div>`;
+
+    html += `<div class="diagram" data-diagram="after" style="opacity:0;transform:translateY(10px);transition:all .6s ease">
+      <div class="diagram-label">✅ AFTER — retrieval-service 처리 결과</div>
+      <div class="block-row" data-blockrow="after">${this.renderChunkGroups(d.afterChunks, d.beforeBlocks, this.collectOverrides(d.afterChunks))}</div>
+    </div>`;
+
+    html += `<div class="tmap" data-tmap>
+      <div class="tmap-title">청크 전환 맵</div>
+      ${d.transitionMap.map((t, i) => {
+        let inner = '';
+        if (t.from) inner += `<span class="tbadge tb-from">${t.from}</span><span class="tarrow">→</span>`;
+        if (t.mid) inner += `<span class="tbadge tb-delete">${t.mid}</span><span class="tarrow">→</span>`;
+        inner += `<span class="tbadge tb-${t.type}">${t.to}</span>`;
+        return `<div class="tflow" data-tflow="${i}">${inner}</div>`;
+      }).join('')}
+    </div>`;
+
+    html += `<div class="summary" data-summary>
+      <div class="summary-title">📊 결과</div>
+      <div class="summary-text">${d.summary.text}</div>
+      <div class="summary-cost ${d.summary.costClass}">${d.summary.cost}</div>
+      ${d.summary.key ? `<div class="summary-key">${d.summary.key}</div>` : ''}
+    </div>`;
+
+    this.panel.innerHTML = html;
+    this.bindEvents();
+  }
+
+  collectOverrides(chunks) {
+    const map = {};
+    chunks.forEach(c => {
+      if (c.blockOverrides) Object.assign(map, c.blockOverrides);
+    });
+    return map;
+  }
+
+  renderChunkGroups(chunks, allBlocks, overrides) {
+    const blockMap = {};
+    allBlocks.forEach(b => blockMap[b.id] = b);
+
+    return chunks.map(chunk => {
+      const statusCls = {keep:'cg-keep',affected:'cg-affected',rebuild:'cg-rebuild',new:'cg-new',delete:'cg-delete'}[chunk.status] || 'cg-keep';
+      const label = chunk.label || chunk.id;
+
+      const blocksHtml = chunk.blockIds.map(bid => {
+        const base = blockMap[bid] || {id: bid, hint: bid, type: 'normal'};
+        const over = overrides[bid] || {};
+        const type = over.type || base.type || 'normal';
+        const hint = over.hint || base.hint || '';
+        const short = over.short || base.short;
+        const tall = over.tall || base.tall;
+        const typeCls = {normal:'blk-normal',modified:'blk-modified',added:'blk-added',deleted:'blk-deleted',heading:'blk-heading',moved:'blk-moved',target:'blk-target'}[type] || 'blk-normal';
+        const sizeCls = short ? 'block-short' : (tall ? 'block-tall' : '');
+        return `<div class="block ${typeCls} ${sizeCls}" data-block="${bid}">
+          <span class="block-id">${bid}</span>
+          <span class="block-hint">${hint}</span>
+        </div>`;
+      }).join('');
+
+      return `<div class="chunk-group ${statusCls}" data-chunk="${chunk.id}">
+        <div class="chunk-blocks">${blocksHtml}</div>
+        <span class="chunk-label">${label}</span>
+      </div>`;
+    }).join('');
+  }
+
+  bindEvents() {
+    const p = this.panel;
+    p.querySelector('[data-action="play"]').addEventListener('click', () => this.play());
+    p.querySelector('[data-action="step"]').addEventListener('click', () => this.manualStep());
+    p.querySelector('[data-action="reset"]').addEventListener('click', () => this.reset());
+    p.querySelector('[data-speed]').addEventListener('change', e => {
+      this.speed = parseFloat(e.target.value);
+    });
+  }
+
+  delay(ms) {
+    return new Promise(r => setTimeout(r, ms / this.speed));
+  }
+
+  updateProgress() {
+    const pct = Math.min(100, Math.max(0, ((this.currentStep + 1) / this.totalSteps) * 100));
+    const fill = this.panel.querySelector('[data-progress]');
+    if (fill) fill.style.width = pct + '%';
+    const label = this.panel.querySelector('[data-step-label]');
+    if (label) {
+      if (this.currentStep < 0) label.textContent = '▶ 클릭하여 시작';
+      else if (this.currentStep >= this.totalSteps - 1) label.textContent = '✓ 완료';
+      else label.textContent = `단계 ${this.currentStep + 1} / ${this.totalSteps}`;
+    }
+  }
+
+  updateButtons() {
+    const playBtn = this.panel.querySelector('[data-action="play"]');
+    const stepBtn = this.panel.querySelector('[data-action="step"]');
+    const resetBtn = this.panel.querySelector('[data-action="reset"]');
+    const done = this.currentStep >= this.totalSteps - 1;
+
+    if (this.playing) {
+      playBtn.disabled = true;
+      playBtn.textContent = '⏵ 재생 중...';
+      stepBtn.disabled = true;
+    } else if (done) {
+      playBtn.disabled = true;
+      playBtn.textContent = '✓ 완료';
+      stepBtn.disabled = true;
+    } else {
+      playBtn.disabled = false;
+      playBtn.textContent = this.currentStep >= 0 ? '▶ 이어서 재생' : '▶ 자동 재생';
+      stepBtn.disabled = false;
+    }
+    resetBtn.disabled = this.currentStep < 0;
+  }
+
+  async play() {
+    if (this.playing || this.currentStep >= this.totalSteps - 1) return;
+    this.playing = true;
+    this.updateButtons();
+
+    while (this.currentStep < this.totalSteps - 1 && this.playing) {
+      await this.executeNextStep();
+      if (this.currentStep < this.totalSteps - 1) await this.delay(1400);
+    }
+
+    this.playing = false;
+    this.updateButtons();
+  }
+
+  async manualStep() {
+    if (this.playing || this.stepping || this.currentStep >= this.totalSteps - 1) return;
+    this.stepping = true;
+    this.updateButtons();
+    await this.executeNextStep();
+    this.stepping = false;
+    this.updateButtons();
+  }
+
+  async executeNextStep() {
+    this.currentStep++;
+    this.updateProgress();
+    this.updateButtons();
+
+    const stepIdx = this.currentStep;
+    const d = this.data;
+
+    if (stepIdx === 0) {
+      await this.animateScanIntro();
+    } else if (stepIdx <= d.steps.length) {
+      await this.animateProcessStep(stepIdx - 1, d.steps[stepIdx - 1]);
+    } else {
+      await this.showResult();
+    }
+  }
+
+  async animateScanIntro() {
+    const beforeRow = this.panel.querySelector('[data-blockrow="before"]');
+    beforeRow.classList.add('scanning');
+
+    await this.delay(600);
+    const ce = this.panel.querySelector('[data-change-event]');
+    ce.classList.add('visible');
+
+    await this.delay(800);
+    beforeRow.classList.remove('scanning');
+  }
+
+  async animateProcessStep(idx, step) {
+    const entry = this.panel.querySelector(`[data-step="${idx}"]`);
+    if (entry) {
+      entry.classList.add('visible');
+      entry.style.animation = 'fadeInUp .4s ease-out';
+    }
+
+    const beforeRow = this.panel.querySelector('[data-blockrow="before"]');
+    const targets = step.targets || {};
+
+    if (targets.blocks) {
+      targets.blocks.forEach(bid => {
+        const el = beforeRow.querySelector(`[data-block="${bid}"]`);
+        if (el) {
+          ['anim-pulse','anim-pulse-red','anim-pulse-green','anim-pulse-blue'].forEach(c => el.classList.remove(c));
+          void el.offsetWidth;
+          const animCls = step.anim?.includes('delete') ? 'anim-pulse-red' :
+                          step.anim?.includes('add') ? 'anim-pulse-green' :
+                          step.anim?.includes('move') ? 'anim-pulse-blue' : 'anim-pulse';
+          el.classList.add(animCls);
+        }
+      });
+    }
+
+    if (targets.chunks) {
+      targets.chunks.forEach(cid => {
+        const el = beforeRow.querySelector(`[data-chunk="${cid}"]`);
+        if (el) {
+          el.classList.remove('anim-glow');
+          void el.offsetWidth;
+          el.classList.add('anim-glow');
+          el.classList.remove('cg-keep');
+          el.classList.add('cg-affected');
+        }
+      });
+    }
+
+    if (step.anim === 'dissolve-chunk' && targets.oldChunks) {
+      targets.oldChunks.forEach(cid => {
+        const el = beforeRow.querySelector(`[data-chunk="${cid}"]`);
+        if (el) el.classList.add('anim-dissolve');
+      });
+      await this.delay(500);
+    }
+
+    if (step.anim === 'scan') {
+      beforeRow.classList.add('scanning');
+      await this.delay(1000);
+      beforeRow.classList.remove('scanning');
+    }
+
+    if (step.anim === 'keep-rest') {
+      const keepChunks = beforeRow.querySelectorAll('.cg-keep');
+      keepChunks.forEach((el, i) => {
+        setTimeout(() => {
+          el.classList.remove('anim-pulse-blue');
+          void el.offsetWidth;
+          el.classList.add('anim-pulse-blue');
+        }, i * 200);
+      });
+    }
+
+    if (step.anim === 'group-break') {
+      const affectedChunks = beforeRow.querySelectorAll('.cg-affected');
+      affectedChunks.forEach(el => el.classList.add('anim-shake'));
+      await this.delay(400);
+    }
+
+    if (step.anim === 'highlight-split') {
+      const allAffected = beforeRow.querySelectorAll('.cg-affected');
+      allAffected.forEach(el => {
+        el.classList.remove('anim-glow');
+        void el.offsetWidth;
+        el.classList.add('anim-glow');
+      });
+    }
+
+    await this.delay(300);
+  }
+
+  async showResult() {
+    const arrow = this.panel.querySelector('[data-arrow]');
+    arrow.classList.add('visible');
+    await this.delay(400);
+
+    const afterDiag = this.panel.querySelector('[data-diagram="after"]');
+    afterDiag.style.opacity = '1';
+    afterDiag.style.transform = 'translateY(0)';
+
+    const afterRow = afterDiag.querySelector('[data-blockrow="after"]');
+    const groups = afterRow.querySelectorAll('.chunk-group');
+    for (const g of groups) {
+      g.style.opacity = '0';
+      g.style.transform = 'translateY(10px)';
+    }
+
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      await this.delay(250);
+      g.style.transition = 'all .5s ease';
+      g.style.opacity = '1';
+      g.style.transform = 'translateY(0)';
+
+      if (g.classList.contains('cg-new')) g.classList.add('anim-pulse-green');
+      else if (g.classList.contains('cg-rebuild')) g.classList.add('anim-pulse-purple');
+      else if (g.classList.contains('cg-delete')) g.classList.add('anim-pulse-red');
+    }
+
+    await this.delay(600);
+
+    const tmap = this.panel.querySelector('[data-tmap]');
+    tmap.classList.add('visible');
+    const flows = tmap.querySelectorAll('[data-tflow]');
+    for (let i = 0; i < flows.length; i++) {
+      await this.delay(250);
+      flows[i].classList.add('visible');
+    }
+
+    await this.delay(400);
+    const summary = this.panel.querySelector('[data-summary]');
+    summary.classList.add('visible');
+
+    this.updateButtons();
+  }
+
+  reset() {
+    this.currentStep = -1;
+    this.playing = false;
+    this.stepping = false;
+    this.render();
+  }
+}
+
+const engines = {};
+Object.keys(CASES).forEach(id => {
+  engines[id] = new AnimEngine(id, CASES[id]);
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

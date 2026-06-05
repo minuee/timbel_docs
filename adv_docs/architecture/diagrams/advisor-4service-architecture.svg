@@ -1,0 +1,127 @@
+<svg viewBox="0 0 920 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" style="font-family: ui-sans-serif, system-ui, sans-serif;">
+  <title id="title" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Advisor 4-서비스 아키텍처</title>
+  <desc id="desc" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">브라우저, asst-service, user-service, auth-service, tenant-mgmt-service의 관계와 각자가 관리하는 데이터 저장소를 보여주는 아키텍처 다이어그램.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--text-200, #6b7280)"/>
+    </marker>
+    <marker id="arrow-runtime" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-provision" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  
+
+  <!-- 헤더 -->
+  <text x="20" y="28" style="font-size:16px;;fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:600;text-anchor:start;dominant-baseline:auto">Advisor 플랫폼 — 4 서비스 아키텍처</text>
+
+  <!-- 브라우저 -->
+  <rect x="370" y="60" width="180" height="50" rx="6" style="fill:rgb(255, 255, 255);stroke:rgb(209, 213, 219);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="460" y="82" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:14px;font-weight:600;text-anchor:middle;dominant-baseline:auto">브라우저 (상담원)</text>
+  <text x="460" y="98" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">x-auth-token: JWT</text>
+
+  <!-- asst-service -->
+  <rect x="340" y="170" width="240" height="70" rx="6" style="fill:rgb(250, 250, 250);stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="460" y="193" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:14px;font-weight:600;text-anchor:middle;dominant-baseline:auto">asst-service (advisor)</text>
+  <text x="460" y="210" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">NestJS · 비즈니스 로직</text>
+  <text x="460" y="225" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">AuthMiddleware + DynamicDB</text>
+
+  <!-- auth-service -->
+  <rect x="60" y="320" width="220" height="70" rx="6" style="fill:rgb(250, 250, 250);stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="170" y="343" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:14px;font-weight:600;text-anchor:middle;dominant-baseline:auto">auth-service</text>
+  <text x="170" y="360" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">JWT 발급/검증 (RS256)</text>
+  <text x="170" y="375" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">로그인 진입점</text>
+
+  <!-- user-service -->
+  <rect x="340" y="320" width="240" height="70" rx="6" style="fill:rgb(250, 250, 250);stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="460" y="343" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:14px;font-weight:600;text-anchor:middle;dominant-baseline:auto">user-service</text>
+  <text x="460" y="360" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">사용자/회사 메타 + 테넌트 설정</text>
+  <text x="460" y="375" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">자격증명 게이트</text>
+
+  <!-- tenant-mgmt-service -->
+  <rect x="640" y="320" width="220" height="70" rx="6" style="fill:rgb(250, 250, 250);stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="750" y="343" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:14px;font-weight:600;text-anchor:middle;dominant-baseline:auto">tenant-mgmt-service</text>
+  <text x="750" y="360" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">테넌트 인프라 프로비저닝</text>
+  <text x="750" y="375" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">(런타임 호출 없음)</text>
+
+  <!-- 데이터 저장소 영역 -->
+  <text x="20" y="450" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:12px;font-weight:600;text-anchor:start;dominant-baseline:auto">데이터 저장소</text>
+  <line x1="20" y1="458" x2="900" y2="458" stroke="var(--border-200, #d1d5db)" stroke-width="1" style="fill:rgb(0, 0, 0);stroke:rgb(209, 213, 219);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Redis (auth) -->
+  <rect x="60" y="475" width="220" height="50" rx="6" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:3px, 3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="170" y="495" text-anchor="middle" style="font-size:12px;;fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:12px;font-weight:600;text-anchor:middle;dominant-baseline:auto">Redis</text>
+  <text x="170" y="510" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">중복 로그인 추적</text>
+
+  <!-- user-service DB -->
+  <rect x="340" y="475" width="240" height="50" rx="6" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:3px, 3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="460" y="495" text-anchor="middle" style="font-size:12px;;fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:12px;font-weight:600;text-anchor:middle;dominant-baseline:auto">user-service DB</text>
+  <text x="460" y="510" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">agents · prod.company (db_config 암호화)</text>
+
+  <!-- tenant-mgmt DB -->
+  <rect x="640" y="475" width="220" height="50" rx="6" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:3px, 3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="750" y="495" text-anchor="middle" style="font-size:12px;;fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:12px;font-weight:600;text-anchor:middle;dominant-baseline:auto">tenant-mgmt DB</text>
+  <text x="750" y="510" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">tenants (자격증명 원본)</text>
+
+  <!-- 테넌트 인프라 -->
+  <rect x="340" y="545" width="540" height="55" rx="6" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:3px, 3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="610" y="565" text-anchor="middle" style="font-size:12px;;fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:12px;font-weight:600;text-anchor:middle;dominant-baseline:auto">테넌트별 인프라 (DB-per-tenant)</text>
+  <text x="610" y="582" text-anchor="middle" style="fill:rgb(107, 114, 128);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">PostgreSQL 전용 DB · MinIO 전용 버킷 · Elasticsearch 전용 인덱스</text>
+
+  <!-- 화살표: 브라우저 → asst -->
+  <line x1="460" y1="110" x2="460" y2="168" marker-end="url(#arrow-runtime)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="468" y="140" fill="#2563eb" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">① 요청 (JWT)</text>
+
+  <!-- 브라우저 → auth (로그인) -->
+  <path d="M 380 92 Q 220 200 170 318" marker-end="url(#arrow-runtime)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="180" y="220" fill="#2563eb" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">⓪ 로그인 (ID/PW)</text>
+
+  <!-- asst → user -->
+  <line x1="460" y1="240" x2="460" y2="318" marker-end="url(#arrow-runtime)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="468" y="282" fill="#2563eb" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">② 토큰 + configs 요청</text>
+
+  <!-- user → auth (verify) -->
+  <line x1="338" y1="355" x2="282" y2="355" marker-end="url(#arrow-runtime)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="290" y="348" fill="#2563eb" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">③ verify_token</text>
+
+  <!-- auth → user (로그인 시 비밀번호 검증, HMAC) -->
+  <path d="M 280 335 Q 310 305 338 335" marker-end="url(#arrow-runtime)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="285" y="305" fill="#2563eb" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">⓪' user/exist (HMAC)</text>
+
+  <!-- auth → Redis -->
+  <line x1="170" y1="392" x2="170" y2="473" marker-end="url(#arrow)" style="fill:none;stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- user → user DB -->
+  <line x1="460" y1="392" x2="460" y2="473" marker-end="url(#arrow)" style="fill:none;stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- tenant-mgmt → tenant DB -->
+  <line x1="750" y1="392" x2="750" y2="473" marker-end="url(#arrow)" style="fill:none;stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- tenant-mgmt → 테넌트 인프라 (프로비저닝) -->
+  <path d="M 750 525 Q 750 535 700 545" marker-end="url(#arrow-provision)" style="fill:none;stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:2px;stroke-dasharray:6px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="600" y="540" fill="#d97706" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">프로비저닝</text>
+
+  <!-- asst → 테넌트 인프라 (런타임 직결) -->
+  <path d="M 540 240 Q 700 290 700 545" marker-end="url(#arrow-runtime)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="640" y="270" fill="#2563eb" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">④ 테넌트 DB 직접 쿼리</text>
+
+  <!-- tenant-mgmt → user-service (자격증명 동기화, 끊김) -->
+  <line x1="640" y1="355" x2="582" y2="355" marker-end="url(#arrow-provision)" style="fill:none;stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:2px;stroke-dasharray:6px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="588" y="372" fill="#d97706" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">자격증명 동기화 (?)</text>
+
+  <!-- 범례 -->
+  <g transform="translate(640, 60)" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+    <rect x="0" y="0" width="240" height="92" rx="6" fill="var(--bg-100, #ffffff)" stroke="var(--border-200, #d1d5db)" stroke-width="1" style="fill:rgb(255, 255, 255);stroke:rgb(209, 213, 219);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+    <text x="12" y="18" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:12px;font-weight:600;text-anchor:start;dominant-baseline:auto">범례</text>
+    <line x1="12" y1="35" x2="42" y2="35" marker-end="url(#arrow-runtime)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+    <text x="50" y="39" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">런타임 흐름 (JWT/HMAC)</text>
+    <line x1="12" y1="55" x2="42" y2="55" marker-end="url(#arrow-provision)" style="fill:none;stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:2px;stroke-dasharray:6px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+    <text x="50" y="59" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">프로비저닝 / 동기화</text>
+    <line x1="12" y1="75" x2="42" y2="75" marker-end="url(#arrow)" style="fill:none;stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+    <text x="50" y="79" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">데이터 저장소 접근</text>
+  </g>
+</svg>

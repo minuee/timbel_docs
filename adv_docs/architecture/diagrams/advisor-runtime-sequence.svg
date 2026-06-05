@@ -1,0 +1,98 @@
+<svg viewBox="0 0 920 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title2 desc2" style="font-family: ui-sans-serif, system-ui, sans-serif;">
+  <title id="title2" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">사용자 요청 런타임 시퀀스</title>
+  <desc id="desc2" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">브라우저가 advisor에 요청을 보낼 때 asst-service, user-service, auth-service 사이에서 일어나는 호출 순서를 표현한 시퀀스 다이어그램.</desc>
+
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow2-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/>
+    </marker>
+  </defs>
+
+  
+
+  <text x="20" y="28" style="font-size:15px;;fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:15px;font-weight:600;text-anchor:start;dominant-baseline:auto">런타임 요청 흐름 — asst-service → user-service → auth-service</text>
+
+  <!-- Actors -->
+  <rect x="40" y="55" width="140" height="40" rx="6" style="fill:rgb(250, 250, 250);stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="110" y="80" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:13px;font-weight:600;text-anchor:middle;dominant-baseline:auto">브라우저</text>
+
+  <rect x="240" y="55" width="160" height="40" rx="6" style="fill:rgb(250, 250, 250);stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="320" y="80" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:13px;font-weight:600;text-anchor:middle;dominant-baseline:auto">asst-service</text>
+
+  <rect x="460" y="55" width="160" height="40" rx="6" style="fill:rgb(250, 250, 250);stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="540" y="80" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:13px;font-weight:600;text-anchor:middle;dominant-baseline:auto">user-service</text>
+
+  <rect x="680" y="55" width="160" height="40" rx="6" style="fill:rgb(250, 250, 250);stroke:rgb(156, 163, 175);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="760" y="80" text-anchor="middle" style="fill:rgb(17, 24, 39);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:13px;font-weight:600;text-anchor:middle;dominant-baseline:auto">auth-service</text>
+
+  <!-- Lifelines -->
+  <line x1="110" y1="95" x2="110" y2="570" style="fill:rgb(0, 0, 0);stroke:rgb(209, 213, 219);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:4px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="320" y1="95" x2="320" y2="570" style="fill:rgb(0, 0, 0);stroke:rgb(209, 213, 219);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:4px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="540" y1="95" x2="540" y2="570" style="fill:rgb(0, 0, 0);stroke:rgb(209, 213, 219);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:4px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="760" y1="95" x2="760" y2="570" style="fill:rgb(0, 0, 0);stroke:rgb(209, 213, 219);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:4px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- 1. Browser → asst -->
+  <line x1="110" y1="130" x2="320" y2="130" marker-end="url(#arrow2)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:1.8px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="215" y="124" text-anchor="middle" style="fill:rgb(37, 99, 235);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:500;text-anchor:middle;dominant-baseline:auto">① GET /api/asst/v1/... (x-auth-token)</text>
+
+  <!-- asst self note: AuthMiddleware -->
+  <rect x="245" y="148" width="160" height="40" rx="4" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="325" y="164" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">AuthMiddleware</text>
+  <text x="325" y="178" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">토큰 추출 (자체검증 X)</text>
+
+  <!-- 2. asst → user -->
+  <line x1="320" y1="210" x2="540" y2="210" marker-end="url(#arrow2)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:1.8px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="430" y="204" text-anchor="middle" style="fill:rgb(37, 99, 235);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:500;text-anchor:middle;dominant-baseline:auto">② GET /api/configs/get_configs?filters=db_config</text>
+
+  <!-- 3. user → auth -->
+  <line x1="540" y1="245" x2="760" y2="245" marker-end="url(#arrow2)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:1.8px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="650" y="239" text-anchor="middle" style="fill:rgb(37, 99, 235);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:500;text-anchor:middle;dominant-baseline:auto">③ GET /api/auth/verify_token</text>
+
+  <!-- auth self note -->
+  <rect x="685" y="260" width="150" height="55" rx="4" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="760" y="276" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">JWT 서명 검증 (RS256)</text>
+  <text x="760" y="290" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">exp 만료 체크</text>
+  <text x="760" y="304" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">Redis 중복로그인 체크</text>
+
+  <!-- 3'. auth → user (response) -->
+  <line x1="760" y1="335" x2="540" y2="335" marker-end="url(#arrow2-back)" style="fill:none;stroke:rgb(22, 163, 74);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-dasharray:5px, 3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="650" y="329" text-anchor="middle" style="fill:rgb(22, 163, 74);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">{verify, payload: {sub, cId, role, ...}}</text>
+
+  <!-- user self note -->
+  <rect x="465" y="350" width="150" height="55" rx="4" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="540" y="366" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">payload.cId로</text>
+  <text x="540" y="380" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">prod.company 조회</text>
+  <text x="540" y="394" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">db_config 복호화</text>
+
+  <!-- 2'. user → asst (response) -->
+  <line x1="540" y1="425" x2="320" y2="425" marker-end="url(#arrow2-back)" style="fill:none;stroke:rgb(22, 163, 74);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-dasharray:5px, 3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="430" y="419" text-anchor="middle" style="fill:rgb(22, 163, 74);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">{tenant_id, configs:{db_config:"postgresql://..."}}</text>
+
+  <!-- asst self note: DynamicDB -->
+  <rect x="245" y="440" width="160" height="55" rx="4" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="325" y="456" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">DynamicDatabaseService</text>
+  <text x="325" y="470" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">TypeORM DataSource 생성</text>
+  <text x="325" y="484" text-anchor="middle" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">(테넌트 전용 PG 직결)</text>
+
+  <!-- 1'. asst → browser -->
+  <line x1="320" y1="525" x2="110" y2="525" marker-end="url(#arrow2-back)" style="fill:none;stroke:rgb(22, 163, 74);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-dasharray:5px, 3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="215" y="519" text-anchor="middle" style="fill:rgb(22, 163, 74);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">비즈니스 응답</text>
+
+  <!-- 캐시 노트 -->
+  <rect x="30" y="555" width="510" height="35" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1" style="fill:rgb(219, 234, 254);stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="40" y="575" style="font-weight:600;;fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:600;text-anchor:start;dominant-baseline:auto">캐시 히트 시:</text>
+  <text x="115" y="575" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">동일 테넌트 후속 요청은 ②③ 생략, asst가 캐싱된 DataSource 즉시 재사용</text>
+
+  <!-- 범례 -->
+  <g transform="translate(580, 555)" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+    <line x1="0" y1="10" x2="30" y2="10" marker-end="url(#arrow2)" style="fill:none;stroke:rgb(37, 99, 235);color:rgb(255, 255, 255);stroke-width:1.8px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+    <text x="38" y="14" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:start;dominant-baseline:auto">요청</text>
+    <line x1="90" y1="10" x2="120" y2="10" marker-end="url(#arrow2-back)" style="fill:none;stroke:rgb(22, 163, 74);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-dasharray:5px, 3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+    <text x="128" y="14" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:start;dominant-baseline:auto">응답</text>
+    <rect x="180" y="2" width="20" height="14" style="fill:rgb(254, 243, 199);stroke:rgb(217, 119, 6);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+    <text x="206" y="14" style="fill:rgb(55, 65, 81);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:ui-sans-serif, system-ui, sans-serif;font-size:11px;font-weight:400;text-anchor:start;dominant-baseline:auto">내부 처리</text>
+  </g>
+</svg>
