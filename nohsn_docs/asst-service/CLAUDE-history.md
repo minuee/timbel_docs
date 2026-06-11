@@ -328,3 +328,129 @@
 **검증**: tsc 0. **런타임 재검증은 프론트가 company payload 추가 + 서버 재시작 후 필요**(사용자가 프론트에 전달 예정). 남은 정리: handleNlpComplete의 `[VOC-DEBUG]` 로그는 동작 확인 후 debug 레벨로 낮추거나 제거.
 
 **핵심 교훈(기록)**: 디버깅을 단편적으로 하지 말 것 — 전체 플로우(프론트 payload→미들웨어→토큰→Redis 이벤트→LLM 호출)를 처음부터 끝까지 한 번에 트레이스했으면 ① X-Tenant-Id 형식, ② AuthMiddleware exclude, ③ 타이밍 경합을 더 빨리 묶어 찾았을 것. 오케스트레이터 같은 외부 의존은 **직접 호출(curl)로 입력값별 응답을 먼저 확정**하는 게 추측보다 빠름.
+
+### 28. 프론트 company payload 적용 완료 + 배포 환경변수(IS_REALTIME_VOC_CHECK) 주입 방법 논의 (코드 변경 없음, 정책/지식)
+
+**프론트 작업 완료**: 프론트가 assist-stream payload에 `company`(id, vendor_tenant_id) 추가 + 테스트 완료. → 섹션 27의 company 폴백 경로로 실시간 VOC 정상 동작 확인.
+
+**배경 질문**: `IS_REALTIME_VOC_CHECK=true`일 때만 실시간 VOC를 돌리고 싶은데, 개발은 로컬이고 배포는 젠킨스인데 **서버의 env 구조(env.prod, docker 형식)를 알 수 없음**. 서버 env 파일을 직접 못 고치는 상황에서, 로컬에서 커밋만으로 서버에 반영하는 가장 쉽고 안전한 방법은?
+
+**핵심 발견 — `.env.*` 는 서버에 안 들어간다**:
+- `.dockerignore`에 `.env.local/.env.development/.env.test/.env.production` 전부 등재 → `COPY . .` 시 **이미지에 미포함**. 컨테이너 안에 `.env.development` 자체가 없음.
+- ConfigModule(`app.module.ts:16-18`)은 `.env.${NODE_ENV}` + `.env`를 읽지만, 그 파일이 이미지에 없으니 결국 **`process.env`(컨테이너 환경변수)만** 사용.
+- 즉 **`.env.development` 수정·커밋은 서버 반영 0%.** 서버 config = docker-compose `environment:` 또는 젠킨스/k8s 주입(사용자가 못 건드리는 곳).
+- 추가: 레포의 `.env.prod`는 ConfigModule이 찾는 `.env.production`과 이름도 안 맞아 어차피 안 읽힘.
+
+**서버 반영 방법 — 우선순위**:
+```
+docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configService default)
+   (서버측, 못 건드림)            (커밋 가능 ✅)        (커밋 가능 ✅)
+```
+- **추천 = Dockerfile `ENV IS_REALTIME_VOC_CHECK=true`**: Dockerfile은 이미지 빌드에 무조건 사용되므로 젠킨스 구조와 무관하게 확실. compose에 같은 변수가 없으면 그대로 먹음(현재 두 compose 모두 이 변수 없음). 나중에 인프라가 compose에서 override 가능.
+- `docker-compose.prod.yml`의 `environment:`에 넣는 건 "서버가 그 파일을 실제로 쓴다"는 가정 필요 → 불확실하므로 차선.
+- 코드: `configService.get('IS_REALTIME_VOC_CHECK') === 'true'`로 읽고 **없으면 false(기본 OFF, 안전)**. `true`일 때만 nlp 구독 등록(미구현 — 사용자가 배선 보류, 추후).
+
+**docker-compose.dev.yml ↔ .env.development 불일치 점검(사용자 요청)**:
+- compose에 **`env_file:` 지시어 없음** → compose는 `.env.development`를 **아예 안 읽음**(두 파일 연결고리 자체가 없음).
+- compose `environment:`엔 ~12개만 정의. `USER_HOST`/`LLM_ORCHESTRATOR_HOST`/`SEARCH_HOST`/`REDIS_*`/`DB_DIRECT_CON`/외부호스트들/`IS_REALTIME_VOC_CHECK`/`REALTIME_VOC_INTERVAL` 등 **핵심 변수 대거 누락**. DB값도 placeholder(`dev_user/dev_password/asst_dev`).
+- 결론: **이 committed `docker-compose.dev.yml`은 실제 배포본 아닐 가능성 큼**(이대로면 앱 정상 기동 불가). 실제 서버 env는 젠킨스/서버측 다른 경로에서 주입. → **개발서버 구축 시점에 env 주입 방식 확정 후 정리하기로 함**(지금은 로컬 동작 우선).
+
+**문서 기록 위치 이전 시도**: 대화기록을 `minuee_timbel_docs/nohsn_docs/asst-service/`로 옮기려 했으나, 해당 폴더가 macOS 파일권한(EPERM)으로 Claude 도구 접근 불가(`/add-dir` 재추가로도 안 풀림). → 원본(`asst-service/CLAUDE-history.md`) 갱신 후 사용자가 `cp`로 복사하는 방식으로 운용.
+
+### 29. SEARCH_HOST → AICM_HOST 통합 (RAG 답변/문서원본을 새 AICM 서버로 마이그레이션) (tsc 0, 테스트 27 통과) (2026-06-11)
+
+**배경**: 새 AICM 서버(`192.168.101.192`, mock 단계)가 설치됨. 기존 `AICM_HOST`(`https://dev-ecp-aicm-service.langsa.ai`) → `http://192.168.101.192:8173`(nginx 권장, :32012 직접)로 변경. 추가로 기존 `SEARCH_HOST`(`54.116.103.216:5101`)로 하던 RAG 작업도 새 AICM 서버로 **통합**하기로 결정.
+
+**조사 결과(소스 grep)**:
+- `AICM_HOST` 사용처 = `knowledge-proxy.controller.ts` 1곳(엔드포인트 5개: search/retrieve_doc·indexes/get_doc_idx·sections/get_section·docs/get_doc·dashboard/popular). 이건 host만 8173로 바꿔 끝 — dashboard/popular 200 확인. 처음 409는 프론트 workspace_id(`019d65ea…`)가 mock 서버에 없어서였고, mock workspace_id(`019bfe5d-d00f-74c9-b6f6-416a9bfa1dc6`)로는 200. **코드 버그 아님, 데이터 이슈**.
+- `SEARCH_HOST` 사용처 = 3개 서비스: `assist-stream.service`(`POST /assist-stream`), `search.service`(`POST /stream`), `document.service`(문서원본). 모두 `/api/v1/rag/assist-stream`·`/api/v1/documents/{id}/original` 호출.
+- `SEARCH_REPOSITORY_ID` = 위 2 서비스에서 `repository_id` payload로만 사용. AICM `rag_assist`는 `repository_id` 개념이 없고 **`workspace_id`** 사용 → **이 변수 불필요(죽음)**. `SEARCH_DOCUMENT_TYPE_IDS` = 코드에서 env로 **아예 안 읽힘**(완전 dead). → 3개 SEARCH_* env는 그대로 두되 **미사용**(rename 불필요).
+
+**새 AICM 서버 실측 스펙(openapi :32012/openapi.json)**:
+- RAG 답변: `POST /api/aicm/v1/search/rag_assist` — body 필수 `workspace_id`,`query` + `enable_distill`(기본 true),`conversation_history` / 헤더 **`X-auth-token` 필수**(mock은 값 미검증, 더미 OK, 헤더 없으면 422). SSE 이벤트 `intent→query_analysis→sources→…→done` 실측.
+- 문서원본: `GET /api/aicm/v1/docs/original/{document_id}` — 헤더 `X-auth-token` 필수(없으면 422, dummy면 200 실측).
+
+**코드 변경(6파일)**:
+- `assist-stream.service.ts`·`search.service.ts`: host `SEARCH_HOST`→`AICM_HOST`, 경로 →`/api/aicm/v1/search/rag_assist`, payload `repository_id/distill`→**`workspace_id/enable_distill:false`**(기존 동작=distill 미사용 유지), 헤더 `X-Tenant-Id`(하드코딩 0…)→**`X-auth-token: token||'dummy'`**. `stream()`에 `token` 인자 추가.
+- `document.service.ts`: host→`AICM_HOST`, 경로 →`/api/aicm/v1/docs/original/{id}`, 헤더→`X-auth-token`. `getOriginal()`에 `token` 인자.
+- 컨트롤러 3개: `assist-stream`(이미 헤더서 추출한 `token` 전달, 이 라우트는 AuthMiddleware **제외**라 헤더 직접 추출), `search`(`req.token` 전달, AuthMiddleware 적용), `document`(`@Req()` 추가해 `req.token` 전달).
+- DTO 2개(`assist-stream-request`,`search-request`): **`workspace_id`(snake_case) 옵션 추가**(배포 전환기 안전 위해 required 아님 — 사용자 요청). ⚠️ 처음 camelCase(`workspaceId`)로 넣었다가 프론트가 snake_case `workspace_id`로 보내 `forbidNonWhitelisted` 400 발생 → **snake_case로 정정**(프론트·AICM 필드명과 end-to-end 일치). `repositoryId`는 deprecated로 남김.
+
+**테스트**: 영향 spec 갱신(`assist-stream.service.spec`: AICM_HOST/새 payload/URL/X-auth-token, `assist-stream.controller.spec`: mockReq `headers:{}` + 4번째 인자 + VOC mock `cacheCompany` 보강). 27개 전부 통과, tsc 0.
+
+**미해결/주의**:
+- 프론트가 `/stream`·`/assist-stream` 호출 시 body에 **`workspaceId`** 실어야 함(없으면 AICM 422). dashboard/popular과 동일 workspace_id 사용.
+- mock→실 user-service 전환 시 어드바이저 경로는 더미토큰 거부될 수 있음(실 토큰 필요). `enable_distill`은 현재 false 고정(요약 켜려면 true).
+- `/voc-test`(VOC 실시간)는 `REALTIME_VOC_INTERVAL`만 쓰고 RAG relay와 무관 → 이번 변경 **영향 없음**.
+
+### 30. 실시간 VOC 트리거를 상시 Redis 옵저버 → /assist-stream 호출 시로 변경 (tsc 0, 테스트 27 통과) (2026-06-11)
+
+**증상**: 수동 문서검색 `/stream` 호출 중에도 고객 VOC 탐지가 도는 것처럼 보임. 사용자 요구: 실시간 VOC 는 **`/assist-stream`(실시간 발화) 호출 시에만**, `/stream`(수동검색)에선 절대 안 돼야 함.
+
+**원인(코드 확인)**:
+- `/stream`(SearchService)은 VOC 코드를 호출하는 곳이 **0곳**(grep 확정) — `/stream` 자체는 VOC 못 돌림.
+- 진짜 트리거는 `VocRealtimeService.onModuleInit`이 등록하던 **상시 Redis `nlp:complete` 옵저버**. 앱 기동 시 무조건 등록돼 공용 dev Redis(`dev-ecp-redis.langsa.ai`)의 **모든 통화 발화**를 받아 VOC 분석 → HTTP 경로와 무관하게 백그라운드 상시 동작(그래서 `/stream` 칠 때도 도는 것처럼 보임).
+- `IS_REALTIME_VOC_CHECK` 는 **코드 어디서도 안 읽는 죽은 플래그**(env에만 존재) → 사용자가 env에서 제거(주석처리).
+
+**안전성 확인(다른 시스템 영향 없음)**: `RedisMonitorService.registerMessageObserver`는 콜백 배열(`messageObservers`)에 push만 함(채널 구독 신규 안 함). `notifyMessageObservers`가 각 옵저버를 try/catch 격리 호출. **VOC가 이 옵저버의 유일한 등록자**(호출처 1곳)라 떼면 배열만 비고 중계 파이프라인/다른 구독 무관. 코칭 소켓 등 다른 구독은 `redisService.subscribe()` 직접 경로라 별개. → 채널 unsubscribe 0건, 다른 시스템 영향 0.
+
+**변경**:
+- `voc-realtime.service.ts`: `OnModuleInit` 인터페이스/`onModuleInit`(옵저버 등록) **제거**. `handleNlpComplete`는 향후 재배선 대비 dead 코드로 남김(주석 명시). `redisMonitorService` 주입은 유지(무해).
+- `assist-stream.controller.ts`: 토큰 캐시 직후 `void this.vocRealtimeService.handleUtterance(dto, token)` **fire-and-forget** 추가 → 실시간 발화(=/assist-stream)일 때만 VOC(누적→게이트 REALTIME_VOC_INTERVAL→분석→publish→저장). SSE 응답 안 막음(handleUtterance 내부 예외 격리).
+- `/stream`·`/voc-test` 코드 무변경.
+
+**주의**: 이미 기동된 프로세스엔 **이전 module init 때 등록된 옵저버가 살아있음** → 적용하려면 **서버 풀 재시작 필요**(watch 재컴파일만으론 기존 옵저버 안 빠질 수 있음). 검증: 재시작 후 로그에 "실시간 VOC: nlp:complete 구독 옵저버 등록 완료"가 **안 떠야** 정상. `/assist-stream` 스트리밍 정상 동작 실측 확인.
+
+### 31. 192 개발기(API Gateway 없음) 배포용 환경 전환 — .env.development + docker-compose.dev.yml (2026-06-11)
+
+**배경/방침**: CI/CD 배포 시스템은 일단 미사용, **192 개발기에 git clone 후 Docker 직접 기동**. 외부 노출 포트 정책: 32010번대=인프라, 32020번대~=업무서비스(개발기간 32020~32030, 온프레미스 패키징 때 재정리 예정). **192 개발기엔 API Gateway 미설치**(이태희 수석 미배치, 윤 수석 인계 확인 필요) → 게이트웨이(langsa.ai) 경유하던 outbound 호출을 **각 백엔드 서비스 직접 주소로** 전환.
+
+**연동 서비스 정보(전달받음, 게이트웨이 없음)** — 호스트포트 / timbel_network 내부DNS(:8080):
+| 서비스 | 호스트포트 | 내부DNS |
+|---|---|---|
+| tenant-management-service | 192.168.101.192:32030 (/api/v2) | tenant-management-service:8080 |
+| user-service | 192.168.101.192:32031 (/api) | user-service:8080 |
+| auth-service | 192.168.101.192:32032 (/api) | auth-service:8080 |
+| tenant-mgmt-web | 192.168.101.192:32033 | tenant-mgmt-fe:8080 |
+| ecs-api-service | 192.168.101.192:32034 (/api) | ecs_api_service:8080 |
+
+**핵심 분석(Explore 조사) — asst-service가 실제 코드에서 호출하는 활성 외부 env는 6개**:
+- USER_HOST(✅user-service), AICM_HOST/SEARCH_HOST(✅이미 192.168.101.192:8173), CE_HOST, LLM_ORCHESTRATOR_HOST, AUDIO_STREAMER_HOST, QA_HOST, REDIS.
+- **USER_HOST**: `/api/user/*`,`/api/organization/*`,`/api/configs/get_configs?filters=db_config`(테넌트 db_config=DB 연결 시작점) 붙임 → 받은 user-service base `/api`와 일치.
+- **auth-service = 매핑 env 없음**: AuthMiddleware가 토큰 **추출만 하고 외부검증 안 함**("토큰 검증 더 이상 사용 안 함" 주석). `AUTH_SERVICE_API_URL`은 .env.prod에만 있고 코드 **dead**.
+- **TENANT_HOST/LLM_HOST/AUDIO_SERVICE_API_URL = dead**(validation.config.ts에만, 코드 미사용). 받은 5개 중 asst-service가 쓰는 건 **user 하나뿐**(tenant/ecs/web 무시).
+
+**사용자 결정**: ① "모름" 호스트(CE/LLM-orchestrator/audio/redis)는 현 .env.development(langsa.ai) **그대로 유지** ② 실행=**192 서버 + timbel_network 내부** ③ DB=**동적연결 DB_DIRECT_CON=0** ④ 외부포트=**32099**.
+
+**변경(코드 0, 설정 2파일)**:
+- `.env.development`: `USER_HOST` langsa.ai→**`http://user-service:8080`**(내부DNS, 기존값 주석보존). `DB_DIRECT_CON` 1→**0**. AICM/SEARCH(8173)·CE/LLM-orch/audio/redis(langsa.ai) 유지.
+- `docker-compose.dev.yml`: ⚠️기존 compose가 env를 inline으로만 박아 **.env.development 호스트값이 컨테이너에 주입 안 되던 누락** 발견 → **`env_file: .env.development` 추가**, inline DB env(dev_user/asst_dev) 제거. ports `31001`→**`32099:3000`**. networks `asst-network`(bridge)→**`timbel_network`(external)**. ⚠️Dockerfile CMD가 `NODE_ENV=production` 강제 → compose **`command`로 `NODE_ENV=development node dist/src/main` override**(스키마 마이그레이션 로직 정상화).
+
+**미해결/확인필요**: ① `timbel_network` 네트워크 이름 정확 일치 여부(`docker network ls`). ② DB_DIRECT_CON=0이라 user-service가 주는 db_config가 가리키는 DB가 **192망 내부에서 접근**돼야 함(아니면 30s 타임아웃). ③ CE/LLM-orch/audio/redis는 여전히 langsa.ai → 192망에서 그 망 접근 가능해야 동작(불가 시 추후 192 주소로 교체). ④ 실 user-service 전환 시 어드바이저 경로 더미토큰 거부 가능.
+
+### 32. 192 개발기 배포 트러블슈팅 전 과정 — 빌드 성공~테이블 생성까지 (2026-06-11)
+
+#31 설정 이후 실제 192 서버에 git clone→docker 기동하며 막힌 것들을 순서대로 해결. **결과: 배포 완료**(헬스체크 200, redis 연결, DB 직결, advisor 테이블 생성). 도커 가이드 문서 `docs/docker-deploy-guide.md` 신규 작성.
+
+**환경 확정값(192)**:
+- 외부포트 **32025** (32020번대만 방화벽 개방, **32099는 막힘** — netstat은 LISTEN인데 외부 접속 불가로 확인). `docker-compose.dev.yml` ports `32099→32025`.
+- redis: `redis:7-alpine`이 `192.168.101.192:32014`(호스트포트)로 떠있음. **비TLS** → `.env.development` `REDIS_HOST=192.168.101.192`,`REDIS_PORT=32014`,`REDIS_TLS=false`,`REDIS_PASSWORD=nMzwaa7!U3Z!`(timbel123!는 WRONGPASS였음, redis-cli ping으로 확정).
+- DB: 테넌트 DB 미연동이라 **`DB_DIRECT_CON=0→1` 직결**로 전환. postgres `postgres:17` 컨테이너(ID `4c6fda...`)가 `192.168.101.192:32011`. `.env.development` `DB_HOST=192.168.101.192`,`DB_PORT=32011`,`aicc_admin`/`HPr2!txYB!`/`aicc`.
+- Dockerfile `FROM node:20-alpine→node:24-alpine`(사용자 요청, 로컬 v24.16.0 일치).
+- USER_HOST는 #31대로 `user-service:8080`(내부DNS) 유지.
+
+**겪은 에러→원인→해결(도커 핵심 학습)**:
+1. **브라우저 접속 불가(서버 localhost:32099는 200)**: 외부 방화벽이 32099 미개방 → 32025(개방 범위)로 변경.
+2. **`ECONNREFUSED 127.0.0.1:5432/32011`**: 직결인데 `DB_HOST=127.0.0.1` → **컨테이너 안 127.0.0.1=자기자신**. host를 `192.168.101.192`로. (port만 32011로 바꾸고 host를 안 바꿔 두 번 반복됨)
+3. **redis 연결 타임아웃**: 비TLS redis에 `REDIS_TLS=true` → false로.
+4. **commitlint/eslint pre-commit 막힘**: 커밋 메시지 `type:` 형식 필수(`feat`/`chore` 등 13종, `dev` 불가), `socket.gateway.ts` unused `stats` lint(사용자가 로그 주석 해제로 해결).
+5. **`relation advisor.notices does not exist`(42P01)**: 스키마 껍데기만 있고 **테이블 없음**.
+
+**테이블 생성 해결(중요)**:
+- `synchronize`는 `NODE_ENV==='local'`에서만 켜짐. 배포는 `development`라 OFF → 빈 DB에 핵심 테이블(notices 등) 자동생성 안 됨.
+- **함정**: 사용자가 `database.config.ts`의 synchronize를 development로 바꿨으나 무효 → 이 파일은 **never wired up**(실제 연결은 `dynamic-database.service.ts`). 게다가 `'development로'` 한글오타까지.
+- **또 함정**: `docker-compose.dev.yml`의 `NODE_ENV`는 `command:` 안 값이 적용(Dockerfile CMD가 production 박음) → environment만 바꾸면 무효.
+- **해결책**: 코드 수정 말고 **일회성 `NODE_ENV=local`**(compose의 command+environment 2곳 sed) → 재기동 → synchronize가 전체 테이블 생성 → **development 원복**. (빈 DB라 안전)
+- `advisor-schema-ddl.sql`은 **MySQL 문법(`INT(1)`,`ON UPDATE CURRENT_TIMESTAMP`,인라인 COMMENT)+구버전이라 PG에서 사용 불가** — 폐기 권고.
+
+**남은 것**: CE/LLM-orch/audio는 langsa.ai 유지(미배포). 테넌트 DB 준비되면 `DB_DIRECT_CON=1→0`(동적연결)으로 복귀.
