@@ -454,3 +454,58 @@ docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configServic
 - `advisor-schema-ddl.sql`은 **MySQL 문법(`INT(1)`,`ON UPDATE CURRENT_TIMESTAMP`,인라인 COMMENT)+구버전이라 PG에서 사용 불가** — 폐기 권고.
 
 **남은 것**: CE/LLM-orch/audio는 langsa.ai 유지(미배포). 테넌트 DB 준비되면 `DB_DIRECT_CON=1→0`(동적연결)으로 복귀.
+
+### 33. 프론트(asst-web) 192 배포 + 게이트웨이 없는 환경 CORS 활성화 (2026-06-12)
+
+백엔드 배포 후 프론트(asst-web)도 같은 192에 도커 배포하며 막힌 것 해결. **결과: 프론트↔백엔드 연동 완료.**
+
+**프론트 배포 정보**: 외부 주소 `http://192.168.101.192:32026`(컨테이너 내부 webpack-dev-server 32082). 도커 빌드 이슈 2건:
+- `yarn install`이 `yarn.lock` 없이 "Resolving packages..." 무한대기 → `package-lock.json`만 있으니 **`npm ci`로 통일**(Dockerfile).
+- `npm ci`가 retry 반복 → `.npmrc`가 `@timbel-aicc` 스코프를 **GitHub Packages(npm.pkg.github.com)** 에서 받게 돼있어 폐쇄망/인증 이슈. ⚠️ `.npmrc`에 GitHub PAT(`ghp_...`)가 평문 커밋돼 있음 → 빌드 해결 후 **토큰 revoke 권고**.
+
+**경로 형태 확정**: 게이트웨이가 붙여주던 `/aicc/asst-service/**`(StripPrefix2→PrefixPath `/api/asst/v1`)는 192엔 게이트웨이가 없으므로 **프론트가 직접 `/api/asst/v1/...`** 로 호출해야 함(백엔드 `setGlobalPrefix('/api/asst/v1')`). 즉 프론트 base를 `/aicc/asst-service`→`http://192.168.101.192:32025/api/asst/v1`로 교체. 소켓도 `/api/asst/v1/socket.io` 직접.
+
+**CORS 문제(핵심)**: 프론트(32026)→백엔드(32025) cross-origin인데 CORS 에러. 원인은 `main.ts`가 **CORS를 `NODE_ENV==='local'`에서만 활성화**(주석: "배포는 게이트웨이 globalcors가 단일 처리"). **192엔 게이트웨이가 없어 백엔드·게이트웨이 둘 다 CORS 미제공** → 차단(401도 CORS헤더 없어 CORS로 표시되던 것).
+- **해결(코드)**: `main.ts` CORS 조건을 `NODE_ENV===local || !!CORS_ALLOWED_ORIGINS`로 확장, origin은 `CORS_ALLOWED_ORIGINS`(쉼표분리) 우선·없으면 기존 `ALLOWED_ORIGINS_DEV`. `docker-compose.dev.yml` `CORS_ALLOWED_ORIGINS=http://192.168.101.192:32026`(trailing slash 없이 — Origin 헤더와 매칭). **코드변경이라 `--build` 필요.**
+- **로컬 무영향 확인**: `.env.local`엔 CORS_ALLOWED_ORIGINS 없음→local은 기존과 동일 동작. compose.dev.yml은 배포전용(로컬 start:dev는 미사용). 기존 게이트웨이 배포도 env 미설정시 기존대로.
+
+**남은 것**: `/proxy/user/get_user` 등 401 발생 시 프론트 인터셉터가 `x-auth-token`/`Authorization`을 싣는지 확인(proxy는 게이트웨이 무관·asst-service 내부기능이라 구조 동일). `.npmrc` GitHub 토큰 revoke.
+
+### 34. CE 프록시 502 → 192 ce-service 직접연결 (2026-06-12)
+
+`/proxy/ce/nlu-catalog/intents/all` **502 Bad Gateway**. asst 프록시가 업스트림 CE에 못 닿은 것.
+- **원인**: `CE_HOST`가 아직 `dev-ecp-ce-service.langsa.ai`(langsa.ai) → 192망에서 **timeout**(`curl` 확인). 게이트웨이 없는 192에선 langsa.ai 미접근.
+- **발견**: `docker ps`에 **`ce-service:latest`가 `0.0.0.0:32021->8080`** 으로 떠있음(192에 CE 존재).
+- **해결**: `.env.development` `CE_HOST`·`CE_API_URL` → **`http://192.168.101.192:32021`**(호스트포트). `.env`만이라 빌드 불필요, 재기동만.
+- **검증**: CE 직접 `curl /api/ce/v1/nlu-catalog/intents/all` → **401**(timeout/404 아님 = 연결·경로 OK, 토큰만 필요). ce-proxy 코드는 `Authorization: Bearer ${req.token}`로 올바르게 forward(헤더 일치 — `searchDocuments`만 예외적으로 `X-Auth-token` 사용). 유효 토큰 첨부 시 200 확인.
+- **결론**: 401은 전부 **프론트 토큰 첨부** 문제로 수렴(get_user·CE 동일). 백엔드 프록시는 정상.
+
+**남은 langsa.ai 호스트**: `LLM_HOST`/`LLM_ORCHESTRATOR_HOST`/`AUDIO_STREAMER_HOST`도 동일 패턴 예상(192망 timeout) → 해당 기능 쓸 때 192에 서비스 있으면 `docker ps`로 찾아 호스트포트로 교체.
+
+### 35. 로컬 CORS ACAO 중복 해결 — main.ts CORS 조건 정리 (2026-06-12)
+
+로컬(프론트 `localhost:8173` → 게이트웨이 `localhost:8080` 경유)에서 get_user Axios **`ERR_NETWORK`**. 브라우저 콘솔: `Access-Control-Allow-Origin header contains multiple values 'http://localhost:8173, http://localhost:8173'`. curl(브라우저 아님)은 200+정상데이터 → **CORS 확정**.
+- **원인**: 게이트웨이(globalcors) + asst-service(`NODE_ENV=local`이라 `enableCors`)가 **둘 다 ACAO 헤더를 붙여 중복**. 브라우저는 ACAO 단일값만 허용. (192는 게이트웨이 없어 asst 단독→문제없었음)
+- **해결**: `main.ts` `corsEnabled`를 `NODE_ENV===local || !!CORS_ALLOWED_ORIGINS` → **`!!CORS_ALLOWED_ORIGINS`만**으로 변경. 로컬(.env.local에 CORS_ALLOWED_ORIGINS 없음)→asst CORS off→게이트웨이 단일처리. `npm run start:dev` 재시작으로 적용.
+- **192 무영향**: 192는 `NODE_ENV=development`라 원래도 local조건 안 탔고 `CORS_ALLOWED_ORIGINS=...:32026`으로 켜짐 → 변경 전후 동일. (이 main.ts 변경 자체는 다음 192 배포 때 반영, 동작 동일하므로 급하지 않음)
+- **교훈**: 게이트웨이 경유 환경은 CORS를 게이트웨이가 단일 처리. 백엔드가 추가로 켜면 ACAO 중복. "백엔드에 CORS 추가"는 중복 악화 — **한쪽만** 켜야 함.
+
+### 36. 콜테스트 양산 redis 의존 / FortiGate VPN — 인프라 대기 (미해결, 2026-06-12)
+
+다음주 192 개발서버 시연(AICC 콜봇+어드바이저)의 **실콜 테스트가 안 되는 상황**. 구조 파악 결과:
+- **콜 흐름**: NICE CXone(`cxone.niceincontact.com`) → 양산 STT/NLP → **양산 redis(`dev-ecp-redis.langsa.ai:6379` TLS, AWS)** 로 통화 이벤트 발행 → asst-service가 구독 → 실시간 보조. (테스트 HTML `docs/advisor-call-test.html`은 CXone SDK 테스트용, redis 직접 무관)
+- **콜이력 저장은 양산 DB 아님** — 각 환경 자체 DB(로컬=127.0.0.1, 192=32011)에 저장. 로컬이 양산 DB정보 없이 콜테스트 되던 게 증거 → **양산 종속은 redis(통화이벤트) 하나로 좁혀짐**.
+- **차단 원인**: ECP-AI(=`*.langsa.ai`) 배포 서비스는 이제 **FortiGate VPN 없이는 외부 접근 불가**로 정책 변경(CE/redis 등 192 timeout의 근본 원인). 로컬은 VPN으로 redis 접속됨(코드·설정 정상 증명). 192는 서버라 클라이언트 VPN 불가 → **인프라가 서버단 경로(사이트-투-사이트/방화벽) 열어야**.
+- **요청 사항(콜 인프라 담당자)**: ① 192→`dev-ecp-redis.langsa.ai:6379` 경로 개방(AWS면 192 아웃바운드+AWS SG 인바운드 양쪽), ② 대안: 통화이벤트를 192 redis(32014)로도 발행, ③ 로컬용 macOS FortiClient+프로파일(받은 게 Windows용이라 맥 설치 불가).
+- **상태**: 코드/설정 완료, **인프라 경로 개방 대기**. 열리면 즉시 콜테스트 가능.
+
+### 37. 192 개발서버 모니터링 — 브라우저 실시간 로그 뷰어(Dozzle) 도입 (2026-06-12)
+
+192는 도커 배포(게이트웨이 없음)인데, 서버 로그를 매번 SSH 들어가 `docker compose logs -f` 로만 봐야 해 "Swagger처럼 브라우저에서 실시간 로그"를 원함.
+- **분석**: 코드엔 이미 모니터링 자산이 있으나 192에서 미가동 — ① OpenTelemetry(`src/tracer.ts`, SigNoz용 OTLP gRPC)는 `OTEL_EXPORTER_OTLP_ENDPOINT` 미설정이라 OFF, ② winston 파일로그(`logs/` 30일 로테이트), ③ health 엔드포인트(`/health/check`, `/health/db-connections`).
+- **결정**: SigNoz(Level2)는 ClickHouse 등 무거워 개발기 1대엔 과함 → **Dozzle(컨테이너 1개, 도커소켓 read-only)** 채택. `docker compose logs -f` 를 브라우저로 보는 것 + 검색/멀티컨테이너.
+- **구성**: `docker-compose.monitor.yml`(포트 **32027**, asst 배포와 분리된 독립 컨테이너) + `monitor-data/users.yml`(simple auth). 접속 `http://192.168.101.192:32027`, **admin / lena47**.
+- **함정·해결**: Dozzle **v10은 sha-256 비번 폐기 → bcrypt 필수**(`fatal: sha256 passwords are no longer supported` → 로그인 무한로딩). `docker run --rm amir20/dozzle generate admin --password lena47 --name admin --email nohsn@timbel.net > monitor-data/users.yml` 로 bcrypt(`$2a$...`) 재생성 후 해결. compose `version` obsolete 속성도 제거.
+- **특성**: Dozzle은 도커소켓 기반이라 **asst뿐 아니라 호스트 전체 컨테이너 로그**(postgres/redis/user/ce 등)를 봄 → 서비스간 연관 디버깅에 유리. 단 타 서비스 로그 노출되므로 **인증 필수**, 더 좁히려면 `DOZZLE_FILTER=name=asst-service-dev`.
+- **git 인증 트러블슈팅**: 192(Cursor 서버) `git fetch/pull` **401** — Cursor `GIT_ASKPASS`(askpass-main.js)가 만료 자격증명 자동제출(입력창 안 뜸) + GitLab이 PAT 요구. 해결: `git remote set-url origin 'https://oauth2:<PAT>@gitlab.timbel.dev/...'` 후 fetch, 또는 일회성 `GIT_ASKPASS= git fetch 'https://oauth2:<PAT>@...'`. 서버정렬은 pull(충돌) 대신 `git fetch && git reset --hard origin/develop_nohsn`.
+- **문서**: `docs/docker-deploy-guide.md` 10번 섹션(Dozzle), 신규 `docs/git-server-sync-guide.md`(git 401/PAT + reset 서버정렬). 커밋 `b71c2ed fix: 모니터링 환경 설정` 등으로 배포 완료.

@@ -253,3 +253,101 @@
   - `CustomerVocPanel.vue`: 3행 아래 종합박스 복원 — 위험 시 빨강 펄스+⚠ "대화가 위험 상태로 진입하였으니 상위 관리자 또는 코칭요청을 하세요", 안정 시 "종합 위험도 NN% · 안정". `pct` 헬퍼 + `.voc-total`/`voc-pulse` 스타일 복원.
   - 검증: tsc VOC 에러 0건. **남은 일:** 이상하면 표시 형태 고도화.
 - **(추가)** 사용자 피드백 — 존댓말 사용 요청 → `CLAUDE.md` 대화 지시사항 "한국어 존댓말(반말 금지)"로 갱신.
+
+### 29. [분석/문서화] 상담사 화면 지식·문서 검색(RAG) 프로세스 분석 — `docs/advisor-minuee-docs-rag.md` (2026-06-11)
+- **목적:** 코드 수정 없이 상담사 화면의 RAG 파이프라인 전체를 분석·문서화. 결과를 신규 파일 `docs/advisor-minuee-docs-rag.md`(11개 섹션)에 누적 저장.
+- **분석 핵심:**
+  - **프론트엔드 LLM 직접 호출 0** (grep 확인). `query`만 백엔드 `asst-service`에 전달 → SSE 단계별 스트리밍 수신(백엔드 프록시 패턴).
+  - **RAG 진입 2경로 (동일 SSE 규약):** ①자동 어시스턴트 `callAssistStream`→`POST /assist-stream`(고객 발화 STT final 시 자동) / ②수동 검색 `callDocumentStream`→`POST /stream`(지식저장소 검색바). 파서 `sse-parser.ts`, `done`/`error`서 종료.
+  - **백엔드 RAG 단계 = SSE 이벤트:** `intent`(검색 필요판단·skipped) → `sources`(top-N 후보) → `distilled`(LLM 선별 selected_refs+summary) → `token`(답변 스트림) → `done`(model/token_usage/stages). 타입: `assist-stream.type.ts`.
+  - **트리거 지점:** `useChatMessageParser.ts:482` — 고객 발화(isUser)·final 턴만 `handleAssistStream` 호출. partial은 머지 후 1회만.
+  - **화면 공존 구조:** STT 버블(`chatContent` v-for)과 RAG 결과가 **같은 `item.id`로 묶여** 버블 아래 인라인 표시(`chat/index.vue:313` `selectedKeywordForBubble[item.id]`). 동시에 부모로 emit(`updateChatDocumentList/SelectedRefs/Summary`, `detailItemClick`) → 우측 지식저장소 패널에도 이중 출력.
+  - **ID 체계(혼동 정리):** 실은 3종+이력1 — `callId`(통화1건)/`turn_idx`(서버STT 발화턴)/`bubbleId==messageId`(프론트 `messageIdCounter++` 화면순번)/`callStatsId`(이력). 포함관계 callId→turn_idx→bubbleId→RAG결과. turn_idx=백엔드 저장키(snapshot/VOC), bubbleId=화면 표시키.
+  - **지식저장소 패널:** 실사용 컴포넌트는 `TabTypeKnowledgeIndex.vue`(VOC `CustomerVocPanel` 아래, `agent/index.vue:55-67`). 탭 type chat/search. 토글=`ContentCollapse.vue` 재귀 아코디언 + `useKnowledgeContentItems.shouldBeOpen`(RAG 힌트 키워드 일치 섹션만 자동 펼침). 문서연결=`DocumentDetailModal`/`DocOriginalViewerModal`(원본 DOCX/PDF). ⚠️ **`knowledge/index.vue`는 미사용 레거시(import 0)** — 정리 후보.
+  - **(혼동 정정) "자주 열람 되는 지식"**: 이건 RAG 아님 — 대시보드(`Dashboard.vue`) 열람수(hit_count) 랭킹 위젯(`DashboardAPI.getPopularDocuments`, REST). 같은 Knowledge 문서 공유라 겹쳐 보였을 뿐. (사용자 정정으로 분석 대상은 지식저장소 패널로 확정)
+  - **리스크 메모:** 자동/수동 검색 파라미터 비대칭(top_k/mode 백엔드 기본값 의존), 멀티턴 맥락 직전 2턴만(`extractRecentConversation`), 검색범위 격리(repositoryId/workspaceId 미전달) 백엔드 의존, 가공 로직 중복(인용제거 정규식 등).
+- **환경설정:** 별도 문서 레포(`/Users/seongnamnoh/Documents/WorkSpaces/gitlab/minuee_timbel_docs`) 직접 수정용으로 `.claude/settings.local.json`의 `permissions.additionalDirectories`에 경로 영구 등록(다음 세션부터 자동 접근). 작업 대상 폴더는 `…/minuee_timbel_docs/nohsn_docs/asst-web`. 이번 세션 즉시반영(`/add-dir`)은 미완 → 다음 세션에서 진행 예정.
+
+### 30. [작업완료] popular 지식(대시보드) workspace_id를 mock env로 override — 새 서버 409 해소 (2026-06-11)
+- **증상:** 새 서버(192.168.101.192, mock 단계) 연동 테스트 중 `GET /aicc/asst-service/proxy/knowledge/dashboard/popular?workspace_id=019d65ea-...` 가 **409 Conflict**. 원인은 앱이 보내는 `workspace_id`가 새 서버에 없는 워크스페이스라서.
+- **호출 경로 분석(하드코딩 아님 확인):** `agent/index.vue:477` `getPopularDocuments(workspaceId,10)` ← `loadPopularDocs`의 `workspaceId = assignedWorkspaceId.value`(469) ← computed `assignedWorkspaceId`(183). 일반 상담사일 때 `userProfileStore.agent?.assigned_workspace_id`(205), 관리자/뷰어면 `userListStore.agents`에서 찾은 대상의 `assigned_workspace_id`. 즉 **로그인 계정 프로필의 `assigned_workspace_id`(`019d65ea-...`)가 그대로 전달**되던 것.
+- **문서 근거:** 개발담당자 문서 `docs/callbot_advisor_api.md` §9.2 — 새 서버 mock workspace_id = `019bfe5d-d00f-74c9-b6f6-416a9bfa1dc6`, "하드코딩 금지 → 설정값"으로 명시.
+- **사용자 결정:** `.env.local`에 `VITE_MOCK_WORKSPACE_ID=019bfe5d-...` 추가 후, "이 항목이 있을 때만" override 적용 요청.
+- **클로드 구현 (1파일):** `agent/index.vue` `assignedWorkspaceId` computed **맨 앞**에 가드 추가 — `const mockWorkspaceId = process.env.VITE_MOCK_WORKSPACE_ID; if (mockWorkspaceId) return mockWorkspaceId;`. (env 접근은 이 프로젝트 관행대로 `process.env.VITE_*` 사용 — `apiPlugin.ts`/`AdvisorbotClient.ts` 등과 동일. 타입선언 불필요 확인.)
+- **동작:** `.env.local`에 항목 있으면 무조건 그 값 사용(mock 검증) / 항목 지우면 기존 프로필 `assigned_workspace_id` 자동 복귀(운영 무영향). ⚠️ `process.env`는 빌드타임 주입이라 **dev 서버 재시작 필요**.
+- **검증:** 사용자 재시작 후 재호출 → `workspace_id=019bfe5d-...&limit=10` **200 OK**, "자주 열람 되는 지식" 화면 정상 표시 확인.
+
+### 31. [작업완료] `/stream`(문서검색 RAG) 요청에 `workspace_id`(snake) 추가 + mock override 일원화 (2026-06-11)
+- **배경:** 백엔드 서비스 교체로 `POST /aicc/asst-service/stream` 도 popular처럼 `workspace_id`가 필요해짐. 기존엔 body가 `{"query":"적금"}`만 전송됨. 사용자 확정: **키는 snake `workspace_id`로 통일**(백엔드도 snake로 수신).
+- **호출 구조 분석:** `document-search.api.ts:32` `body: JSON.stringify(req)`(req=`DocumentSearchReq`) — 객체 그대로 전송이라 **필드만 추가하면 됨**. 호출부 2곳:
+  - ① 지식저장소 검색바 `useKnowledgeSearch.ts:82`(실사용 `TabTypeKnowledgeIndex.vue`) — **이미 `getAssignedWorkspaceId()`로 workspaceId 보유**(라인45 검증까지)하나 body엔 미포함이었음. 출처 체인: props.assignedWorkspaceId ← `agent/index.vue` computed(=mock override 적용된 그것).
+  - ② 콜이력 모달 키워드 클릭 `useKeywordDetail.ts:47` — workspace 접근 없던 composable(인자 0). threading 필요.
+- **클로드 구현 (6파일):**
+  - **`src/utils/workspace.ts`(신규):** mock override 단일 소스화 — `getWorkspaceIdOverride()`(`process.env.VITE_MOCK_WORKSPACE_ID || undefined`) + `resolveWorkspaceId(base)`(override || base || "").
+  - **`ce.type.ts`:** `DocumentSearchReq`에 `workspace_id?: string` 추가.
+  - **`agent/index.vue`:** §30에서 넣은 인라인 `process.env.VITE_MOCK_WORKSPACE_ID` 읽기 → `getWorkspaceIdOverride()` 호출로 일원화(동작 동일). import 추가.
+  - **`useKnowledgeSearch.ts`:** `callDocumentStream({ query, workspace_id: workspaceId }, …)` — 이미 보유값 그대로.
+  - **`useKeywordDetail.ts`:** 시그니처 `useKeywordDetail(getWorkspaceId?: () => string|undefined)` + body `workspace_id: getWorkspaceId?.()`.
+  - **`ChatHistoryModal.vue`:** `useUserProfileStore` import+인스턴스 추가, `useKeywordDetail(() => resolveWorkspaceId(userProfileStore.agent?.assigned_workspace_id))` 주입.
+- **동작:** `/stream` 두 경로 모두 `{"query":...,"workspace_id":...}` 전송. mock override 자동 반영(popular와 동일 소스 `workspace.ts`) → `.env.local`에 `VITE_MOCK_WORKSPACE_ID` 있으면 `019bfe5d-...`, 지우면 프로필 값 복귀.
+- **검증:** vue-tsc 관련 파일 에러 0건. ⚠️ `process.env` 빌드타임 주입 → dev 재시작 후 네트워크 payload 확인 필요(사용자 라이브 테스트 예정). 참고: 자동 어시스턴트 `/assist-stream`도 구조 동일해 동일 방식 확장 가능(이번 범위 외).
+
+### 32. [작업완료] 지식저장소 검색결과 패널 — AI답변(요약) vs 문서목록 세로비율 개선 (B안) (2026-06-11)
+- **증상:** 상담화면 우측 지식저장소(`TabTypeKnowledgeIndex.vue`)에서 검색바로 §31 `/stream` 호출 시, 위=AI답변(요약)/아래=문서목록으로 나뉘는데 **요약이 길면 문서목록이 쪼그라들어** 스크롤이 자잘하게 생겨 보기 불편. (사용자는 VOC min-height 190px을 의심했으나 실제 원인 아님 — 외곽은 VOC:지식 = flex 1:9 라 영향 작음.)
+- **원인:** 검색탭 컨텐츠(`:104` AI답변 박스 `search-summary-section`)에 **`flex-shrink-0`** 가 걸려 내용만큼 무한정 세로로 커짐(스크롤 없음) → 아래 문서목록(`flex-1 min-h-0 overflow-y-auto`)이 남는 공간만 차지해 좁아짐.
+- **선택지 제시 → 사용자 결정:** A(정확히 1:1 고정) vs **B(요약 최대 ~45%, 평소엔 내용만큼·문서목록 우선)**. 사용자: **B로 먼저, 안되면 A**. → B 적용, 결과 만족.
+- **클로드 구현 (`TabTypeKnowledgeIndex.vue` 1파일):**
+  - 템플릿(`:106`): `search-summary-section` 클래스에서 **`flex-shrink-0` 제거**.
+  - 스코프 스타일 신규: `.search-summary-section { flex:0 1 auto; max-height:45%; min-height:0; overflow-y:auto; }`.
+  - 결과: 답변 짧으면 요약 작게+문서목록 넓게 / 답변 길면 요약 45%에서 멈추고 자체 스크롤+문서목록 55% 자체 스크롤. **상·하 독립 스크롤**, 문서영역 안 쪼그라듦.
+- **검증:** vue-tsc 에러 0건. 사용자 라이브 확인 "훌륭, 맘에 듦". **폴백 메모:** 45% 과하면 숫자↓(40/35%), 퍼센트 높이 미해석 시 A안(요약 `flex:1 1 0`)으로 전환.
+
+### 33. [작업완료] 원본 문서 뷰어 — PDF 인라인 표시(pdf.js) + 포맷별 분기(DOCX/다운로드) (2026-06-11)
+- **증상:** 지식저장소 원본보기(`DocOriginalViewerModal.vue`)에서 PDF 문서가 "문서를 불러오지 못했습니다" 에러. API(`GET /aicc/asst-service/documents/{id}/original`)는 **200 정상**.
+- **진단(프론트 문제 확정):** curl 실측 — 응답 매직바이트 `25 50 44 46`=**`%PDF-1.4`**(PDF), `Content-Type: application/octet-stream`(파일종류 메타 없음, Content-Disposition도 없음). 그런데 컴포넌트가 파일종류 무관하게 **무조건 `convertDocx()`(mammoth=DOCX전용)** 실행 → PDF에서 throw → catch 에러. (API 정상, 프론트가 PDF를 DOCX변환기로 처리하던 것.)
+- **1차 시도(A안, iframe) → 폐기:** PDF를 `Blob({type:'application/pdf'})` + `<iframe>` 네이티브 뷰어로. 그러나 사용자 환경 브라우저가 iframe 내 PDF 인라인 뷰어 부재 → "PDF아이콘+파일ID+열기버튼" 다운로드 fallback만 뜨고 다운로드됨. **사용자: 원복 후 바로보기 제대로**. → `git checkout`으로 mammoth-only 원복.
+- **포맷 다양성 확인(사용자 협의):** PDF만 있는 게 아님(docx 등). mammoth=docx전용/pdf.js=pdf전용 → 둘 합쳐도 PDF+DOCX만 인라인. zip계열(docx/xlsx/pptx) 매직바이트 동일(`PK`)이라 겉구분 불가. **확정 전략:** PDF→pdf.js 인라인 / DOCX→mammoth 인라인 / **그 외→바로 다운로드**.
+- **2차(B안, pdf.js) 구현 — 채택:**
+  - **설치:** `pdfjs-dist@3.11.174` (`--legacy-peer-deps` — 기존 tiptap peer 충돌 우회, pdf와 무관). webpack5 호환 위해 3.x legacy build 선택.
+  - **`DocOriginalViewerModal.vue` 전면 재작성:**
+    - `detectKind(bytes)`: `%PDF`→pdf / `PK`→zip / 그외→other.
+    - **PDF:** `getPdfjs()`(동적 import `pdfjs-dist/legacy/build/pdf` + worker 설정) → `getDocument({data})` → 페이지별 `<canvas>` 생성·세로 스택. 폭=컨테이너 맞춤, 해상도=`devicePixelRatio` 반영(선명).
+    - **worker:** 사내 폐쇄망 고려 CDN 대신 **로컬 번들** `GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.js", import.meta.url)`(webpack5 asset URL).
+    - **zip:** `convertDocx` 시도→성공 HTML 인라인+기존 `focusActiveContent` 하이라이트 / 빈결과·throw시 다운로드 fallback.
+    - **other/docx실패:** `triggerDownload()` — Blob+`a.download`(`원본문서_{id}{확장자추정}`) 자동 다운로드 + 모달 "미리보기 미지원, 다운로드됨" 안내+[다시 다운로드] 버튼. `guessExt`는 best-effort(jpg/png/OLE).
+    - docKind ref(`''|'html'|'pdf'|'download'`)로 템플릿 분기. DOCX HTML만 캐시(PDF·다운로드 제외). pdf.js도 mammoth처럼 동적 import(첫 PDF시 로드).
+  - 검증: vue-tsc 에러 0건. pdfjs export(getDocument/GlobalWorkerOptions/v3.11.174)·worker파일(1.1MB) 확인. **사용자 라이브 확인 "아주 훌륭, PDF 바로 보임".**
+- **참고:** ① 백엔드가 `Content-Disposition: filename="…"` 주면 매직바이트 추정 없이 확장자 분기 가능(다운로드 파일명도 정확) — 개선 여지. ② PDF는 네이티브 뷰어가 아니라 canvas라 `activeContent` 자동 스크롤·하이라이트는 미적용(DOCX만). 필요시 pdf.js text layer로 고도화 가능. ③ worker 로딩 백업안: copy-webpack-plugin 복사 / asset·Blob URL import.
+
+### 34. [작업완료] 192 개발기 직결 — 게이트웨이 제거(asst-service 직접 호출) + Docker(.env.dev/docker-compose.dev.yml) (2026-06-11)
+- **목표:** 배포시스템 없이 192 개발기에 git clone → Docker 로 직접 실행. 192엔 API Gateway 미설치 → 프론트가 **asst-service 백엔드(`http://192.168.101.192:32025`)로 직접** 호출하도록 전환.
+- **라우팅 구조 분석:**
+  - 프론트 백엔드 호출은 axios 3클라이언트(advisor/auth/audio)지만 **API 32개 전부 `super("advisor")`** + knowledge/ce/qa 도 advisor 의 `/proxy/...` 경유 → **실사용 클라이언트는 advisor + socket.io 둘뿐**. (`getAuthApi`/audio/CCAAS websocket 은 정의만 있고 호출처 없음 = 미사용.)
+  - advisor baseURL = `LANGSA_GATEWAY_URL`, 호출경로 = `path.ADVISOR.API_PREFIX(=ASST_API_PREFIX)` + endpoint. 소켓 = `LANGSA_GATEWAY_URL` + `API_PREFIX/socket.io`.
+  - **게이트웨이 동작:** `/aicc/asst-service/*` 받아서 StripPrefix=2 → PrefixPath=`/api/asst/v1` 로 리라이트해 백엔드 전달. 백엔드는 `setGlobalPrefix('/api/asst/v1')`(main.ts:88)이라 **`/api/asst/v1/...` 만 받음**.
+  - 그래서 직결 시 prefix를 `/aicc/asst-service` → **`/api/asst/v1`** 로 바꿔야 함(안 바꾸면 404). 사용자 검증: `curl localhost:32025/api/asst/v1/health/check`=200, swagger=`/api/asst/v1/doc`.
+- **수정 ①  `.env.dev`(2줄):** `LANGSA_GATEWAY_URL = http://192.168.101.192:32025`, `ASST_API_PREFIX = /api/asst/v1`. → REST·소켓·프록시(`/proxy/knowledge`·`/proxy/ce`·`/proxy/qa`) 전부 `http://192.168.101.192:32025/api/asst/v1/...` 로 자동 정렬.
+- **수정 ② `docker-compose.dev.yml`:** Dockerfile.dev 의 CMD(`MODE=development`→없는 `.env.development`, 포트 32082)를 compose `command` 로 덮어씀 → `MODE=dev`(→`.env.dev`), `--host 0.0.0.0 --port 32026 --allowed-hosts all`. ports `32026:32026`, container `asst-web-dev`. (Dockerfile.dev 원본 미수정.) ※포트 처음 32025로 잡았다 백엔드와 겹쳐 32026으로 정정(사용자 오타).
+- **검증한 함정:**
+  - webpack 은 `.env.${MODE}` **단일 파일만** 로드(베이스 `.env` 병합 안 함). Dockerfile.dev=MODE=development, Dockerfile=build:aws=MODE=aws **둘 다 해당 env파일 없음** → 그대로 띄우면 env 비어 깨짐. 그래서 MODE=dev 로 맞춤.
+  - `host_app/router` 동적 import(`routers/index.ts:12 loadHostRoutes`) 있지만 **호출처 없는 죽은 코드** → `HOST_APP_URL` 미설정 무해.
+  - webpack-dev-server **v5.2.2** → `--allowed-hosts all` 정상(IP 접속 "Invalid Host header" 방지).
+- **미해결/주의(사용자 판단 필요):**
+  - ① ~~포트 32025 중복~~ → 32026 으로 정정해 해소(백엔드 32025와 안 겹침).
+  - ② **인증토큰**: `.env.dev` 엔 `VITE_ACCESS_TOKEN` 폴백 없음 → 단독 실행 시 `accessToken` 쿠키 의존. 192 직접 IP 접속이면 쿠키 도메인 불일치로 401 가능 → 테스트용이면 `.env.local` 처럼 `VITE_ACCESS_TOKEN` 추가 고려.
+  - ③ **CORS**: 백엔드 asst-service 가 프론트 origin 허용해야 함(사용자 인지함, dev라 전체허용일 수 있음).
+
+#### 34-추가. Docker 빌드 실전 트러블슈팅 (2026-06-11, 192 개발기 `aicc-dev:~/workspace/aicc-web`)
+- **node 24 / npm 전환:** 사용자 요청으로 `Dockerfile.dev` `FROM node:20→node:24`. yarn `Resolving packages...` 무한대기 = **yarn.lock 없고 `package-lock.json`(npm락)만 존재** → yarn이 락 못 쓰고 전부 resolve. **`RUN yarn install` → `RUN npm ci`** 로 전환(백엔드도 npm).
+- **compose:** `version` 줄 삭제(obsolete 경고), `build.network: host`(빌드 컨테이너가 호스트 DNS/프록시 사용 → registry 접속 실패 방지), 포트 32026, `command`로 `MODE=dev`+`--allowed-hosts all` 덮어씀.
+- **함정 ①(시간낭비):** 파일 고쳐도 빌드가 계속 `node:20`+`yarn install` → **서버가 잘못된 git 브랜치** 체크아웃 상태였음(파일이 안 바뀐 게 아니라 딴 브랜치 봄). 브랜치 정정 후 해결. ※로컬 수정분은 git 무관하게 서버에 반영되는 구조(사용자가 직접 관리, "깃 신경쓰지 말라").
+- **함정 ②:** `npm ci` → **ERESOLVE**: `@tiptap/core@3.x` vs `@tiptap/extension-document@^2.14.0`(peer `@tiptap/core@^2.7.0`) **tiptap v2/v3 혼용 충돌**. lock 자체가 `--legacy-peer-deps`로 생성됨(#33 pdfjs 설치 때와 동일) → **`RUN npm ci --legacy-peer-deps`** 로 해결.
+- **상태(미검증, 내일):** 위 수정 후 재빌드 미실행. `build --no-cache` → `up -d` → `webpack compiled successfully` → `http://192.168.101.192:32026` 접속 확인 남음.
+- **접속 후 잠재이슈 3:** ①API 401=토큰(`.env.dev`에 `VITE_ACCESS_TOKEN` 폴백 없음, 단독실행시 추가) ②CORS=백엔드에 `http://192.168.101.192:32026` origin 허용 ③404=경로 `/api/asst/v1/...` 확인.
+
+#### 34-추가2. 배포 후 런타임 이슈 3종 해결 (2026-06-12)
+- **① `/undefined/remoteEntry.js` 404 (Module Federation):** webpack `remotes: { host_app: "host_app@"+process.env.HOST_APP_URL+"/remoteEntry.js" }` 인데 `.env.dev`에 `HOST_APP_URL` 없어서 `undefined` 박힘. `loadHostRoutes`(routers/index.ts:12, host_app/router import)는 **호출처 없는 죽은 코드**, 메뉴/라우팅은 API(`initDynamicRouter`)로 받음 → host_app 실제 불필요. **`.env.dev`에 `HOST_APP_URL = http://192.168.101.192:32026`(자기주소, 단독실행) 추가** → 200 받아 404 해소. (host 포털 별도 배포 시 그 주소로 교체.) ※webpack이 시작 시 1회만 `.env.dev` 읽으므로 컨테이너 **재시작** 필요.
+- **② 강제 로그인 토큰:** host 포털 쿠키 없이 단독 실행 → `apiPlugin.getCurrentAccessToken`이 쿠키 없으면 `process.env.VITE_ACCESS_TOKEN` 폴백. `.env.dev`에 **`VITE_ACCESS_TOKEN`(.env.local 35행, exp 2083 사실상 무기한) + `VITE_MOCK_WORKSPACE_ID`** 추가. (`VITE_ACCESS_TOKEN2`/`ADVISOR_API_BASE`/`VITE_AUDIO_SERVICE_API_URL`는 src 미사용 → 생략.) 토큰은 RS256 서명 → 192 백엔드가 같은 키 신뢰해야 통과(통과 확인됨).
+- **③ CORS:** 프론트(32026)→백엔드(32025) cross-origin. `Authorization`+`X-Auth-token` 커스텀 헤더라 프리플라이트(OPTIONS) 탐 → "Authorization 안 감"은 사실 OPTIONS(스펙상 미포함)였고 본 요청은 CORS로 차단된 것. **192 백엔드 asst-service `enableCors`로 해결**(origin 32026 + Authorization/X-Auth-token 허용). → **192 get_user 정상.**
+- **로컬(localhost:8173→8080) CORS 중복(미해결, 백엔드 A안 진행중):** `Access-Control-Allow-Origin: http://localhost:8173, http://localhost:8173` **값 2개** → 차단. 원인=**게이트웨이(8080)+asst-service 이중 CORS**. 192는 게이트웨이 없어 단일 소스라 정상. **해결: CORS를 한 곳만**(게이트웨이 뒤 asst-service enableCors 끄기 등) — 백엔드 수정 예정. (대안 B: webpack devServer `/aicc`→8080 프록시로 same-origin 우회, 192엔 영향 없음 — 미적용.) 증상 디버깅: axios `ERR_NETWORK`/`Network Error`인데 네트워크탭 200 = 서버는 응답했으나 브라우저가 CORS로 JS 읽기 차단.
+- **상태:** 192 개발기 = get_user 포함 정상 동작 ✅. 로컬 = 백엔드 CORS 중복만 해결하면 됨.

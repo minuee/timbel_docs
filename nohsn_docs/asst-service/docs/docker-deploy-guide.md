@@ -97,9 +97,10 @@ networks:
 | 외부 포트 | **32025** | 32020번대(업무 서비스용)만 방화벽 개방. **32099 등은 막혀 있음** |
 | 네트워크 | `timbel_network` (external) | 192에 이미 떠 있는 도커 네트워크에 합류 |
 | `USER_HOST` | `http://user-service:8080` | **같은 네트워크라 컨테이너 이름**으로 통신 (코드가 뒤에 `/api/...` 붙임) |
+| `CE_HOST` | `http://192.168.101.192:32021` | 192 ce-service (호스트포트). langsa.ai는 VPN 정책으로 192에서 timeout |
 | redis | `192.168.101.192:32014`, `REDIS_TLS=false` | 호스트포트 방식. **비TLS** redis라 TLS 끔 |
 | DB | `192.168.101.192:32011` (`DB_DIRECT_CON=1`) | 테넌트 DB 미연동이라 **192 postgres 직결**. 테넌트 DB 준비되면 `0`(동적연결)으로 |
-| CE/LLM-orch/audio | langsa.ai 유지 | 192에 미배포 → 그 망 접근되면 동작 |
+| `CORS_ALLOWED_ORIGINS` | `http://192.168.101.192:32026` | 게이트웨이 없는 직접배포라 백엔드가 CORS 직접 처리 (프론트 origin) |
 
 > **호스트 지정 두 방식**:
 > - **같은 도커 네트워크**에 있으면 → 컨테이너 이름 (`user-service:8080`) ← 깔끔
@@ -141,6 +142,9 @@ docker network ls | grep timbel
 
 # 헬스체크
 curl http://localhost:32025/api/asst/v1/health/check
+
+## docker log 실시간 확인 
+docker compose -f docker-compose.dev.yml logs -f
 ```
 
 ---
@@ -157,6 +161,8 @@ curl http://localhost:32025/api/asst/v1/health/check
 | 6 | `NODE_ENV`가 development인데 안 바뀜 | `command:` 안의 `NODE_ENV`를 안 바꿈 (environment만 바꿈) | compose의 **command + environment 둘 다** 변경 |
 | 7 | `relation "advisor.notices" does not exist` (42P01) | 스키마(껍데기)만 있고 **테이블이 없음** | 테이블 생성 필요 (아래 7번) |
 | 8 | DB 설정 바꿨는데 그대로 | `.env` 바꾼 뒤 컨테이너 재생성 안 함 | `up -d --force-recreate` |
+| 9 | 프록시 호출 **502 Bad Gateway** | asst가 업스트림(예: CE) 호스트에 못 닿음 (langsa.ai가 VPN 정책으로 timeout) | 업스트림을 192 주소로 교체 (`CE_HOST=192.168.101.192:32021`) |
+| 10 | 브라우저 **CORS / `ERR_NETWORK`** | 게이트웨이+백엔드가 ACAO 헤더 **중복** (또는 백엔드 CORS 미설정) | 한쪽만 CORS 처리 (게이트웨이 경유=게이트웨이, 직접배포=`CORS_ALLOWED_ORIGINS`) |
 
 **디버깅 황금률**: "브라우저에서 안 된다"면 먼저 **서버에서 `curl localhost`로 확인** → 되면 네트워크/방화벽 문제, 안 되면 앱 문제. 그리고 **항상 `docker compose logs`를 본다.**
 
@@ -206,3 +212,83 @@ docker compose -f docker-compose.dev.yml up -d --force-recreate
 7. `curl localhost:<포트>/api/asst/v1/health/check` → 200
 8. (빈 DB면) 7번 방식으로 테이블 1회 생성 → development 원복
 9. 토큰 넣고 실제 API 호출 → DB 연동 확인
+
+---
+
+## 9. 서버를 원격(로컬 push본)으로 강제 정렬 — `git reset --hard`
+
+서버에 로컬 수정이 쌓여 `git pull`이 충돌나거나 꼬일 때, **로컬을 원격에 올리고 → 서버를 그 원격 버전으로 강제로 덮어쓰는** 방법.
+
+### 1) 로컬(맥)에서 푸시 — 원격에 올바른 버전부터 올리기
+
+서버가 받아갈 게 원격에 있어야 하니까:
+```bash
+git add -A
+git commit -m "chore: 192 dev 직결 설정 (env/docker/node24/npm/host_app/token)"
+git push origin develop_nohsn      # 네 브랜치
+```
+
+### 2) 서버에서 원격 버전으로 강제 덮어쓰기
+
+```bash
+git fetch origin
+git reset --hard origin/develop_nohsn   # 서버 로컬수정 다 버리고 원격과 100% 동일
+git clean -fd                            # (선택) 추적 안 되는 새 파일/폴더까지 청소 — ⚠️ git에 없는 파일 삭제됨
+```
+
+### ⚠️ 주의
+
+- `git reset --hard`는 **서버의 커밋 안 된 수정·작업을 전부 날린다** (되돌릴 수 없음).
+- 지금은 *서버 수정 == 로컬 수정*(동일)이고 그걸 1)에서 푸시했으니 → 날아가도 원격에 그대로 있어 **안전**하다.
+- 혹시 서버에만 있는 다른 수정이 걱정되면, 날리기 전에 확인/백업:
+  ```bash
+  git status      # 서버에서 뭐가 바뀌었나 확인
+  git stash       # 백업 (나중에 git stash pop 으로 복구 가능)
+  ```
+
+### 한 줄 요약
+
+> 로컬 `push` → 서버 `git fetch && git reset --hard origin/<브랜치>` = 서버가 깃 버전으로 깔끔하게 정렬, 충돌 없음.
+
+**참고:**
+- 서버 브랜치가 맞는지 `git branch`로 **먼저 확인** (전에 브랜치 함정이 있었으니).
+- `.env.development`에 토큰이 들어있어서 push하면 원격에도 올라간다 — 기존에 `.env.local`도 토큰이 커밋돼 있던 레포라 관행상 문제는 없지만, 신경 쓰이면 **나중에 토큰 정리 한 번 권장**.
+
+---
+
+## 10. 브라우저로 실시간 로그 보기 (Dozzle) — Swagger처럼
+
+서버에 SSH 들어가 `docker compose logs -f` 치는 대신, **브라우저 주소만 치면 실시간 로그**가 뜨게 하는 도구. `docker-compose.monitor.yml` 로 컨테이너 1개만 띄우면 된다. (우리 앱/코드는 안 건드림 — 도커 소켓을 read-only로 읽어서 모든 컨테이너 로그를 웹으로 보여줄 뿐)
+
+### 띄우기
+```bash
+docker compose -f docker-compose.monitor.yml up -d            # 시작
+docker compose -f docker-compose.monitor.yml logs --tail=20   # dozzle 자체 로그 확인
+docker compose -f docker-compose.monitor.yml down             # 중지
+```
+
+### 접속
+- 주소: **`http://192.168.101.192:32027`** (방화벽 열린 32020번대)
+- 로그인: **ID `admin` / PW `lena47`**
+- `docker compose logs -f` 와 동일한 실시간 스트리밍 + 검색/필터 + 여러 컨테이너(asst-service, postgres, redis…) 한 화면
+
+### 계정/비밀번호 바꾸기
+계정은 `monitor-data/users.yml` 에 정의돼 있고, 비번은 **bcrypt 해시**로 저장된다.
+> ⚠️ Dozzle v8+ 부터 **sha-256 은 보안상 폐기**됐다(`sha256 passwords are no longer supported` fatal 로그). 반드시 bcrypt 를 써야 하며, **Dozzle 자체 `generate` 명령**으로 만드는 게 가장 안전하다.
+```bash
+# users.yml 통째로 재생성 (ID admin / PW 원하는값)
+docker run --rm amir20/dozzle generate admin \
+  --password '새비번' --name admin --email admin@timbel.net \
+  > monitor-data/users.yml
+
+cat monitor-data/users.yml      # password 가 $2a$... 로 시작하면 bcrypt 정상
+docker compose -f docker-compose.monitor.yml up -d --force-recreate
+```
+
+### 트러블슈팅
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| 브라우저 접속 안 됨 (서버 `curl localhost:32027`은 됨) | 방화벽이 그 포트 미개방 | 32020번대 열린 포트로 변경 |
+| `permission denied ... docker.sock` | 내 계정이 docker 그룹 아님 | 인프라에 docker 그룹 추가 요청 |
+| 로그인 안 됨 | users.yml 해시/마운트 문제 | `./monitor-data:/data` 마운트 + 해시 재생성 확인 |
+| 로그가 안 보임 | 대상 컨테이너가 stdout으로 로그 안 냄 | asst는 winston 콘솔로 stdout에 나가므로 정상 표시됨 |

@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CXone 관리 인터페이스</title>
+    <script src="./init.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 1200px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .controls-panel {
+            padding: 20px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #007bff;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+
+        .contact-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .contact-table th {
+            background: #007bff;
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        .contact-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #dee2e6;
+            vertical-align: top;
+        }
+
+        .contact-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .contact-table tr:hover {
+            background-color: #e3f2fd;
+        }
+
+        .status-active {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .status-inactive {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .phone-number {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .boolean-true {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .boolean-false {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .contact-id {
+            font-family: monospace;
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .empty-data {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .record-count {
+            margin-bottom: 10px;
+            color: #495057;
+            font-weight: bold;
+        }
+
+        .test-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #e3f2fd;
+            border-radius: 5px;
+        }
+
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .test-button:hover {
+            background: #0056b3;
+        }
+
+        .test-button.secondary {
+            background: #6c757d;
+        }
+
+        .test-button.secondary:hover {
+            background: #545b62;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            color: #2d3748;
+            overflow: hidden;
+        }
+
+        .main-container {
+            display: grid;
+            /* grid-template-columns: 500px 500px 1fr ; */
+            grid-template-columns: 500px 1fr;
+            gap: 15px;
+            padding: 15px;
+            height: 100vh;
+        }
+
+        .controls-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .log-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+
+        /* 섹션 스타일링 */
+        .section {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1a202c;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #4299e1;
+        }
+
+        /* 폼 그룹 - 더 컴팩트한 레이아웃 */
+        .form-group {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .form-group.with-button {
+            grid-template-columns: 90px 1fr 100px;
+        }
+
+        .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #4a5568;
+            text-align: right;
+            line-height: 1.2;
+        }
+
+        .form-input {
+            padding: 6px 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 12px;
+            background: white;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.1);
+        }
+
+        .form-input:read-only {
+            background: #f7fafc;
+            color: #718096;
+        }
+
+        /* 버튼 스타일링 - 더 작게 */
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-primary {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #718096;
+            color: white;
+        }
+
+        /* 버튼 그룹 - 더 조밀하게 */
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 6px;
+            margin-top: 12px;
+        }
+
+        .button-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-top: 12px;
+        }
+
+        .button-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-top: 12px;
+        }
+
+        /* 상태 표시 카드들 - 더 작게 */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .status-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 8px;
+            border-left: 3px solid #4299e1;
+        }
+
+        .status-card-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #718096;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-card-value {
+            font-size: 11px;
+            font-weight: 500;
+            color: #2d3748;
+            padding: 4px 6px;
+            background: #f7fafc;
+            border-radius: 3px;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* 인라인 폼 (작은 입력들) - 더 조밀하게 */
+        .inline-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .inline-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .inline-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .inline-input {
+            padding: 6px 8px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 11px;
+            background: white;
+        }
+
+        /* 로그 영역 */
+        .log-header {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1a202c;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .log-header::before {
+            content: '📋';
+            font-size: 16px;
+        }
+
+        .log-area {
+            flex: 1;
+            background: #1a202c;
+            color: #e2e8f0;
+            border: none;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 11px;
+            line-height: 1.3;
+            resize: none;
+            overflow-y: auto;
+        }
+
+        /* 구분선 */
+        .divider {
+            margin: 12px 0;
+            padding: 6px 0;
+            border-top: 1px solid #e2e8f0;
+            font-size: 11px;
+            font-weight: 600;
+            color: #718096;
+        }
+
+        /* 스크롤바 */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 2px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(66, 153, 225, 0.4);
+            border-radius: 2px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(66, 153, 225, 0.6);
+        }
+
+        /* 반응형 */
+        @media (max-width: 1400px) {
+            .main-container {
+                grid-template-columns: 1fr 500px;
+            }
+        }
+
+        @media (max-width: 1200px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 65vh 35vh;
+            }
+
+            .status-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .button-grid-3 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 10px;
+                gap: 10px;
+            }
+
+            .controls-panel,
+            .log-panel {
+                padding: 15px;
+            }
+
+            .section {
+                padding: 12px;
+                margin-bottom: 12px;
+            }
+
+            .form-group {
+                grid-template-columns: 1fr;
+                text-align: left;
+            }
+
+            .form-group.with-button {
+                grid-template-columns: 1fr;
+            }
+
+            .form-label {
+                text-align: left;
+                margin-bottom: 3px;
+            }
+
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .button-grid-3 {
+                grid-template-columns: 1fr;
+            }
+
+            .inline-form {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .main-container {
+                padding: 8px;
+                gap: 8px;
+            }
+
+            .controls-panel,
+            .log-panel {
+                padding: 12px;
+            }
+
+            .section {
+                padding: 10px;
+                margin-bottom: 10px;
+            }
+
+            .btn {
+                padding: 5px 8px;
+                font-size: 10px;
+                min-width: 70px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main-container">
+        <!-- 컨트롤 패널 -->
+        <div class="controls-panel">
+            <!-- 서버 연결 세팅 -->
+            <div class="section">
+                <div class="section-title">서버 연결 세팅</div>
+                <div class="form-group with-button">
+                    <label class="form-label">서버 정보</label>
+                    <input type="text" class="form-input" id="ecpserverurl" value="">
+                    <button class="btn btn-primary" onclick="setServerInfo()">설정</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">결과</label>
+                    <input type="text" class="form-input" id="setServerInfo" readonly>
+                </div>
+            </div>
+
+            <!-- 서버 연결 -->
+            <div class="section">
+                <div class="section-title">서버 연결</div>
+                <div class="form-group">
+                    <label class="form-label">HOSTNAME</label>
+                    <input type="text" class="form-input" id="cxoneHostname" value="https://cxone.niceincontact.com/">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CLIENT ID</label>
+                    <input type="text" class="form-input" id="clientId" value="0f14de39-94e8-4fb6-8339-8f8d597b6d81">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">companyId</label>
+                    <select class="form-input" id="companyId">
+                        <option value="57">POC1</option>
+                        <option value="58">POC2</option>
+                        <option value="59">POC3</option>
+                        <option value="60">POC4</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">REDIRECT URL</label>
+                    <input type="text" class="form-input" id="redirectUri" value="">
+                </div>
+                <div class="button-grid-2">
+                    <button class="btn btn-primary" onclick="connectToServer()">서버 연결</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">결과</label>
+                    <input type="text" class="form-input" id="connectToServer" readonly>
+                </div>
+            </div>
+
+            <!-- 상담사 로그인 -->
+            <div class="section">
+                <div class="section-title">상담사 로그인</div>
+
+                <div class="form-group">
+                    <label class="form-label">계정</label>
+                    <input type="text" class="form-input" id="loginUserId" value="hjjeon@ecstel.demo.kr">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">패스워드</label>
+                    <input type="text" class="form-input" id="loginUserPw" value="Wkswls12#$%^">
+                </div>
+                <div class="button-grid-2">
+                    <button class="btn btn-success" onclick="login()">로그인</button>
+                    <button class="btn btn-danger" onclick="logout()">로그아웃</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">결과</label>
+                    <input type="text" class="form-input" id="login" readonly>
+                </div>
+            </div>
+
+            <!-- 상담사 상태 -->
+            <div class="section">
+                <div class="section-title">상담사 상태</div>
+                <div class="status-grid">
+                    <div class="status-card">
+                        <div class="status-card-label">상담원 Id</div>
+                        <div class="status-card-value" id="agentId">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-card-label">상담원 상태</div>
+                        <div class="status-card-value" id="agentStatus">-</div>
+                    </div>
+
+
+                    <div class="status-card">
+                        <div class="status-card-label">상세 상태</div>
+                        <div class="status-card-value" id="CurrentOutReason">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-card-label">팀</div>
+                        <div class="status-card-value" id="agentTeam">-</div>
+                    </div>
+                </div>
+                <div class="button-grid">
+                    <button class="btn btn-success" onclick="ready()">대기</button>
+                    <button class="btn btn-warning" onclick="notready()">이석</button>
+                    <button class="btn btn-secondary" onclick="login_dialer()">아웃 로그인</button>
+                    <button class="btn btn-secondary" onclick="logout_dialer()">아웃 로그아웃</button>
+                </div>
+            </div>
+
+            <!-- 인바운드 콜 -->
+            <div class="section">
+                <div class="section-title">인바운드 콜</div>
+                <div class="status-grid">
+                    <div class="status-card">
+                        <div class="status-card-label">Contact ID</div>
+                        <div class="status-card-value" id="ContactId">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-card-label">Call Type</div>
+                        <div class="status-card-value" id="CallType">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-card-label">Call Status</div>
+                        <div class="status-card-value" id="CallStatus">-</div>
+                    </div>
+                </div>
+
+                <div class="button-grid">
+                    <button class="btn btn-success" onclick="answer()">전화받기</button>
+                    <button class="btn btn-danger" onclick="hangup()">전화끊기</button>
+                    <button class="btn btn-secondary" onclick="hold()">홀드</button>
+                    <button class="btn btn-secondary" onclick="unhold()">홀드해제</button>
+                    <button class="btn btn-warning" onclick="mute()">음소거</button>
+                    <button class="btn btn-warning" onclick="unmute()">음소거해제</button>
+                </div>
+
+                <!-- 컨설트 정보 -->
+                <div class="divider">컨설트 정보</div>
+                <div class="status-grid">
+                    <div class="status-card">
+                        <div class="status-card-label">Consult ID</div>
+                        <div class="status-card-value" id="ConsultContactId">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-card-label">Consult Type</div>
+                        <div class="status-card-value" id="ConsultCallType">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-card-label">Consult Status</div>
+                        <div class="status-card-value" id="ConsultCallStatus">-</div>
+                    </div>
+                </div>
+
+                <div class="inline-form">
+                    <div class="inline-group">
+                        <label class="inline-label">대상 번호/ID</label>
+                        <input type="text" class="inline-input" id="target">
+                    </div>
+                    <div class="inline-group">
+                        <label class="inline-label">컨설트 유형</label>
+                        <input type="text" class="inline-input" id="ConsultType" placeholder="1:서비스 2:상담원 3:외부">
+                    </div>
+                </div>
+
+                <div class="button-grid">
+                    <button class="btn btn-primary" onclick="consult()">컨설트</button>
+                    <button class="btn btn-primary" onclick="consult_answer()">컨설트 받기</button>
+                    <button class="btn btn-primary" onclick="transfercomplete()">호전환</button>
+                    <button class="btn btn-primary" onclick="blindtransfer()">1step 호전환a</button>
+                    <button class="btn btn-primary" onclick="retrieve()">회수</button>
+                    <button class="btn btn-primary" onclick="conference()">회수</button>
+
+                    <button class="btn btn-secondary" onclick="checkMicPermission()">마이크정보</button>
+                </div>
+            </div>
+
+            <!-- 아웃바운드 콜 -->
+            <div class="section">
+                <div class="section-title">아웃바운드 콜</div>
+                <div class="inline-form">
+                    <div class="inline-group">
+                        <label class="inline-label">PREFIX</label>
+                        <input type="text" class="inline-input" id="prefix" value="+82">
+                    </div>
+                    <div class="inline-group">
+                        <label class="inline-label">다이얼 번호</label>
+                        <input type="text" class="inline-input" id="dialednum" value="1038437258">
+                    </div>
+                    <div class="inline-group">
+                        <label class="inline-label">스킬</label>
+                        <input type="text" class="inline-input" id="outSkill" value="23077884">
+                    </div>
+                </div>
+                <div class="button-grid-2">
+                    <button class="btn btn-success" onclick="makecall()">전화걸기</button>
+                </div>
+            </div>
+
+            <!-- 디지털 메시지 테스트 -->
+            <div class="section">
+                <div class="section-title">디지털 메시지 테스트</div>
+
+                <!-- 메시지 전송 -->
+                <div class="form-group">
+                    <label class="form-label">Case ID</label>
+                    <input type="text" class="form-input" id="digitalCaseId" placeholder="디지털 콘택트 Case ID">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Thread ID</label>
+                    <input type="text" class="form-input" id="digitalThreadId" placeholder="외부 플랫폼 Thread ID">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">메시지</label>
+                    <textarea class="form-input" id="digitalMessage" rows="2" placeholder="전송할 메시지를 입력하세요"></textarea>
+                </div>
+                <div class="button-grid-2">
+                    <button class="btn btn-primary" onclick="sendDigitalMessage()">메시지 전송</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">결과</label>
+                    <input type="text" class="form-input" id="sendDigitalMessage" readonly>
+                </div>
+
+                <!-- 상태 변경 & Unassign -->
+                <div class="divider">상태 관리</div>
+                <div class="inline-form">
+                    <div class="inline-group">
+                        <label class="inline-label">Contact ID</label>
+                        <input type="text" class="inline-input" id="digitalContactId" placeholder="디지털 콘택트 Contact ID">
+                    </div>
+                    <div class="inline-group">
+                        <label class="inline-label">상태</label>
+                        <select class="inline-input" id="digitalStatus">
+                            <option value="new">New</option>
+                            <option value="open">Open</option>
+                            <option value="pending">Pending</option>
+                            <option value="escalated">Escalated</option>
+                            <option value="resolved">Resolved</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="button-grid-3">
+                    <button class="btn btn-warning" onclick="changeDigitalStatus()">상태 변경</button>
+                    <button class="btn btn-danger" onclick="unassignDigitalContact()">Unassign</button>
+                </div>
+                <div class="inline-form">
+                    <div class="inline-group">
+                        <label class="inline-label">상태 변경 결과</label>
+                        <input type="text" class="inline-input" id="changeDigitalStatus" readonly>
+                    </div>
+                    <div class="inline-group">
+                        <label class="inline-label">Unassign 결과</label>
+                        <input type="text" class="inline-input" id="unassignDigitalContact" readonly>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Event (Agent Event Stream) -->
+            <div class="section">
+                <div class="section-title">Custom Event (Agent Event Stream)</div>
+                <div class="form-group">
+                    <label class="form-label">Agent ID</label>
+                    <input type="text" class="form-input" id="customEventAgentId" placeholder="Agent ID">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Event Name</label>
+                    <input type="text" class="form-input" id="customEventName" placeholder="Event Name"
+                        value="FavoriteColor">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Event Data</label>
+                    <textarea class="form-input" id="customEventData" rows="2" placeholder="Blue"
+                        value="Blue"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Persist In Memory</label>
+                    <select class="form-input" id="customEventPersist">
+                        <option value="false">False</option>
+                        <option value="true">True</option>
+                    </select>
+                </div>
+                <div class="button-grid-2">
+                    <button class="btn btn-primary" onclick="sendCustomEvent()">Send Custom Event</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">결과</label>
+                    <input type="text" class="form-input" id="sendCustomEvent" readonly>
+                </div>
+            </div>
+
+            <!-- Custom Data (Contact Data) -->
+            <div class="section">
+                <div class="section-title">Custom Data (Contact Data)</div>
+                <div class="form-group">
+                    <label class="form-label">Contact ID</label>
+                    <input type="text" class="form-input" id="customDataContactId" placeholder="Contact ID">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Indicator Name</label>
+                    <input type="text" class="form-input" id="customDataIndicatorName" placeholder="Indicator Name"
+                        value="CustomData">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Custom Data (JSON)</label>
+                    <textarea class="form-input" id="customDataJson" rows="3"
+                        placeholder='{"key1":"value1","key2":"value2"}'></textarea>
+                </div>
+                <div class="button-grid-2">
+                    <button class="btn btn-primary" onclick="sendCustomData()">Send Custom Data</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">결과</label>
+                    <input type="text" class="form-input" id="sendCustomData" readonly>
+                </div>
+            </div>
+
+            <!-- 부가기능 -->
+            <div class="section">
+                <div class="section-title">부가기능</div>
+                <div class="button-grid">
+                    <button class="btn btn-primary" onclick="loginuser()">유저정보</button>
+                    <button class="btn btn-primary" onclick="notreadyinfo()">이석정보</button>
+                    <button class="btn btn-primary" onclick="getcurrentcall()">컨택정보</button>
+                    <button class="btn btn-primary" onclick="assignedservice()">서비스목록</button>
+                    <button class="btn btn-primary" onclick="getcontactlist()">컨택리스트</button>
+                </div>
+
+                <div class="divider">DTMF</div>
+                <div class="inline-form">
+                    <div class="inline-group">
+                        <label class="inline-label">DTMF</label>
+                        <input type="text" class="inline-input" id="dtmf" value="1">
+                    </div>
+                </div>
+                <div class="button-grid-2">
+                    <button class="btn btn-secondary" onclick="senddtmf()">DTMF 전송</button>
+                </div>
+                <input type="text" id="dialer_skill" value="V_PC_GM_PDS_1">
+                <button class="warn" onclick="login_dialer()">아웃바운드 로그인</button>
+                <button class="warn" onclick="logout_dialer()">아웃바운드 로그아웃</button>
+            </div>
+        </div>
+
+        <!-- 로그 패널 -->
+        <div class="log-panel">
+            <div class="log-header">실시간 로그</div>
+            <textarea class="log-area" id="logArea" readonly></textarea>
+        </div>
+
+        <div class="container">
+            <div class="controls-panel">
+                <div class="section">
+                    <div class="section-title">컨택 정보</div>
+                    <div class="record-count" id="recordCount"></div>
+                    <div class="table-container">
+                        <table class="contact-table" id="contactTable">
+                            <thead id="tableHeader"></thead>
+                            <tbody id="tableBody">
+                                <tr>
+                                    <td class="empty-data" colspan="100%">컨택 데이터가 없습니다.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 로컬스토리지 관련 함수들
+        function saveCompanyIdToStorage(companyId) {
+            try {
+                localStorage.setItem('companyId', companyId);
+                console.log('CompanyId saved to localStorage:', companyId);
+            } catch (error) {
+                console.error('Error saving companyId to localStorage:', error);
+            }
+        }
+
+        function loadCompanyIdFromStorage() {
+            try {
+                return localStorage.getItem('companyId');
+            } catch (error) {
+                console.error('Error loading companyId from localStorage:', error);
+                return null;
+            }
+        }
+
+        // 페이지 로드 시 환경에 따른 redirect URL 자동 설정 및 저장된 companyId 로드
+        document.addEventListener('DOMContentLoaded', function () {
+            const currentHost = window.location.hostname;
+            const redirectUriInput = document.getElementById('redirectUri');
+            const ecpserverurlInput = document.getElementById('ecpserverurl');
+            const companyIdSelect = document.getElementById('companyId');
+
+            console.log("currentHost", currentHost);
+            if (currentHost === 'localhost' || currentHost === '127.0.0.1' || currentHost === '') {
+                // 로컬 환경
+                redirectUriInput.value = 'http://localhost:8080';
+                ecpserverurlInput.value = 'http://localhost:8080';
+            } else {
+                // 서버 환경
+                redirectUriInput.value = 'https://ecplab-sdknice.etaas.co.kr';
+                ecpserverurlInput.value = 'https://ecplab-sdknice.etaas.co.kr';
+            }
+
+            // 로컬스토리지에서 저장된 companyId 값 불러오기
+            const savedCompanyId = loadCompanyIdFromStorage();
+            if (savedCompanyId) {
+                companyIdSelect.value = savedCompanyId;
+                // CXoneSdk.companyId 값도 로컬스토리지 값으로 설정
+                if (typeof CXoneSdk !== 'undefined') {
+                    CXoneSdk.companyId = savedCompanyId;
+                }
+                console.log('CompanyId loaded from localStorage and set to CXoneSdk:', savedCompanyId);
+            }
+
+            // companyId select 박스에 change 이벤트 리스너 추가
+            companyIdSelect.addEventListener('change', function () {
+                const selectedValue = this.value;
+                saveCompanyIdToStorage(selectedValue);
+                // CXoneSdk.companyId 값도 업데이트
+                if (typeof CXoneSdk !== 'undefined') {
+                    CXoneSdk.companyId = selectedValue;
+                }
+                console.log('CompanyId changed, saved to localStorage and set to CXoneSdk:', selectedValue);
+            });
+        });
+
+        function addLogs(cmd, event, origin) {
+            const logArea = document.getElementById("logArea");
+            const timestamp = new Date().toLocaleTimeString();
+            try {
+                const formattedJson = JSON.stringify(event, null, 2);
+                logArea.value += `[${origin}][${timestamp}] [${cmd}] ==> \n${formattedJson}\n\n`;
+            } catch (error) {
+                logArea.value += `[${origin}][${timestamp}] [${cmd}] ==> \n${event}\n\n`;
+            }
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        window.addEventListener("message", function (event) {
+            console.log("###############################################", event);
+            const msg = event.data;
+            const origin = event.origin;
+
+            if (!msg || !msg.cmd) return;
+
+            const setValue = (id, condition, successText = "성공", failText = "실패") => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = condition ? successText : failText;
+            };
+
+            const setValueInput = (id, condition, successText = "성공", failText = "실패") => {
+                const el = document.getElementById(id);
+                if (el) el.value = condition ? successText : failText;
+            };
+
+            const postToWebview = () => {
+                try {
+                    window.chrome.webview?.postMessage(msg);
+                } catch (E) {
+                }
+            };
+
+            const handleLoginStatus = () => {
+                setValueInput("login", msg.ret === 0);
+                postToWebview();
+            };
+
+            addLogs(msg.cmd, msg, origin);
+
+            switch (msg.cmd) {
+                case "setServerInfo":
+                    setValueInput("setServerInfo", msg.ret === 0);
+                    CXoneSdk.onLoadPage = msg.ret === 0;
+                    postToWebview();
+                    break;
+
+                case "connectToServer":
+                    setValueInput("connectToServer", msg.ret === 0);
+                    postToWebview();
+                    break;
+
+                case "login":
+                case "notready":
+                case "logout":
+                    handleLoginStatus();
+                    break;
+
+                case "agent_event":
+                    if (msg.ret === 0) {
+                        const data = msg.msg.agentStateData;
+                        const user = msg.msg.userInfo;
+                        setValue("agentStatus", true, data.CurrentState, "-");
+                        setValue("agentId", true, user.icAgentId, "-");
+                        setValue("agentTeam", true, user.teamId, "-");
+                        setValue("CurrentOutReason", true, data.CurrentOutReason, "-");
+                        CXoneSdk.sub_agent_event(msg.msg);
+                    }
+                    postToWebview();
+                    break;
+
+                case "contact_event":
+                    CXoneSdk.sub_voice_event(msg.msg);
+                    renderContactTable(CXoneSdk.getContactList())
+                    postToWebview();
+                    const isConsult = msg.msg.callType === "ReskillProxy" || msg.msg.callType === "Consult";
+                    const prefix = isConsult ? "Consult" : "";
+                    console.log()
+                    setValue(`${prefix}ContactId`, true, msg.msg.contactID, "-");
+                    setValue(`${prefix}CallType`, true, msg.msg.callType, "-");
+                    setValue(`${prefix}CallStatus`, true, msg.msg.status, "-");
+
+                    console.log("??????????????????", msg.msg.case)
+                    if (msg.msg.case != undefined) {
+                        console.log("???????????????????????????????????????????aaaaaaa", msg)
+                        setValueInput("digitalCaseId", true, msg.msg.case.channelId, "-");
+                        setValueInput("digitalThreadId", true, msg.msg.case.threadIdOnExternalPlatform, "-");
+                        setValueInput("digitalContactId", true, msg.msg.contactID, "-");
+                    }
+
+                    break;
+
+                case "CHANGE_DIGITAL_STATUS":
+                    setValueInput("changeDigitalStatus", msg.ret === 0);
+                    postToWebview();
+                    break;
+
+                case "UNASSIGN_DIGITAL_CONTACT":
+                    setValueInput("unassignDigitalContact", msg.ret === 0);
+                    postToWebview();
+                    break;
+
+                case "SEND_CUSTOM_EVENT":
+                    setValueInput("sendCustomEvent", msg.ret === 0);
+                    postToWebview();
+                    break;
+
+                case "SEND_CUSTOM_DATA":
+                    setValueInput("sendCustomData", msg.ret === 0);
+                    postToWebview();
+                    break;
+
+                case "CustomEvent":
+                    break;
+
+                default:
+                    postToWebview();
+                    break;
+            }
+        });
+
+        function setServerInfo() {
+            CXoneSdk.setServerInfo(document.getElementById("ecpserverurl").value, true);
+        }
+
+        function connectToServer() {
+            CXoneSdk.connectToServer(document.getElementById("cxoneHostname").value, document.getElementById("clientId").value, document.getElementById("redirectUri").value, document.getElementById("companyId").value);
+        }
+
+        function login() {
+            console.log("login....");
+            CXoneSdk.LOGIN(document.getElementById("loginUserId").value, document.getElementById("loginUserPw").value);
+        }
+
+        function logout() {
+            CXoneSdk.logout();
+        }
+
+        function conference() {
+            CXoneSdk.conference_call();
+        }
+
+        function ready() {
+            CXoneSdk.ready();
+        }
+
+        function notready() {
+            CXoneSdk.notready("lunch");
+        }
+
+        function login_dialer() {
+            CXoneSdk.login_dialer("V_PC_preview");
+        }
+
+        function logout_dialer() {
+            CXoneSdk.logout_dialer("V_PC_preview");
+        }
+
+        function answer() {
+            const conatctId = document.getElementById("ContactId").textContent;
+            const contactType = document.getElementById("CallType").textContent;
+            CXoneSdk.answer(conatctId, contactType);
+        }
+
+        function consult_answer() {
+            const conatctId = document.getElementById("ConsultContactId").textContent;
+            const contactType = document.getElementById("ConsultCallType").textContent;
+            CXoneSdk.answer(conatctId, contactType);
+        }
+
+        function hangup() {
+            const conatctId = document.getElementById("ContactId").textContent;
+            CXoneSdk.hangup(conatctId);
+        }
+
+        function makecall() {
+            const prefix = document.getElementById("prefix").value;
+            const dialednum = document.getElementById("dialednum").value;
+            const calltype = document.getElementById("outSkill").value;
+            CXoneSdk.makecall(prefix, dialednum, calltype);
+        }
+
+        function hold() {
+            const conatctId = document.getElementById("ContactId").textContent;
+            CXoneSdk.hold(conatctId);
+        }
+
+        function unhold() {
+            const conatctId = document.getElementById("ContactId").textContent;
+            CXoneSdk.unhold(conatctId);
+        }
+
+        function mute() {
+            const conatctId = document.getElementById("ContactId").textContent;
+            CXoneSdk.mute(conatctId);
+        }
+
+        function unmute() {
+            const conatctId = document.getElementById("ContactId").textContent;
+            CXoneSdk.unmute(conatctId);
+        }
+
+        function consult() {
+            const conatctId = document.getElementById("ContactId").textContent;
+            const target = document.getElementById("target").value;
+            const type = document.getElementById("ConsultType").value;
+            CXoneSdk.consult(type, conatctId, target);
+        }
+
+        function retrieve() {
+            const conatctId = document.getElementById("ContactId").textContent;
+            const consultconatctId = document.getElementById("ConsultContactId").textContent;
+            CXoneSdk.retrieve(conatctId, consultconatctId);
+        }
+
+        function transfercomplete() {
+            CXoneSdk.transfercomplete();
+        }
+
+        function blindtransfer() {
+            const type = document.getElementById("ConsultType").value;
+            const conatctId = document.getElementById("ContactId").textContent;
+            const target = document.getElementById("target").value;
+            CXoneSdk.blindtransfer(type, conatctId, target);
+        }
+
+        function loginuser() {
+            CXoneSdk.loginuser();
+        }
+
+        function notreadyinfo() {
+            const teamId = document.getElementById("agentTeam").textContent;
+            CXoneSdk.notreadyinfo(teamId);
+        }
+
+        function getcurrentcall() {
+            CXoneSdk.getcurrentcall();
+        }
+
+        function assignedservice() {
+            CXoneSdk.assignedservice();
+        }
+
+        function getcontactlist() {
+            CXoneSdk.getContactList();
+            renderContactTable(CXoneSdk.getContactList());
+        }
+
+        function senddtmf() {
+            const dtmf = document.getElementById("dtmf").value;
+            CXoneSdk.senddtmf(dtmf);
+        }
+
+        function singlestepreskill() {
+            console.log("singlestepreskill function needs implementation");
+        }
+
+        function checkMicPermission() {
+            console.log("checkMicPermission function needs implementation");
+        }
+
+        function sendDigitalMessage() {
+            const caseId = document.getElementById("digitalCaseId").value;
+            const threadId = document.getElementById("digitalThreadId").value;
+            const message = document.getElementById("digitalMessage").value;
+            CXoneSdk.sendDigitalMessage(caseId, threadId, message);
+        }
+
+        function changeDigitalStatus() {
+            const contactId = document.getElementById("digitalContactId").value;
+            const status = document.getElementById("digitalStatus").value;
+            CXoneSdk.changeDigitalStatus(contactId, status);
+        }
+
+        function unassignDigitalContact() {
+            const contactId = document.getElementById("digitalContactId").value;
+            CXoneSdk.unassignDigitalContact(contactId);
+        }
+
+        function sendCustomEvent() {
+            const agentId = document.getElementById("customEventAgentId").value;
+            const eventName = document.getElementById("customEventName").value;
+            const eventData = document.getElementById("customEventData").value;
+            const persistInMemory = document.getElementById("customEventPersist").value === "true";
+
+            if (!agentId) {
+                alert("Agent ID를 입력해주세요.");
+                return;
+            }
+
+            if (!eventName) {
+                alert("Event Name을 입력해주세요.");
+                return;
+            }
+
+            // Custom Event 전송 (Agent Event Stream에 이벤트 생성)
+            CXoneSdk.sendCustomEvent(agentId, eventName, eventData, persistInMemory);
+        }
+
+        function sendCustomData() {
+            const contactId = document.getElementById("customDataContactId").value;
+            const indicatorName = document.getElementById("customDataIndicatorName").value;
+            const customDataJson = document.getElementById("customDataJson").value;
+
+            if (!contactId) {
+                alert("Contact ID를 입력해주세요.");
+                return;
+            }
+
+            try {
+                // JSON을 파싱하여 객체로 변환
+                const dataObject = JSON.parse(customDataJson || '{}');
+
+                // 객체를 custom data 형식으로 변환
+                const customData = CXoneSdk.createCustomData(dataObject);
+
+                // Custom Data 전송 (Contact에 데이터 저장)
+                CXoneSdk.sendCustomData(contactId, customData, indicatorName);
+            } catch (error) {
+                console.error("Invalid JSON format:", error);
+                alert("올바른 JSON 형식으로 입력해주세요.");
+            }
+        }
+
+        function login_dialer() {
+            const reason = document.getElementById("dialer_skill").value;
+            CXoneSdk.login_dialer(reason);
+        }
+
+        function logout_dialer() {
+            const reason = document.getElementById("dialer_skill").value;
+            CXoneSdk.logout_dialer(reason);
+        }
+
+
+        function renderContactTable(contactDataArray) {
+            const tableHeader = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+            const recordCount = document.getElementById('recordCount');
+
+            // 배열이 아닌 경우 배열로 변환
+            let dataArray = Array.isArray(contactDataArray) ? contactDataArray : [contactDataArray];
+
+            // null이나 undefined 제거
+            dataArray = dataArray.filter(item => item !== null && item !== undefined);
+
+            if (dataArray.length === 0) {
+                tableHeader.innerHTML = '';
+                tableBody.innerHTML = '<tr><td class="empty-data" colspan="100%">컨택 데이터가 없습니다.</td></tr>';
+                recordCount.textContent = '';
+                return;
+            }
+
+            // 헤더와 필드 정보 생성
+            const { headerHTML, fields } = createTableHeader(dataArray);
+
+            // 테이블 업데이트
+            tableHeader.innerHTML = headerHTML;
+            tableBody.innerHTML = createTableBody(dataArray, fields);
+            recordCount.textContent = `총 ${dataArray.length}개의 컨택 정보`;
+        }
+
+        function createTableHeader(dataArray) {
+            if (!dataArray || dataArray.length === 0) return { headerHTML: '', fields: [] };
+
+            // 지정된 필드만 사용 (하드코딩)
+            const selectedFields = ['ani', 'dnis', 'status', 'type', 'skill', 'contactID', 'masterID', 'callType'];
+
+            const fieldLabels = {
+                acwTypeId: 'ACW 타입 ID',
+                agentMuted: '상담원 음소거',
+                allowDispositions: '처리결과 허용',
+                ani: '발신자 번호',
+                blendingToSkillName: '블렌딩 스킬명',
+                callType: '통화 유형',
+                contactID: '컨택 ID',
+                customData: '커스텀 데이터',
+                customerCardUrl: '고객카드 URL',
+                deliveryType: '전달 유형',
+                disconnectCode: '연결해제 코드',
+                dnis: '수신자 번호',
+                externalId: '외부 ID',
+                finalState: '최종 상태',
+                hideInboundHangup: '인바운드 종료 숨김',
+                interactionId: '상호작용 ID',
+                isInbound: '인바운드 여부',
+                lastStateChangeTime: '마지막 상태변경시간',
+                masterID: '마스터 ID',
+                maxSecondsACW: '최대 ACW 시간(초)',
+                skill: '스킬 ID',
+                skillName: '스킬명',
+                status: '상태',
+                type: '타입'
+            };
+
+            // 실제 데이터에 해당 필드가 존재하는지 확인하여 필터링
+            const fields = selectedFields.filter(field => {
+                return dataArray.some(item =>
+                    item.hasOwnProperty(field) &&
+                    item[field] !== null &&
+                    item[field] !== undefined &&
+                    item[field] !== ''
+                );
+            });
+
+            let headerHTML = '<tr>';
+            fields.forEach(field => {
+                const label = fieldLabels[field] || field;
+                headerHTML += `<th>${label}</th>`;
+            });
+            headerHTML += '</tr>';
+
+            return { headerHTML, fields };
+        }
+
+        function createTableBody(dataArray, fields) {
+            if (!dataArray || dataArray.length === 0) {
+                return '<tr><td class="empty-data" colspan="100%">컨택 데이터가 없습니다.</td></tr>';
+            }
+
+            let bodyHTML = '';
+            dataArray.forEach(item => {
+                bodyHTML += '<tr>';
+                fields.forEach(field => {
+                    const value = item[field];
+                    // 값 포맷팅
+                    let displayValue = value;
+                    let extraClass = '';
+
+                    if (value === null || value === undefined || value === '') {
+                        displayValue = '-';
+                    } else if (typeof value === 'boolean') {
+                        displayValue = value ? '예' : '아니오';
+                        extraClass = value ? 'boolean-true' : 'boolean-false';
+                    } else if (field === 'status') {
+                        extraClass = value.toLowerCase() === 'active' ? 'status-active' : 'status-inactive';
+                    } else if (field === 'contactID' || field === 'masterID' || field === 'interactionId') {
+                        extraClass = 'contact-id';
+                    }
+
+                    bodyHTML += `<td><span class="${extraClass}">${displayValue}</span></td>`;
+                });
+                bodyHTML += '</tr>';
+            });
+
+            return bodyHTML;
+        }
+
+    </script>
+</body>
+
+</html>
