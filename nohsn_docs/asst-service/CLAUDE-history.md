@@ -509,3 +509,64 @@ docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configServic
 - **특성**: Dozzle은 도커소켓 기반이라 **asst뿐 아니라 호스트 전체 컨테이너 로그**(postgres/redis/user/ce 등)를 봄 → 서비스간 연관 디버깅에 유리. 단 타 서비스 로그 노출되므로 **인증 필수**, 더 좁히려면 `DOZZLE_FILTER=name=asst-service-dev`.
 - **git 인증 트러블슈팅**: 192(Cursor 서버) `git fetch/pull` **401** — Cursor `GIT_ASKPASS`(askpass-main.js)가 만료 자격증명 자동제출(입력창 안 뜸) + GitLab이 PAT 요구. 해결: `git remote set-url origin 'https://oauth2:<PAT>@gitlab.timbel.dev/...'` 후 fetch, 또는 일회성 `GIT_ASKPASS= git fetch 'https://oauth2:<PAT>@...'`. 서버정렬은 pull(충돌) 대신 `git fetch && git reset --hard origin/develop_nohsn`.
 - **문서**: `docs/docker-deploy-guide.md` 10번 섹션(Dozzle), 신규 `docs/git-server-sync-guide.md`(git 401/PAT + reset 서버정렬). 커밋 `b71c2ed fix: 모니터링 환경 설정` 등으로 배포 완료.
+
+### 38. wav STT 콜 시뮬레이션 — 소켓 룸 0명 디버깅 (프론트가 엉뚱한 asst 인스턴스 접속) (2026-06-16)
+
+`run_wav_stt.sh`(wav→STT→redis 발화 발행, 양산 redis 의존 우회)로 콜 시뮬레이션 시, 대화 자막·assist-stream RAG는 화면에 뜨는데 로그에 `⚠️ NO CLIENTS IN ROOM: 'dev:4609686:56356659:call:nlp:complete' (0 clients)`. "이전과 다르다, 룸 번호가 안 맞는 것 같다"며 스크립트(`run_wav_stt.sh`)의 `TENANT_ID`/`AGENT_ID`를 계속 수정 중이었음.
+
+**구조(3단 정렬 필요)**: ① asst RedisService가 redis 채널 subscribe → ② 수신 시 채널명과 **글자 그대로 같은** 소켓 룸으로 broadcast(`broadcastToRedisMonitorRoom`, room명=redis 채널명) → ③ 프론트가 `join-room`으로 같은 이름 룸 참여. **소켓 join-room(③)과 redis subscribe(①)는 완전 별개** — 룸에 들어가 있어도 asst가 그 채널 subscribe 안 하면 broadcast 자체가 안 일어남.
+
+**데이터로 하나씩 소거(추측 배제)**:
+- `GET /api/asst/v1/redis-monitor/status`(x-auth-token 필요): `subscribedChannels`에 5개 콜채널(events/nlp:complete/nlp:partial/voc/orchestrator:persisted) **전부 구독됨 ✅** → ① 빵꾸 아님. `socketRooms` 5개 전부 `exists:false, clientCount:0` → 룸 이름은 ①과 동일, **이름 불일치 아님**.
+- **대화 흐르는 중에도** 같은 curl → 여전히 5개 룸 0명. 근데 화면엔 데이터 나옴 → **화면 자막은 소켓이 아니라 REST(`dev:call:{callId}:turn:data` 정렬셋 폴링)로 그려짐**(스크립트가 그 Lua로 정렬셋 만드는 이유). 소켓 broadcast 경로는 클라 0명.
+- 토큰(JWT) 페이로드 = `cId=60, ad=412627, acc=agent40, cd=POC4`. user-service `get_user`(`/api/asst/v1/proxy/user/get_user`)로 실제 식별자 확인 → `company.vendor_tenant_id=4609686 ✅`, `agent.cc_cti_id=56356659 ✅`. **스크립트 id 4609686/56356659는 정확.** (agent UUID `agent_349727fe...`, tenant UUID `tenant_7b72c2eb...` = 스크립트 주석의 그 값) → **id 불일치 아님, 스크립트 손대면 안 됐던 것.**
+
+**결론(범인)**: 스크립트 id 맞음 + asst 구독 다 됨 + 룸 이름 정렬 다 맞음 + 그런데 소켓 룸만 0명 → **프론트 대시보드의 소켓이 데이터 흐르는 asst(124.194.32.36:32025)에 안 붙어 있었음**(다른 asst 인스턴스/주소에 접속). 같은 redis를 여러 asst가 구독하면, 프론트가 붙은 인스턴스만 룸에 클라가 있어 broadcast가 닿고, 안 붙은 인스턴스(우리가 curl한 124)는 같은 nlp 이벤트를 받아도 룸이 비어 "0 clients" 경고. 사용자: "프론트가 잘못 접속해 있는 게 맞다" 확인 → 프론트 접속 주소를 124.194.32.36:32025로 수정 후 재테스트 예정.
+
+**교훈**: ①"0 clients 룸 경고 + 화면엔 데이터" 조합 = 화면은 REST 경로, 소켓은 다른 인스턴스 의심. ②**API와 소켓을 같은 asst 인스턴스로** 붙여야 함(소켓만 딴 데면 같은 증상). ③검증=대화 흐르는 중 `/redis-monitor/status`의 `socketRooms[].clientCount≥1`. ④로그 시각으로 접속 유무만 추론하면 헛다리 — `redis-monitor/status`로 구독·룸·클라수를 한 번에 직접 비교하는 게 정확.
+
+### 39. agent-status 소켓 룸 0명 — 프론트가 join-room 누락 (2026-06-16)
+
+상담 종료 시 `[AgentStatusSocketHandler] ⚠️ Room에 연결된 클라이언트 없음: agent-status (0명)`. 근데 `REALTIME STATS: 1명 연결` + ACTIVE ROOMS엔 coaching/notices/`dev:...:call:*` 룸은 1명씩 있는데 **`agent-status`만 없음**.
+- **원인**: 이 소켓 서버는 룸 자동 join이 아니라 **클라가 `join-room` 이벤트를 직접 emit해야** 참여(`socket.gateway.ts:312 handleJoinRoom`). 프론트가 다른 룸엔 join하면서 `agent-status`만 빠뜨림. 서버 broadcast(`broadcastToAgentStatusRoom`)는 정상 — 받는 클라가 0명일 뿐.
+- **해결(프론트)**: connect 직후 `socket.emit('join-room', 'agent-status')` + `socket.on('agent-status-update', ...)`. 재연결 시 룸 멤버십 날아가니 `on('connect')` 안에 둘 것. 서버/이벤트명=`agent-status-update`, 룸명=`agent-status`(`agent-status-socket.handler.ts:27,53`). → 프론트 적용 후 `agent-status → 2명` 확인.
+
+### 40. orchestrator:persisted 미수신 + 요약팝업 — run_wav_stt.sh에 라이프사이클 publish 추가 (2026-06-16)
+
+상담 종료 시 프론트가 `...:call:orchestrator:persisted`로 요약팝업을 띄우는데 안 뜸.
+- **분석**: `orchestrator:persisted`는 **asst가 publish 안 함 — 오케스트레이터 서비스가 발행**(asst 소스에 publish 0건, `run_wav_stt.sh:199` 주석 근거). asst는 Redis→Socket **가공없이 verbatim 중계**(`redis-monitor.controller.ts:413 handleChannelMessage`). 구독은 정확채널(패턴X), `POST /redis/subscribe/:channel`로 등록. 이 테스트엔 오케스트레이터가 없어 persisted가 영영 안 나감.
+- **agent_id 매칭**: 프론트 전역필터가 `agent_id`를 cc_cti_id와 비교. `voc` 채널은 asst가 `agent_id=cc_cti_id`로 **덮어써 발행**(`voc-realtime.service.ts:500,517`)하지만, nlp/events/persisted는 **verbatim**이라 업스트림이 넣은 값 그대로. → persisted가 긴 agent_id면 프론트가 버림.
+- **해결(테스트 스크립트 `run_wav_stt.sh`)**: ① 콜시작 시 `call:events`(type=start) publish(프론트 `isInit=false`→"콜 집계 중", 없으면 "상담한 콜이 없습니다"), ② 종료 시 `call:orchestrator:persisted` 직접 publish(오케스트레이터 흉내). agent_id=`${AGENT_ID}`(cc_cti_id), `callstats_id`(=프론트 버튼 활성화 게이트)+`call_id` 포함. 채널 `dev:${TENANT_ID}:${AGENT_ID}:call:orchestrator:persisted`(로그의 룸명과 글자 동일 확인).
+- **⚠️ 미해결 연쇄**: 버튼은 켜지지만 누르면 `/summary`가 그 callstats_id로 **DB(raw_call.callstats_call/turn)** 조회 → 테스트는 turn을 Redis에만 넣어 DB행 없음 → 404(45번 참조). asst의 redis 구독 여부는 publish 반환 `수신(구독)자 수`로 확인.
+
+### 41. LLM 오케스트레이터 404 = TENANT_NOT_FOUND + 임시 테넌트 override (2026-06-16)
+
+실시간 VOC가 `LLM Custom Complete 404`. "서버 먹통 같다"고 의심.
+- **진단(서버 정상)**: 엔드포인트 직접 curl → 빈body 400, 헤더 넣으면 404 `{"code":"TENANT_NOT_FOUND","message":"테넌트(company_ea847481_...)가 등록되지 않았습니다"}`. **서버·경로 정상, 그 회사UUID가 오케스트레이터에 미등록**이라 404. (`X-Tenant-Id`=company UUID, 설계상 맞는 값 — `voc-realtime.service.ts:82` 주석.) 두 테넌트 직접 검증: `company_ea847481_...`→404, `company_71900448_...`→201(LLM응답 정상). **등록된 건 71900448, ea847481은 미등록**(사용자 기억과 반대).
+- **해결(임시, 코드)**: `llm-orchestrator.service.ts` — `complete`/`customComplete`의 `X-Tenant-Id` 세팅 직전 `resolveTenantId()`로 치환. env `LLM_TENANT_OVERRIDE_MAP="원본:대체"`(쉼표 다중쌍), **`NODE_ENV===local||development`에서만** 동작(운영 안전). env 미설정/운영이면 무동작. `.env.5f.development`·`.env.development`에 `company_ea847481_...:company_71900448_...` 추가.
+- **배포 함정(핵심)**: 적용 안 됐던 진짜 이유 = `up -d --force-recreate`는 **이미지 재빌드 안 함**. Dockerfile이 `COPY . . && npm run build`로 **dist를 이미지에 굽는** 구조(볼륨마운트X) → `.ts` 변경은 **`--build` 필수**. `docker compose -f docker-compose.dev.5f.yml up -d --build --force-recreate`. 부팅로그 `[임시] LLM 테넌트 오버라이드 활성화`, 호출시 `[임시] LLM 테넌트 치환: ea847481→71900448` 뜨면 성공.
+
+### 42. 실시간 VOC 게이트 제거 — assist-stream 호출마다 무조건 분석 (2026-06-16)
+
+실시간 VOC가 발화 턴 2,5,8…에서만 발동(`shouldRun`: `totalTurns>=2 && (totalTurns-2)%interval===0`, interval=`REALTIME_VOC_INTERVAL` 기본3). 매 호출 분석 원함.
+- **구조**: 트리거 진입점은 `POST /assist-stream`→`handleUtterance` 하나뿐. nlp:complete redis 구독경로(`handleNlpComplete`)는 현재 **비활성**(과거 onModuleInit 옵저버 제거됨). `call:events` 종료신호를 VOC로 소비하는 코드는 **없음**(사용자 가정과 다름).
+- **해결(코드)**: `assist-stream.controller.ts:77` `handleUtterance(dto, token)` → `{ force: true }` 추가(이미 설계된 게이트 우회 옵션). `shouldRun`은 그대로 둠(nlp경로 재활성 대비). 이 경로는 토큰을 HTTP로 직접 받아 게이트의 "1턴 토큰경합" 사유가 애초에 무관 → 안전. `--build` 필요.
+
+### 43~45. DB 스키마 드리프트 — 바꿔낀 DB가 ORM보다 뒤처져 연쇄 에러 (2026-06-16)
+
+`.env.5f.development`의 `DB_DATABASE`를 `company_ea847481_...`로 바꿔 직결(`DB_DIRECT_CON=1`, 124.194.32.36:32011). 이 DB 스키마가 엔티티보다 구버전이라 엔드포인트가 줄줄이 깨짐.
+- **43) `coachings/requests/sender/:key` 500**: 테이블 `advisor.coaching_requests`에 엔티티가 선언한 `customer_name`/`sender_name` 컬럼 **없음**. `create_advisor_schema.sql:103` 정의에 그 컬럼 없고, `runSchemaMigrations`는 그 컬럼을 **`coachings`에만** 추가(`coaching_requests`엔 안 함). dev는 synchronize OFF. `findAndCount`가 전체컬럼 SELECT → `column does not exist` → 메서드에 try/catch 없어 500. **수정案**: `runSchemaMigrations`에 `addColumnIfNotExists('coaching_requests','sender_name'/'customer_name')` 2줄(미적용, 보류).
+- **44) `assist-stream/snapshot` 500**: 테이블 `advisor.callstat_assist_snapshot` **자체가 없음**. `runSchemaMigrations`가 안 만들고 수동 SQL(`create_callstat_assist_snapshot_table.sql`)로만 생성 — 이 DB엔 미적용 → `relation does not exist`.
+- **45) `POST /summary` 404**: 라우트 정상(`@Controller('summary')+@Post()`). 앱이 던지는 `NotFoundException` — `summarizeCall`이 `raw_call.callstats_call`(id)·`callstats_turn`(callstats_id)을 DB조회하는데 그 callstats_id 행이 없음(테스트는 turn을 Redis에만 넣음, `/summary`는 Redis 폴백 없음). 테이블자체 없으면 500이었을테니 **테이블은 있고 행만 없는 것**.
+- **공통 원인/방향**: 스키마 반영 3경로(① synchronize=local만, ② runSchemaMigrations=advisor 일부만, ③ 수동 migrations/*.sql) 중 이 DB엔 ③이 덜 적용됨. `migrations/*.sql` 재실행은 `CREATE TABLE IF NOT EXISTS`라 **이미 있는데 컬럼만 빠진 건 못 고침**(이름만 보고 스킵) → 빠진 컬럼은 `ALTER ADD COLUMN`으로. **권장=읽기전용 information_schema로 엔티티↔DB 3-way diff 후 멱등 reconciliation DDL**(보류, 담당자 협의). 사용자 결론: "당장은 두고 나중에 엔티티 문제되면 그때 수정."
+
+### 46. callstat 상세응답에 voc 추가 + raw_call 읽기전용 분석 (2026-06-16)
+
+**(a) `GET /callstat/calls/:id`에 voc 추가(완료)**: 응답 `{call,turns,entities,keywords,snapshots}`에 `voc` 1depth 추가. 소스=`advisor.emotions`. `advisor.service.ts findCallstatDetailById`에서 Emotion 레포를 `callstats_id=call.id`(PK, turns/entities와 동일 기준)로 `findOne`, 없으면 `voc:null`. 매핑: `sentiment_type/score/description`→`emotion.{type,score,summary}`, `complaint_risk_*`→`complaintRisk`, `churn_risk_*`→`churnRisk`(=`VocAnalysisDto`=summary/real-voc 동일구조, null컬럼은 0/''폴백). `callstat.controller.ts` Swagger에 voc(nullable, VocAnalysisDto) 문서화 + `@ApiExtraModels`. 타입체크 통과. `--build` 필요. **주의**: `emotion.type`은 4종 아이콘(negative/neutral/positive/etc)이라 예시의 "angry"(5종)와 다름(테이블 저장값이 아이콘타입). 조회키는 callstats_id(=callstats_call.id) — call_id 기준이 맞으면 키만 교체.
+**(b) `raw_call.callstats_call` 사용분석**: asst는 이 테이블 **읽기 전용**(write/DDL 0건) — 통화통계는 외부서비스가 적재, asst는 조회만. 중심=`advisor.service.ts`(findCallstatDetailById 등 callstat 조회들), 집계=`call-stats.service.ts`(QueryBuilder), summary(id조회), todo(consumer_phonenumber 조인). **결론**: raw_call은 asst 비소유 → "DB를 ORM에 맞추기"는 거꾸로, 엔티티를 실제테이블(공통 부분집합)에 맞춰야. `find()/findOne()`은 엔티티 전체컬럼 SELECT라 "엔티티 컬럼 ⊆ 접속DB 컬럼"이어야 안전 — 지금 OK, 다른 raw_call DB(컬럼셋 다름)로 바꾸면 `find()` 엔드포인트 500 위험. 사용자: 문제되면 그때 엔티티 수정.
+
+### 47. 로컬 CORS — get_user (localhost:8173) 차단, .env.local에 CORS_ALLOWED_ORIGINS 추가 (2026-06-16)
+
+로컬 프론트(`localhost:8173`)→로컬 백엔드(`localhost:3000`) `/proxy/user/get_user` CORS 에러.
+- **원인**: `start:dev`(NODE_ENV=local)는 `.env.local`→`.env` 로딩. 둘 다 `CORS_ALLOWED_ORIGINS` **없음** → `main.ts:69 corsEnabled=!!CORS_ALLOWED_ORIGINS`가 false → `enableCors` 미호출 → CORS OFF. (main.ts:71-75 `ALLOWED_ORIGINS_DEV` 폴백은 `if(corsEnabled)` 안이라 **죽은 코드**.)
+- **해결**: `.env.local`에 `CORS_ALLOWED_ORIGINS=http://localhost:8173,http://localhost:3000,http://127.0.0.1:8173` 추가. `x-auth-token`은 이미 허용헤더(`environment.constant.ts:33`)라 preflight 통과. **로컬 dev 서버 재시작만**(도커 아님, --build 불필요). 35번(게이트웨이 경유시 ACAO 중복)과 달리 여긴 게이트웨이 없는 직결이라 백엔드가 CORS 켜는 게 맞음.
