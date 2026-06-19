@@ -473,3 +473,15 @@
 - **원인(메커니즘 확실):** `ChatHistoryModal.vue:494`에서 데이터 로딩 끝에 `audioSrc`에 playback URL 세팅 → `preload="metadata"`라 **사용자 재생 전에 브라우저가 자동 fetch** → 실패 시 error 이벤트. 가드(`isCallHistoryModalActive && isModalVisible && audioSrc`)는 통과되므로 토스트 발생.
 - **실패 사유(env 의존, 추정):** 해당 콜 AGENT 녹취 부재 / `ticket·recKey(call_id)·date`/proxy 불일치 / **로컬-개발 환경에서 audio playback proxy 미제공**.
 - **수정안(미확정, 사용자 선택 대기):** A안(추천)=error 이벤트 자동 토스트 제거, 재생 직접 눌렀을 때만 토스트+상태로 버튼 비활성/"녹취없음" 표시 / B안=`preload="none"`로 자동 fetch 차단 / C안=A+B.
+
+#### 52. VOC 고객감정 3종 → 5종(+레거시 3종) 프론트 반영 (2026-06-17)
+- **배경(백엔드 변경):** `docs/voc-emotion-5type-frontend.md`. VOC 3축 중 **emotion 축만** 세분화. `emotion.type` 값이 신규 5종(`angry`화남/`dissatisfied`불만/`normal`일반/`satisfied`만족/`thanks`감사) + 과거 콜이력 한정 레거시 3종(`negative`/`neutral`/`positive`)로 변경. 민원위험/이탈징후/종합위험도는 변경 없음.
+- **백엔드 추가 확인(중요):** 실시간 소켓 `emotion` payload에서 **`sentiment_type` 필드 제거됨 → 이제 `type`만 옴**(`{ type, score, summary }`). 예: `{"type":"negative","score":0.65,"summary":"..."}`. → 프론트가 `type`(8종)을 직접 정규화하도록 통일.
+- **색상 확정(사용자):** 화남=red`#ef4444` / 불만=보라`#a855f7` / 일반=중립색`#94a3b8` / 만족=긍정색`#22c55e` / 감사=핑크`#ec4899`. 레거시 부정/중립/긍정은 기존 3색 그대로.
+- **수정 `src/utils/emotionVoc.ts`:** 8종 단일 소스 신규 — `EmotionTypeKey`(8종) + `EMOTION_TYPE_META`(라벨/색) + `resolveEmotionType(type)`(미정의/누락 값은 `normal`로 안전 처리, 문서 권장). `resolveVocView`의 하드코딩·API 양 경로가 이걸 써서 `emotion:{key,label,color,summary}` 생성. 죽은 `toSentiment`/`VOC_SENTIMENT_META` 제거. `VocEmotionView.sentiment`(4종) → `key`(8종 EmotionTypeKey)로 교체.
+- **수정 `src/api/types/voc.type.ts`:** `VocEmotionType` → 신규5+레거시3 8종으로 교체(구 raw 5종 calm/sad/happy 폐기). `VocEmotion`에서 `sentiment_type` 제거(이제 안 옴), `type/score/summary`만. `VocSentimentType`(4종)은 정의만 잔존(미사용, 호환용).
+- **수정 `src/view/advisor/components/voc/CustomerVocPanel.vue`:** 실시간 풀패널 — `SENTIMENT_META`/`sentimentMeta`(sentiment_type 기반) 제거 → `emotionMeta = resolveEmotionType(current.emotion.type)`. 템플릿 점/라벨 색 바인딩도 `emotionMeta`로.
+- **수정 `src/view/advisor/components/chat/index.vue`:** 상담내용 헤더 인라인 VOC — `VOC_SENTIMENT_META`/`vocSentimentMeta`(sentiment_type) 제거 → `resolveEmotionType(vocLatest.emotion.type)`. import도 `VocSentimentType` → `resolveEmotionType`.
+- **수정 `useChatMessageParser.ts:254`:** 진단 로그 `sentiment=...sentiment_type` → `type=...type` (로그만).
+- **검증:** `vue-tsc --noEmit` 관련 파일 에러 0(잔여는 작업 전부터 있던 tsconfig deprecation 경고 2건뿐). `sentiment_type`/`VOC_SENTIMENT_META`/`toSentiment` 실사용 전부 제거 확인.
+- **안 건드린 것:** 하드코딩 데모 4콜(`EMOTION_BY_CALL_ID`) 경로 — 기존 우선 노출 그대로(키가 positive/neutral/negative라 8종 메타에 그대로 매핑됨).

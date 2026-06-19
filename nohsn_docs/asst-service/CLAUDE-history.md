@@ -570,3 +570,145 @@ docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configServic
 로컬 프론트(`localhost:8173`)→로컬 백엔드(`localhost:3000`) `/proxy/user/get_user` CORS 에러.
 - **원인**: `start:dev`(NODE_ENV=local)는 `.env.local`→`.env` 로딩. 둘 다 `CORS_ALLOWED_ORIGINS` **없음** → `main.ts:69 corsEnabled=!!CORS_ALLOWED_ORIGINS`가 false → `enableCors` 미호출 → CORS OFF. (main.ts:71-75 `ALLOWED_ORIGINS_DEV` 폴백은 `if(corsEnabled)` 안이라 **죽은 코드**.)
 - **해결**: `.env.local`에 `CORS_ALLOWED_ORIGINS=http://localhost:8173,http://localhost:3000,http://127.0.0.1:8173` 추가. `x-auth-token`은 이미 허용헤더(`environment.constant.ts:33`)라 preflight 통과. **로컬 dev 서버 재시작만**(도커 아님, --build 불필요). 35번(게이트웨이 경유시 ACAO 중복)과 달리 여긴 게이트웨이 없는 직결이라 백엔드가 CORS 켜는 게 맞음.
+
+---
+
+## 2026-06-17
+
+### 48. VOC 고객감정 — 3종 → 5종 확장 (emotion_prompt.md 기준) (tsc/lint 0)
+
+**요구**: VOC 3축 중 **감정(emotion) 1축만** `docs/emotion_prompt.md`의 5종 기준으로 교체. 민원위험/이탈징후 2축은 그대로. **DB 컬럼 구조 변경 없음.** 단 sentiment_type 값은 치환 없이 LLM 5종 영문을 **그대로 저장**.
+
+**핵심 합의(이해 정정 2회)**:
+- (1차 오해) 5종→3종 치환 저장 ❌. (정정) **치환 없이 5종 영문 그대로 저장.**
+- 기존 `negative/neutral/positive`는 **이미 저장된 데이터 호환용 레거시**라 남김. 앞으로는 5종만 저장.
+- 결과적으로 `sentiment_type` 가질 수 있는 값 = 레거시 3종 + 신규 5종 = **8종**(사용자 결정: `etc` 제거).
+- 발견: `sentiment_type` 에 **CHECK 제약**(`emotions`/`callstat_voc` 둘 다, `IN ('negative','neutral','positive','etc')`)이 실제로 있음 → 5종 그대로 저장하려면 CHECK 확장 불가피(컬럼 구조 변경은 아님).
+
+**확정값**:
+- 신규 5종 영문키: `angry`(화남) / `dissatisfied`(불만) / `normal`(일반) / `satisfied`(만족) / `thanks`(감사). (일반은 기존 neutral과 키 충돌 피해 `normal`)
+- CHECK 8종: 레거시 3종(negative/neutral/positive) + 신규 5종. etc 제거.
+- 매핑/치환 함수 **신설 안 함**(저장부 emotion.service.ts:27, persistVoc, 이력조회 summary.service.ts:1004 모두 이미 값 그대로 통과 — 섹션 21에서 매핑 삭제됨).
+
+**변경 파일(코드 4개)**:
+- `emotion.entity.ts`: `EmotionIconType`/`EMOTION_ICON_TYPES` 8종으로(레거시3+신규5, etc 제거).
+- `summary-response.dto.ts`: `EmotionType`/`EMOTION_TYPES` 8종, **`NEW_EMOTION_TYPES`(신규 5종) 신설**, `EmotionDto` 설명 5종 기준+레거시 안내로 갱신.
+- `summary.service.ts`: `buildVocPrompt` 감정 정의를 emotion_prompt.md 5종(정의/판단신호/우선순위 angry>dissatisfied>satisfied>thanks>normal/감사 과대검출 주의)으로 교체, JSON 예시 type=`angry`. `parseVocResponse` allowed=`NEW_EMOTION_TYPES`(신규 5종만 통과, 레거시는 LLM이 출력 안 함). `analyzeVoc` fallback emotion.type `neutral`→`normal`.
+- `dynamic-database.service.ts` `runSchemaMigrations`: 두 CREATE TABLE의 CHECK를 8종으로+DEFAULT `neutral`→`normal`. 기존 배포 DB용 **멱등 ALTER**(DROP CONSTRAINT IF EXISTS `{table}_sentiment_type_check` → ADD, 인라인 자동 제약명) 추가, 테이블별 개별 try/catch 격리. ⚠️기존 데이터에 `etc` 행이 있으면 ADD CONSTRAINT 실패(그 테이블만 스킵) — etc 없다는 전제.
+
+**안 건드린 것**: `migrations/*.sql`(사용자 관리 영역, 섹션 18 규칙). 실제 반영은 runSchemaMigrations 담당. → 일관성 위해 사용자가 `create_emotion_table.sql`/`create_callstat_voc_table.sql`의 CHECK도 8종으로 갱신 권장(기록용).
+
+**프론트 전달 문서 작성**: `docs/voc-emotion-5type-frontend.md` — 5종 표/레거시 3종 fallback 처리/값 받는 위치(소켓 voc 채널, /summary, /summary/data, /callstat/calls)/체크리스트. complaintRisk·churnRisk 무변경 명시.
+
+**비대칭(인지된 한계)**: 실시간/요약 응답은 5종, 콜이력 상세조회는 과거건이면 레거시 3종이 나옴(DB 미변경이라 불가피). 프론트가 8종 모두 매핑.
+
+**검증**: tsc 0, eslint 0, etc 잔존참조 0. **런타임 검증(실통화/재시작 후 5종 출력+CHECK 확장 적용)은 사용자 재시작 필요**(코드/스키마 배선만 검증).
+
+### 49. 실시간 소켓 emotion payload 구조 확인(프론트 질문) + emotion score 설계 논의 → 미반영 결정
+
+**프론트 질문**: 실시간 voc 소켓 payload 의 emotion 에 `type` 외 `sentiment_type` 필드가 따로 오는지.
+- **확인 결과(코드+git)**: 소켓 payload 는 `emotion: voc.emotion` = `{ type, score, summary }` **하나뿐, `sentiment_type` 필드 없음**(과거에도 추가된 적 없음 — `voc-realtime.service.ts` payload 블록 `:516-523`/`:568-575`). `sentiment_type` 은 DB 저장(`callstat_voc` upsert `:472`)에만 등장. 프론트가 쓰던 `emotion.type` 이 곧 그 값이고, 별도 `sentiment_type` 은 없음. 이번 변경으로 그 `type` 값만 3종→5종으로 바뀜(구조 동일).
+- **답변**: `emotion.type` 한 필드로 내려감. 5종(angry/dissatisfied/normal/satisfied/thanks)으로 바뀐 것뿐.
+
+**emotion score 설계 논의(결론: 미반영)**:
+- 현재 3축 score 는 모두 **LLM 이 직접 책정**, 백엔드는 `Math.max(0,Math.min(1,x))` 클램프만(구간→type 변환 로직 없음. type/score 독립).
+- complaint/churn 은 "0 없음~1 매우높음(위험)"으로 의미 명확하나 emotion.score 는 의미 정의가 느슨(LLM 자율 "강도").
+- 논의: emotion.score 를 위험도 방향(높을수록 위험)으로 통일 + 유형별 구간(thanks 0~0.2 … angry 0.8~1.0) + 구간내 미세조정안까지 검토. 미세조정은 "위험 방향"이어야 함을 확인(긍정유형은 강할수록 0쪽, 부정유형은 강할수록 1쪽 — 단순 "강도 위쪽"은 thanks/satisfied 에서 거꾸로).
+- **사용자 최종 결정: 프롬프트에 score 구간/미세조정 규칙 넣지 않음.** emotion.score 는 기존대로 LLM 자율(0~1) 유지. 이번 작업은 **5종 감정 변경만으로 확정**(섹션 48 상태 그대로, 추가 코드 변경 없음).
+
+### 50. POST /summary·이력조회 404 — callstats_id 가 call_id 로 와도 동작하게 fallback (tsc/lint 0)
+
+**증상**: `POST /summary` 404 `통화 통계를 찾을 수 없습니다: test-call-id-...`. "어제는 됐는데 갑자기".
+- **원인(데이터)**: `raw_call.callstats_call` 은 `id`(PK, 예 `call_07ddaf31_...`) 와 `call_id`(예 `test-call-id-...`) 가 **별도 컬럼**(섹션 17). `summarizeCall` 은 `where:{id:callstats_id}` 로 **id(PK)** 를 찾는데, 프론트가 **call_id 값**을 callstats_id 로 보냄 → id 로는 미존재 → 404. (어제는 프론트가 id 를 보냈거나 데이터가 달랐던 것. 코드는 git diff 상 무변경 — 5종 작업은 조회 로직 안 건드림.)
+- **함정**: fallback 만으로 부족 — `summarizeCall` 의 turn 조회(`callstats_turn.callstats_id`)·emotions 저장도 파라미터 callstats_id 를 그대로 써서, call_id 로 callstatCall 을 찾아도 turn 에서 또 0건. **이후 조회/저장을 모두 실제 PK(callstatCall.id) 기준으로** 통일해야 함.
+
+**수정(3곳, 동일 패턴 — id 로 찾고 없으면 call_id 로 fallback → 실제 PK 로 후속 조회)**:
+- `summary.service.ts summarizeCall`(`POST /summary`): callstatCall = id||call_id 조회, `resolvedCallstatsId = callstatCall.id` 도입 → turn 조회·`saveEmotion` 모두 resolvedCallstatsId.
+- `summary.service.ts findSummaryByCallstatsId`(`GET /summary/data/:id`): CallstatCall 레포 추가, 동일 fallback → summary/call_categories/call_keywords/emotions 4개 조회 모두 resolvedCallstatsId.
+- `advisor.service.ts findCallstatDetailById`(`GET /callstat/calls/:id`): `call` 을 id||call_id 로 fallback(이후 로직은 이미 call.id 기준이라 자동 일관).
+
+**효과**: 프론트가 id(PK) 든 call_id 든 셋 다 200. 내부 조회/저장은 항상 callstats_call.id 기준이라 turn/emotions 매칭 일관(emotions PK 도 진짜 id 로 저장).
+
+**확인된 정상 동작**: 보여준 emotions 행들은 전부 created_at=06-16(어제) 라 sentiment_type 이 레거시(neutral/negative) — 옛 코드 산물, 정상. 오늘 재시작 후 새 통화부터 5종 저장. (LLM 실패 fallback 행은 'neutral 0.0' → 이제 'normal').
+
+**검증**: tsc 0, eslint 0. **런타임은 사용자 재빌드(124 도커 `--build`)/재시작 후 확인 필요.**
+
+### 51. (시연 트러블슈팅) fallback OR 강화 + emotions 미저장 진짜 원인 = STT 의 callstats_turn 미적재 (tsc 0)
+
+오전 11시 시연 직전 디버깅. "최근 통화 emotions 저장 안 됨 / GET /summary/data 404" 증상을 한 겹씩 벗김.
+
+**오해 → 진짜 원인 추적 순서**:
+1. (오해) emotions CHECK 4종이 5종을 막는 줄 → **DDL 확인 결과 이미 8종**(ALTER 정상 적용됨, thanks 포함). CHECK 무관.
+2. (오해) saveEmotion 코드 문제 → 코드 정상(call_id/sentiment_type 다 채움).
+3. (진짜) `POST /summary` 가 `통화 턴 데이터가 없습니다` 404 → emotions 저장 **이전 단계(callstat_turn 조회)** 에서 막힘. `callstat_voc`(실시간)는 turn 안 써서 정상 → 둘의 차이가 단서였음.
+4. **근본 원인**: `raw_call.callstats_turn` 에 그 통화의 대화 턴이 **아예 없음**. asst 는 이 테이블 **읽기 전용**(grep 결과 save/insert/upsert 0건, find 만) — 적재는 **외부 STT/콜인프라** 몫. 그날 **STT 담당자의 데이터 적재 로직 오류**로 callstats_turn 이 안 쌓여서, asst 가 요약할 대화가 없어 404 → emotions 도 못 생김. **asst 코드(요약/VOC/이번 수정) 전부 정상.**
+   - 관계: `callstats_turn`(원천 대화) → POST /summary 가 읽어 LLM 분석 → `emotions`(결과). 직접 FK 아님, `callstats_id`(=callstats_call.id) 공유로 연결. turn 없으면 emotions 없음.
+
+**이번에 한 코드 보강(50번 이어서, OR 강화)**:
+- `summary.service.ts summarizeCall`: turn 조회를 `idCandidates`(요청값 + callstatCall.id + callstatCall.call_id, dedupe) **OR 조회**로. saveEmotion 은 `resolvedCallstatsId`(=callstatCall.id) 로 통일.
+- `summary.service.ts findSummaryByCallstatsId`: `whereAny`(같은 후보 OR)로 summary/category/keyword/emotions 4개 조회.
+- `advisor.service.ts findCallstatDetailById`: call 을 id||call_id fallback.
+- **OR 안전성**: where 후보를 늘리는 것이라 **기존 id 조회는 1순위 그대로 처리(회귀 없음, superset)**. id·call_id 둘 다 통화당 유니크라 다른 통화 오염 불가.
+
+**상태**: 시연은 turn 있는 과거 통화(call_xxx)로 정상 진행. **로컬 작업분(48~51) 아직 서버 미배포** — 시연은 기존 서버 코드로 돌아 무관했음. 사용자가 **로컬에서 회귀 테스트(특히 진짜 id 호출이 기존과 동일한지) 후 문제없으면 그대로 유지** 예정. 커밋/배포는 추후.
+
+### 52. 응답 시간 UTC→KST 전역 변환 인터셉터 (tsc/lint 0)
+
+**문제**: 프론트에 노출되는 시간(특히 DB 조회 제공 시간)이 **UTC 기준이라 9시간 빠르게** 보임. DB 시간 컬럼이 대부분 `timestamptz`(UTC 저장) → TypeORM Date → JSON 직렬화 시 `...Z`(UTC ISO)로 나감. `main.ts`에 응답 직렬화 인터셉터가 없었고(ValidationPipe만), 코드의 `toISOString()`은 전부 로그·소켓용이라 HTTP 응답 본문 변환은 부재.
+
+**결정(사용자 확정)**: 프론트 무수정 → **백엔드 글로벌 응답 인터셉터**로 일괄 변환. 포맷 **A = ISO 8601 + `+09:00` 오프셋**(`2026-06-17T10:30:00.000+09:00`). 표준이라 프론트가 그대로 표시해도, Date 로 재파싱해도 안전.
+
+**구현**:
+- 신규 `src/common/interceptors/timezone.interceptor.ts` (`TimezoneInterceptor`): 응답 본문 재귀 순회하며 `Date` → KST ISO(+09:00) 치환(절대시각 유지, 표기만 KST). 순환참조 WeakSet 방어.
+- `main.ts`: `app.useGlobalInterceptors(new TimezoneInterceptor())` (useGlobalPipes 직후).
+
+**한계(기록)**:
+- 엔티티 `Date` 필드만 변환됨(TypeORM 이 Date 로 읽는 timestamptz 등). **raw 쿼리(QueryBuilder `getRawMany`)가 시간을 문자열로 반환하면 변환 안 됨**(call-stats 통계 등 — 필요 시 별도 처리).
+- **SSE/소켓 등 `@Res()` 직접 응답엔 미적용**(HTTP 응답 본문 한정). 소켓 payload 시간은 별도.
+- timestamp(타임존 없음) 컬럼(config/group)도 Date 로 읽히면 동일 변환되나, 저장 자체가 tz 없는 값이라 의미는 주의.
+
+**검증**: tsc 0, eslint 0. 런타임은 재시작 후 GET 응답의 created_at/updated_at 이 `+09:00` 로 나오는지 확인 필요.
+
+### 53. 시간 KST 노출 — 2차 보강(문자열 ISO 변환 + TZ=UTC) → 완전 해결 (tsc/lint 0, 런타임 검증 완료)
+
+52의 인터셉터(Date 만 변환)로는 대부분 페이지가 그대로 UTC 노출. 실제 응답값 확인하며 두 겹을 추가로 잡음.
+
+**관찰된 실제 응답값**:
+- `created_at`: `"2026-06-17T15:11:04.718+09:00"`(정상) ← `timestamptz` 가 **문자열**로 직렬화돼 옴(`...+00:00`). Date 가 아니라 인터셉터가 못 잡고 있었음.
+- `started_at`/`ended_at`: `"...06:10:48.634+09:00"`(9시간 부족, 오류) ← `callstat_call` 의 이 두 컬럼만 **`timestamp`(타임존 없음)**.
+
+**원인 2겹**:
+1. DB 시간이 `Date` 가 아니라 **타임존 명시된 ISO 문자열**(`+00:00`/`Z`)로 응답에 옴 → 52 인터셉터(Date instanceof)가 우회됨.
+2. `started_at`/`ended_at` 은 `timestamp(no tz)` 라, node-postgres 가 **서버 로컬 TZ(KST)로 파싱** → 절대시각이 9시간 어긋남(읽는 순간 틀어짐, 인터셉터 +9 로는 복구 불가, 게다가 서버 TZ 마다 어긋남이 달라짐).
+
+**해결(2곳, 둘 다 한 군데씩)**:
+- `timezone.interceptor.ts`: `Date` 뿐 아니라 **타임존이 명시된 ISO 문자열**(`/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/`)도 KST(+09:00)로 변환. 오프셋 없는 문자열·UUID·일반텍스트는 매칭 안 돼 안전(node 로 케이스 실증).
+- `main.ts`: `process.env.TZ = 'UTC'` 한 줄 → `timestamp(no tz)` 를 UTC 로 일관 파싱 → started_at 절대시각 정상화 → 인터셉터가 정확한 KST 로. `timestamptz` 는 절대시각이라 영향 0.
+
+**엔티티 타입 분류(참고)**: `timestamptz` = 콜 created_at/updated_at, bookmark/todo/intent-feedback/callstat-voc/keyword/snapshot. `timestamp(no tz)` = **callstat_call.started_at/ended_at**, config/group/agent/notice/favorite/keyword-detect 의 created_at/updated_at.
+
+**검증 완료(런타임)**: 재시작 후 `started_at 06:10 → 15:10`, `ended_at → 15:13`, `created_at 15:11` 전부 같은 시간대로 정상. 사용자 확인 완료.
+
+**배포 시 권장**: 도커 환경엔 `docker-compose`/`Dockerfile` 에도 `TZ=UTC` 를 넣어두면 환경 무관하게 확실(main.ts 런타임 설정의 안전망). formatDateTime(콜이력 목록 일부 경로)을 타는 화면이 있으면 그건 오프셋 없는 문자열이라 별도 정리 필요(현재 미발생).
+
+## 2026-06-19
+
+### 54. 5f 서버 STT 미수신 — Redis 연결 하루 뒤 죽음(redisConnected:false) → 무한 재연결+자가 헬스체크로 근본수정 (tsc 0, 런타임 복구 확인)
+
+**증상**: 5f 서버에서 상담전화 시작부터 STT 메시지가 프론트로 **아예 안 옴**. "아침부터 갑자기". 코드 변경 없었고(테스트 완료 상태), 5f redis 는 원래부터 `dev-ecp-redis.langsa.ai`.
+
+**진단 과정(데이터로 좁힘)**:
+1. redis-cli 로 `dev-ecp-redis.langsa.ai`(TLS) ping → PONG. 직접 PSUBSCRIBE 후 실제 통화 걸어보니 `dev:{vendor}:{cti}:call:nlp:partial/complete`, `call:events` 가 **redis 까지 정상 도착**. → redis·publisher(STT) 정상, 채널명 규칙도 코드 기대값과 일치(채널 변경 아님).
+2. `GET /redis-monitor/status` → **`redisConnected:false`** 인데 monitoredChannels/subscribedChannels 에 STT 채널 다 있고 socketRooms 에 프론트 3명 join 됨. = 구독 등록·소켓룸·프론트 다 정상, **asst 의 redis 소켓 연결만 죽음**. health/check 는 ok(프로세스는 살아있음).
+
+**근본 원인(왜 5f 만, 왜 하루 뒤)**:
+- `dev-ecp-redis.langsa.ai` → CNAME → `timbel-dev-callbot-pub-nlb-...elb.ap-northeast-2.amazonaws.com` (AWS **public NLB**, 3.37.104.111 / 52.78.5.55).
+- AWS NLB 특성: **idle timeout 약 350초 + 끊을 때 FIN/RST 없이 silent drop** → 클라이언트는 half-open(죽은 줄 모름).
+- AWS 프로덕션은 통화 24시간 상시라 연결이 idle 될 틈이 없어 안 끊김. 5f 는 테스트라 통화 뜸 → 밤사이 긴 idle → NLB 가 조용히 끊음 → asst half-open.
+- 게다가 코드가 **재연결 10회 초과 시 Error 반환=영구 포기**(`redis.service.ts` reconnectStrategy) + `redis-monitor.service.ts` health check 가 끊김 감지해도 실제 `reconnect()` 미호출(주석만) + `startHealthCheck()` 호출처도 없음 → 한 번 죽으면 자력 복구 불가. 다음 통화의 `POST /redis-monitor/subscribe/{ch}` 가 `ensureRedisConnected→reconnect` 를 우연히 트리거할 때까지 죽어있음(분석 중 그 경로로 한 번 살아남).
+
+**해결(근본수정, 사용자 확정 후)** — 파일 3곳:
+- `redis.service.ts` ① reconnectStrategy(client/subscriber 둘 다) **10회 포기 제거 → 무한 재연결**(로그는 초기10회+이후10회마다). ② **자가 헬스체크 추가**: `onModuleInit→startHealthCheck()`, 주기마다 client/subscriber **PING+5초 타임아웃**으로 half-open 감지(`isOpen=false` 또는 PING 무응답 → `reconnect()`). PING 이 keepalive 도 겸해 NLB idle 예방. `disconnect()` 에 타이머 clear. 기존 `reconnect()` 의 구독 자동복구 로직 재사용.
+- `redis.config.ts` health_check_interval 기본 **30000→180000(180초)**. 이 값이 node-redis pingInterval + 자가 헬스체크 주기 공통 제어. (주기는 사용자가 180초 선택 — NLB 350초보다 짧게. `REDIS_HEALTH_CHECK_INTERVAL` 로 override 가능)
+
+**효과**: 통화 없는 새벽에 NLB 가 끊어도 최대 180초+α 안에 asst 가 자력 감지·재연결·구독복구. 도커 재가동(임시방편) 불필요해짐. tsc --noEmit 0. (배포: develop 커밋 후 5f 1회 재시작 필요. 확인: status 가 시간 지나도 redisConnected:true 유지 + 로그 `🩺 Redis 자가 헬스체크 시작`.)
