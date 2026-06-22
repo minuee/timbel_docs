@@ -338,3 +338,149 @@
 - `PendingMerge`에 `turnIdx` 필드 추가(타임아웃 호출 시 가드용). 통화 start/end에서 `assistedTurnIdx.clear()`(통화 간 turn_idx 충돌 방지).
 - 한계(고지함): 타임아웃 호출 후 *다른 turn_idx*로 3.5초+ 뒤늦은 final이 오면 1회 더 호출 가능(드묾, 같은 내용 재검색이라 무해).
 - 검증: vue-tsc 통과(관련 파일 타입에러 0). 라이브는 사용자 몫 — 콘솔 `[stt-diag] pending merge timeout` 후 `/stream-assist` 호출되면 누락방지 작동.
+
+## 2026-06-19 — 고객 발화 버블 final 수신 여부 시각화 (옅은 회색 → 본래색)
+
+### 1. 요청 (사용자)
+- 챗봇형 상담내용 UI에서 고객 발화가 final(메시지 끝) 수신됐는지 버블만 봐선 모름. final 전엔 옅은 회색, final 오면 현 색상으로 구분하고 싶음.
+
+### 2. 사전 확인 — "현 색상" 정정
+- 처음에 고객 버블을 "보라색"이라 했으나 **오류**. CSS `.bubble-user { background: var(--color-secondary)=#8e5edd }`는 죽은 fallback.
+- 실제 색은 `SpeechBubble.vue` 내부 `backgroundColor` computed(:299)가 결정: 금칙어 `#E75858`/이슈어 `#FFA500`/욕설 `#0000FF`, **일반 고객발화 기본 `#666666`(진회색)** + 글자 흰색(`textColor` user=흰색).
+- 고객 버블 배경은 인라인 style(`SpeechBubble.vue:19`)이라 CSS보다 우선 → computed 값이 실제 색.
+
+### 3. 신호 = isStreaming (정확히 일치)
+- partial 입력중/미완 merge대기 → `isStreaming=true`(옅은 회색), `final`/타임아웃/통화종료 확정 → `false`(본래색). 색을 isStreaming에 100% 묶음.
+
+### 4. 결정 (사용자 확정)
+- **A안 채택**: final 전 옅은 회색 배경 `#e4e7ed` + 글자 `#606266`, final 후 현행. (B안 점선테두리 등 추가질감 거절)
+- 대상 고객 버블만. 금칙어 처리: streaming 중엔 회색 통일 → final 후 금칙어색(추천대로).
+
+### 5. 구현 (완료, 라이브 검증 대기) — `SpeechBubble.vue` 단일 파일
+- `backgroundColor` computed: 맨 앞에 `if (sender==="user" && isStreaming) return "#e4e7ed"` 추가(금칙어색보다 우선 → streaming 중 회색 통일).
+- `textColor` computed: user면서 isStreaming이면 `#606266` 반환(옅은 배경에 흰글자 안 보이는 문제 해결).
+- `.chat-bubble-message`에 `transition: background-color .25s ease` + `> span { transition: color .25s ease }` — final 전환 부드럽게.
+- **final 누락 대비 = 자동 커버**: 색이 isStreaming에 묶여 있어, final 안 와도 3.5초 타임아웃/통화종료에서 isStreaming=false 되면 색 자동 확정(이전 STT 작업 안전망에 그대로 올라탐). "회색 영구 멈춤" 없음. 시너지: 색이 본래색 되는 순간 = 누락방지 API 호출 나가는 순간.
+- 검증: vue-tsc 통과(SpeechBubble 타입에러 0). 라이브는 사용자 테스트 예정.
+
+## 2026-06-19 — "지식정보" 영역 검색중 프로그래스바 (호출~결과 사이 빈 화면 해소)
+
+### 1. 진단 (사용자 라이브 테스트 결과)
+- 버블색 #666 전환(=final=`/stream-assist` 호출)은 즉시 일어나는데, "지식정보" 문서 노출은 1~2초 뒤. 사용자가 "호출이 늦다"고 느낌.
+- Network 탭 확인 결과: 호출은 색변경 순간 나감. 1~2초는 **백엔드(의도판단 intent + aicm검색 sources)** 시간. 프론트 지연 아님.
+- 구간 분해: `stt_last_partial→request`(NeMo final 대기/merge, 프론트 일부 제어가능) vs `request→sources`(백엔드, 프론트 불가). 이번 건은 후자(백엔드 응답)로 확정 → 프론트는 체감 개선만 가능.
+
+### 2. 원인 — 호출~결과 사이 화면이 빔
+- "지식정보" 영역(`chat/index.vue:341~`)은 `selectedKeywordForBubble[item.id]` 있을 때만 표시. 이 값은 `distilled`(결과) 도착 시 `useChatAssist.ts:445`에서 자동 설정 → **결과 와야 영역이 뜸**. 호출~결과 1~2초는 아무 표시 없음 → "동작 안 하는 것처럼" 보임.
+- 빈값 경로(영역 안 뜸): 일상대화 `intent.skipped`(:286), 검색결과 0개 `distilled selected_refs=[]`(:378).
+
+### 3. 결정 (사용자 확정)
+- 호출 즉시 지식정보 영역에 "문서 검색중..." **프로그래스바** 노출 → 결과 오면 문서 리스트로 교체 / 빈값이면 프로그래스바만 제거(영역 닫힘).
+- 형태: 막대 프로그래스바(el-progress indeterminate). 일상대화 깜빡임은 그냥 둠(과설계 방지).
+
+### 4. 구현 (완료, 라이브 검증 대기) — `useChatAssist.ts` + `chat/index.vue`
+- `useChatAssist.ts`: 새 ref `assistSearching: Record<number, boolean>`(bubbleId 키) 추가·반환. 토글 — 시작 :240 `true`, intent.skip/distilled빈값/distilled결과/finally(종료 안전망) `false`. messageId=String(bubbleId)라 `Number(messageId)`로 변환.
+- `chat/index.vue`: 구조분해에 `assistSearching` 추가. v-memo에 `assistSearching[item.id]` 추가(반응성). 영역 v-if를 `selectedKeywordForBubble[item.id] || assistSearching[item.id]`로. 내부 최상단 `v-if assistSearching` → "문서 검색중..." + `<ElProgress indeterminate stroke-width=4>`.
+- 피드백 반영: 검색중엔 외부 테두리 제거 + 패딩 축소 → 컨테이너 class 조건부 `selectedKeywordForBubble ? 'mb10 py20 px10 border-default' : 'mb6 py4 px10'`, 프로그래스바 div `gap8 py4 px4`→`gap4`. (결과 뜨면 기존 박스 스타일 유지)
+- ElProgress는 main.ts `app.use(ElementPlus)` 전역 등록이라 import 불필요.
+- 검증: vue-tsc baseline 10 = 변경 후 10(새 타입에러 0). git stash로 before/after 비교 확인.
+
+## 2026-06-19 — 로컬 vs 배포(124:32026) 속도차 진단 → 백엔드 병목 결론 (코드 변경 없음)
+
+### 1. 현상 (사용자)
+- 같은 통화인데 로컬(localhost:8173)이 배포(http://124.194.32.36:32026)보다 "지식정보" 노출이 확실히 빠름. 원인 추적.
+
+### 2. 환경 비교 — 로컬·배포 백엔드 동일
+- 로컬=`MODE=5f.local`(.env.5f.local), 배포=`MODE=5f.dev`(.env.5f.dev). 배포 실행: `docker compose -f docker-compose.dev.5f.yml up -d --build --force-recreate` (Dockerfile.dev + command override로 `webpack serve`, 즉 **배포도 dev-server**).
+- 두 env diff = `HOST_APP_URL`(localhost:8173 vs 124:32026) **단 하나**. 이건 Module Federation remoteEntry 주소(webpack.config.js:92)라 API속도 무관.
+- 백엔드 동일: `LANGSA_GATEWAY_URL=http://124.194.32.36:32025`(둘 다, `path.ts:6` `process.env` 빌드타임 고정). stream-assist는 `assist-stream.api.ts`에서 이 baseURL로 **브라우저 순수 fetch 직접 호출**(axios·dev-server 프록시 안 거침, devServer.proxy 없음). socket(발화종료 신호)도 `LANGSA_GATEWAY_URL`(useAdvisorbot.ts:155), 채팅 socket은 `VITE_API_CCAAS_ROOT_SERVER`(둘 다 동일).
+
+### 3. 가설 소거
+- **#1 서버 리소스 경합**(배포 dev-server가 124서버 CPU 먹어 백엔드 굶김): top -c 확인 결과 dev-server **CPU 한가** → 기각.
+- **#2 프록시/TLS/연결수립 지연**(사용자 가설): 배포 stream-assist **TTFB=14.68ms**, Initial connection 미표시(keep-alive 재사용) → 연결·네트워크 정상 → 기각.
+- **webpack mode**: `webpack.config.js:18 mode:"development"` 하드코딩(모든 빌드가 dev). 양산화 가치는 있으나(JS 체감), SSE속도와는 무관.
+
+### 4. 결론 — 백엔드 처리 시간
+- SSE 특성: TTFB(14ms)는 "연결 열림+200 OK"까지만. 1~2초는 **연결 후 백엔드가 `intent`→`sources` 이벤트 보내기까지**(의도판단+RAG검색) = 우리 speedTrace의 `request→sources` 구간. Network Timing엔 안 잡힘.
+- 프론트는 발화종료(final) 즉시 호출(버블 #666 전환=호출 동시, 코드·육안 일치). **느림은 백엔드 영역**. 양산빌드/서버이전 다 헛다리로 확정.
+- 액션: 백엔드팀에 `done.stages`(intent/search/distill/generate ms) 기준 병목 분석 요청(특히 search=RAG). 메시지 초안 사용자에게 전달.
+- 미결: speedTrace `request→sources` 로컬/배포 직접 비교는 미수행(같은 백엔드라 부하/시점 차이로 추정). 양산빌드(nginx static) 전환은 정석화 차원 보류 — webpack mode 동적화+Dockerfile.5f+compose 수정 설계까지만 해둠(nginx.conf listen 80, SPA try_files 확인).
+
+## 2026-06-19 — AICM 속도 모달 단계 통합 (의도+검색+생성 → "검색(AICM)처리")
+
+### 1. 사고 경위 — 내 오류 → 전부 원복
+- 직전 작업에서 모달/배지를 사용자 요구와 다르게 처리: ① 배지 측정 끝점을 `sources`→`done`으로 변경 ② 모달 `STAGE_DEFS`를 `request~done` "AICM 처리" 1막대로 뭉개 **완성(done) 단계가 사라짐**. → `git checkout -- ` 으로 3파일(`assist-stream.api.ts`/`useChatAssist.ts`/`SearchFlowModal.vue`) **전부 원복**. **배지 측정은 원래대로 `sources`(첫 문서 도착) 기준으로 복구**(사용자 확정 A안).
+
+### 2. 모달 단계 통합 (`SearchFlowModal.vue` 단일 파일)
+- 확정(사용자): 단계 = `발화수신 → STT타이핑 → 발화종료대기 → 검색(AICM)처리 → 완성`.
+  - ⭐ **검색(AICM)처리 = 의도판단(intent)+검색(sources)+생성(token) 3단계 통합**. **완성(done)은 별도 단계로 유지**(통합에 빨아들이지 않음).
+- 구현(핵심): `STAGE_DEFS`에서 `intent`/`sources`/`distilled` 제거하고 `token`을 라벨 `"검색(AICM) 처리"`(isKey=true 파랑★)로 변경. `rows`의 *"미수신 stage = prevSince 유지"* 로직 덕에 `token` 막대가 `request` 바로 뒤로 연결돼 **자동으로 `request~token`(의도+검색+생성) 통합 구간**이 됨 → `rows` 계산 로직 자체는 무변경. `done` 막대 = `token~done` = 완성.
+- 부수 수정: 마크목록 key 점 조건 `stage==='sources'` → `row.isKey`. 그래프 색상범례 보라(LLM) 항목 제거 → `검색(AICM) 처리(의도+검색+생성)`. 헤더 ⓘ 툴팁 5단계로 축약(의도/검색/선별/생성 → "검색(AICM) 처리 ★ 핵심" 1줄, note에서 보라=LLM 제거).
+- 검증: `SearchFlowModal` 타입에러 0. 라이브는 사용자 직접.
+- 미해결 인지(추후): 배지값(=`request~sources`, 순수검색)과 모달 통합단계(=`request~token`, 의도+검색+생성)는 **측정 구간이 다름**. 현재 사용자 확정은 "배지=sources 원복" 상태. 추후 배지도 통합구간(생성까지)으로 맞출지는 미정.
+
+### 4. asst-latency(백엔드 구간 분해) 수신 → "검색(AICM)처리" 막대 내부 세분화 (구현 완료, 라이브 검증 대기)
+- 배경: 백엔드(asst-service)가 `assist-stream` SSE에 **`asst-latency` 이벤트를 첫 sources 직전 1회** 추가 송출. `{ callId, receivedAt, backendMs, aicmConnectMs, aicmSearchMs, totalMs }` (ms, **백엔드 서버 실측, 네트워크 제외**). `totalMs = backendMs+aicmConnectMs+aicmSearchMs = 접수~첫sources`.
+- 확정(사용자): 단계 구조(`발화수신→STT타이핑→발화종료대기→검색(AICM)처리→완성`)는 **그대로 두고**, **"검색(AICM)처리" 막대 1개 안만** 색조각으로 분할(줄 수 불변). 생성은 별도 단계로 안 빼고 막대 안 마지막 조각으로 유지(="있던 자리 그대로").
+- ⭐ 막대 내부 5조각(시간축 정합): `request~sources` = **API 접수(backendMs) | AICM 연결(aicmConnectMs) | AICM 검색(aicmSearchMs)★주지연 | 결과 전송(network)**, `sources~token` = **생성**.
+  - **network(결과 전송) = 프론트측정(request~sources) − 백엔드 totalMs** (= aicm→api→프론트 경로, 백엔드 미측정분 역산). 스펙대로 "차이분=네트워크". 음수면 0.
+  - 사용자 원안의 "aicm 결과 전송(aicm→api)"은 백엔드 미제공 → network(→화면)에 흡수, 대신 "AICM 연결" 포함해 4조각 유지.
+  - asst-latency 미수신(수동검색/구버전)이면 `segments=null` → 기존 단일 막대 폴백.
+- 구현 파일:
+  - `assist-stream.type.ts`: `AsstLatencyEvent` 인터페이스 + `StreamTraceData.asstLatency?` 추가.
+  - `assist-stream.api.ts`: `event==="asst-latency"` 수신 시 변수 보관 → `done`의 `onTrace`에 `asstLatency` 동봉. (배지 onTiming=sources, trace 측정 로직 무변경)
+  - `SearchFlowModal.vue`: `rows`의 token 행에 `segments`(SegRow[]) 계산 + 템플릿 `v-else-if="row.segments"`로 조각 렌더(hover 툴팁=라벨+초), 색상범례 6항목(API접수/AICM연결/AICM검색★/결과전송/생성+EOU), 하단 `latencyLine`("AICM 실측: …(백엔드 합, 네트워크 제외)"), 헤더 ⓘ 툴팁에 분해 설명.
+  - 호출부(`useChatAssist`/`useKnowledgeSearch`)·store(`speedTrace.add`) **무수정** — `add({...meta, ...data})` spread라 `asstLatency` 자동 전파.
+- 검증: 변경 파일 타입에러 0. 라이브는 사용자 직접(asst-service 재배포 + 5f 플래그 ON 상태에서 막대 5조각/툴팁/AICM실측 줄 확인).
+
+## 2026-06-22 — assist-stream 렌더링 속도 개선 (집 분석문서 기반, Step1 진단부터)
+
+### 0. 배경/방향
+- 집에서 분석한 `docs/frontend-assist-stream-refactoring.md`(2026-06-21 작성, 1주전 소스 기준) 검토. 현재 회사 소스와 **구조 동일, 라인만 +48 밀림** → 그대로 유효 확정.
+  - token 핸들러: 문서 422-435 → 현재 `useChatAssist.ts:469-482` (item.data.search_summary deep-mutate + appendAssistStreamToken 둘 다).
+  - distilled 자동 상세오픈 `emit("detailItemClick")` 현재 445-467 그대로. 수동(`useKnowledgeSearch.ts`)은 rawAnswer/streamingAnswer 별도문자열(133-139).
+- 목표: 자동(assist-stream)이 API 응답후 화면 그려지는 속도 느린 문제 개선.
+- 진행 순서 확정(사용자): 제안 3→2 역순(쉬운 것부터). **먼저 body 최소화 진단(Step1), 그다음 throttle(A안=2번).**
+
+### 1. Step1 — body 최소화 진단 (구현 완료, 라이브 측정 대기)
+- 함정: 문서는 "query만 보내라"지만 코드 주석상 **workspace_id는 필수**(빼면 RAG 422). → workspace_id는 유지, 나머지(conversationHistory/callId/turnIdx/company)만 미전송.
+- 구현(`useChatAssist.ts`):
+  - 모듈 상단 토글 상수 `ASSIST_MINIMAL_BODY_TEST = true` 추가(검증 후 false 원복).
+  - `callAssistStream` body를 삼항으로 분기: true면 `{ query, workspace_id }`만, false면 기존 전체.
+  - `done` 핸들러 맨앞에 진단 로그 `console.log("[assist-stream][done] minimalBody=...", stages, token_usage)`.
+- 비교용: 수동 `useKnowledgeSearch.ts` done 핸들러도 `(e: DoneEvent)` 받아 `console.log("[stream/manual][done]", stages, token_usage)` (DoneEvent import 추가).
+- 판정 기준(문서 Step1): minimal 전후로 ① done.token_usage.context_tokens 줄어드는지 ② done.stages 어느 단계 빨라지는지 ③ **렌더링 체감 빨라지는지**. 렌더링 여전히 느리면 → 프론트 렌더링이 주범 확정 → Step2(throttle).
+- 미수정/인지: `useChatAssist.ts:659 totalCount`, `useKnowledgeSearch.ts:147 error 핸들러 e` 미사용 경고는 기존 코드(내 수정 무관)라 미터치. 라이브 측정은 사용자 직접.
+
+### 2. 모달 'AICM 실측'에 생성 포함 + 배지 = 체감 응답속도 (구현 완료, 라이브 검증 대기)
+- 백엔드 답변: done의 stages/token_usage/distill은 asst-service 아닌 **RAG(AICM) 생성값**. asst-service 구간은 asst-latency로 ≈0~2ms 분리 제공 중. 2.7~3.8초는 RAG 처리. → 우리 측정과 일치(갈등 아님). 속도 win은 RAG/AICM 팀 영역.
+- 사용자 요청: 모달 'AICM 실측' 줄이 생성 빠져서 '백엔드 보고'와 안 맞음 → **생성 포함**. 모달 고치면 **배지 값도** 같이.
+- 원인: asst-latency는 첫 sources 직전 1회라 generate 못 담음 → 생성은 `done.stages.generate`(백엔드 보고 출처)에서 가져와 합산.
+- 확정(사용자): 배지 기준 = **체감(request~token, 네트워크 포함)**.
+- 함정/결정: 배지 측정끝점을 sources→token으로 직접 옮기면 안 됨 — assist의 timing emit이 distilled 시점(useChatAssist:446)이라 그때 token 아직 없어서 배지로 안 나감. → SSE 계측 무수정, **배지가 trace의 request/token 마크 차이로 request~token 계산**(SearchSpeedBadge), trace 없으면 elapsedMs 폴백. 자동/수동 공통 적용.
+- 구현:
+  - `SearchFlowModal.vue` latencyLine: `· 생성 {generate}s` 추가, 백엔드 합 = `lat.totalMs + (backendStages.generate ?? 0)`. 제목/범례 '검색속도'→'응답속도'.
+  - `SearchSpeedBadge.vue`: seconds = trace token.sinceStartMs − request.sinceStartMs (폴백 elapsedMs). 라벨 '검색속도'→'응답속도'.
+  - `assist-stream.api.ts`: 주석만 정정(배지 실제표시=trace 기반 request~token, elapsedMs는 폴백).
+- 미해결(출처 차이): AICM 실측 '검색'(asst-service 실측 왕복) ≠ 백엔드 보고 '의도+검색'(RAG 자가보고). 프론트에서 합칠 수 없음 — 그대로 둠.
+- 라이브 검증은 사용자 직접.
+
+## 2026-06-22 (이어서) — assist-stream 속도 원인 규명 + 모달 '생성' 값 정합
+
+### 3. 진단 3종 모두 헛탕 → 병목 = 백엔드 RAG(변동) 확정
+- 순서: 사용자 요청대로 처음 3,2,1 역순으로 테스트.
+- ① body 최소화(ASSIST_MINIMAL_BODY_TEST): conversationHistory/callId/turnIdx/company 빼고 query+workspace_id만. → token_usage는 처음 0으로 보였으나 generate 있는 콜은 context 1008~1875/completion 10~46. **효과 없음**.
+- ② 가벼운 stream 엔드포인트(ASSIST_USE_LIGHT_STREAM): 실시간을 callDocumentStream(수동과 동일 경로)로 호출. **동일하게 느림**. → 같은 백엔드 경로인데 수동(~1초)은 빠르고 실시간은 느림 = 엔드포인트/백엔드 파이프라인 차이 아님.
+- ③ A안 throttle(useChatAssist token 핸들러): snapshotBuffer에 즉시 누적 + rAF+100ms 가드 flush(leading 첫토큰 즉시), done 강제 flush, error/abort 취소, active-id 가드, 클로저 독립 상태. chatData에 setAssistStreamText 추가. **체감 효과 없음 + "빠를땐 빠르고 느릴땐 겁나 느림"(변동성)**.
+- ⭐ 결론: **변동성은 프론트 렌더 특성 아님**(렌더는 토큰수 비례 일정). generate 682~1761ms(2.5배 변동)+intent ~1초 = **백엔드 RAG 생성 지연이 콜마다 다른 것**이 병목. → ①②③ 모두 원복 완료. RAG팀 영역.
+- 백엔드 답변(참고): done.stages/token_usage/distill은 asst-service 아닌 **RAG(AICM) 생성값**. asst-service 구간은 asst-latency로 ≈0~2ms 분리. 2.7~3.8초는 RAG.
+- "한꺼번에 vs 타이핑" 답변(프론트): SSE 파서 버퍼링 0(sse-parser:30), token마다 즉시 reactive write → **프론트는 done까지 안 모으고 토큰 단위 즉시 렌더**. 한꺼번에 보이면 token 프레임이 네트워크에서 덩어리로 와서 1 read에 동기 처리된 것(=토큰 도착 패턴/B). → RAG팀에 청크 도착시각 로그 요청.
+
+### 4. 유지된 실제 기능(원복 안 함)
+- 모달 'AICM 실측' 줄에 생성 포함, 배지 'AICM 응답속도'(request~token, trace의 token-request 마크 차이로 SearchSpeedBadge가 계산, elapsedMs 폴백). 제목/범례 '검색속도'→'응답속도'.
+
+### 5. 모달 'AICM 실측' 생성 값 = 그래프 값으로 정합 (최종)
+- 증상: "AICM 실측: …검색 1.05s · 생성 2.58s…" 의 **생성이 위 그래프 '생성' 막대 값과 다름**. 접수/연결/검색은 둘 다 asst-latency라 일치하는데 생성만 done.stages.generate(백엔드 보고값)이라 어긋남.
+- 사용자 의도(최종 확정): **그래프/누적타임라인의 생성(프론트 실측)이 정답**, AICM 실측 줄도 그 값을 노출해야 함. (백엔드 보고값 노출이 잘못)
+- ⚠️ 시행착오: 처음에 "그래프 생성 막대를 sources→done으로 키워 완성과 합치자"로 오해(거꾸로), 다음엔 latencyLine에서 tokM-srcM 새 수식으로 계산(=사용자가 "수식 바꾸지 마" 거부). → **정답: 새 수식 금지, `rows`의 generate 행 `deltaSec`(이미 화면에 표시되는 그래프 값)을 그대로 재사용.**
+- 구현(`SearchFlowModal.vue` latencyLine): `const genRow = rows.value.find(r => r.key === "generate"); genPart = ' · 생성 ${genRow.deltaSec}s'; sum = lat.totalMs + parseFloat(genRow.deltaSec)*1000`. 접수/연결/검색은 asst-latency 그대로. → 그래프 생성과 AICM 실측 생성 항상 동일. 검증 완료(사용자 확인).

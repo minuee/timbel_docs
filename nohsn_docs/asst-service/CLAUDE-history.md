@@ -712,3 +712,68 @@ docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configServic
 - `redis.config.ts` health_check_interval 기본 **30000→180000(180초)**. 이 값이 node-redis pingInterval + 자가 헬스체크 주기 공통 제어. (주기는 사용자가 180초 선택 — NLB 350초보다 짧게. `REDIS_HEALTH_CHECK_INTERVAL` 로 override 가능)
 
 **효과**: 통화 없는 새벽에 NLB 가 끊어도 최대 180초+α 안에 asst 가 자력 감지·재연결·구독복구. 도커 재가동(임시방편) 불필요해짐. tsc --noEmit 0. (배포: develop 커밋 후 5f 1회 재시작 필요. 확인: status 가 시간 지나도 redisConnected:true 유지 + 로그 `🩺 Redis 자가 헬스체크 시작`.)
+
+### 55. assist-stream 1~2초 지연 — 백엔드 결백, AICM rag_assist 검색시간이 범인 (구간분해 로그로 실측 확정, tsc/lint 0)
+
+**증상**: 프론트(로컬 npm run dev → 빠름 / 배포 도커 asst-web-dev 32026 → 느림)에서 assist-stream 첫 sources 도착까지 1~2초. 프론트는 "백엔드가 AICM 호출 *전* 단계에서 1~2초 먹는다"고 주장. A/B 둘 다 백엔드는 동일(asst-service 도커 32025).
+
+**진단 단계(추측 배제, 측정으로 확정)**:
+1. 코드 확인: `assist-stream.service.ts` 는 **얇은 SSE 릴레이** — `${AICM_HOST}/api/aicm/v1/search/rag_assist`(124.194.32.36:8173) 로 fetch 후 청크를 `res.write` 로 그대로 중계만. sources/intent/search/distill/generate stages 는 전부 AICM 이 생성(asst 는 통과). SSE 헤더도 모범(X-Accel-Buffering:no, flushHeaders). VOC(`handleUtterance`)는 `void` fire-and-forget(컨트롤러에서 stream 전 호출). AuthMiddleware 는 assist-stream `exclude`(app.module) → 미들웨어 외부호출 없음.
+2. `docker stats`: asst-service-dev **CPU ~0%(피크 7%)**, MEM 109MB/62.5GB, limit 없음 → **사양/경합/CPU바운드 전부 기각**. 1~2초가 CPU 작업이면 스파이크가 떴어야 함.
+3. 핵심 통찰: 백엔드 동일 → `inToFetch`(백엔드 내부시간)는 A/B 물리적으로 동일해야 함. 프론트 측정값은 네트워크 경로가 섞여 **오염**됨 → 백엔드 자기 시계 로그만이 네트워크 무관·일괄적 진실.
+4. 측정 사각지대 발견: 기존 latency 로그 시작점(`tIn`)이 stream() 진입이라 그 *전*의 VOC 동기구간이 안 잡힘 → **컨트롤러 진입 시각(t0) 추가 측정** 필요.
+
+**수정(측정 보강 + 방어)** — 파일 3곳, 동작/응답 영향 0:
+- `assist-stream.controller.ts`: 진입 시각 `t0=Date.now()` 측정해 `stream(...,t0)` 전달. VOC 호출을 `setImmediate(()=>void handleUtterance(...))` 로 **다음 틱 분리**(동기구간이 fetch 출발을 못 막게).
+- `assist-stream.service.ts`: `stream()` 에 `tController?` 인자 추가, latency 로그에 `controllerToStreamMs`(수신→stream진입) + `totalMs` 추가. (기존 inToFetch/fetchToHeaders/headersToFirstChunk 유지)
+- `.env.5f.development`: `ASSIST_STREAM_LATENCY_LOG=1`.
+
+**실측 결과(배포 후 통화)** — `[assist-stream-latency]`:
+- `controllerToStreamMs` **0~2ms**, `inToFetchMs` **0~1ms** → **asst 백엔드는 요청받고 1ms 안에 AICM 호출. 완전 결백.** ("AICM 호출 전 1~2초" 가설 기각)
+- `fetchToHeadersMs` 13~62ms(AICM 연결 정상)
+- `headersToFirstChunkMs` **≈1000ms**(948~1019, query별 544~1019 변동, 통화 직후 짧은query는 7~8ms) → **여기가 범인 = AICM `rag_assist` 의 intent+벡터검색+리랭킹 시간**
+- `totalMs` ≈ 첫 sources까지 1초
+
+**결론**: asst-service 는 1~2ms 로 결백(더 최적화할 것 없음). assist-stream 1초는 **AICM/RAG 서비스(8173) `rag_assist` 의 첫 sources 생성시간** — 단축은 AICM/RAG 팀의 검색 최적화 영역. 프론트 체감 1~2초 = AICM 1초 + 배포환경(B) 네트워크 경로. query별 출렁임도 AICM 검색시간 변동. (참고: 브라우저 Timing 의 Content Download 7s 는 SSE 라 "스트림 전체 열린시간=LLM generate 완료까지"이지 다운로드 지연 아님 — TTFB 14ms 가 증거.)
+
+**후속 (같은 날)**:
+- **프론트 전달용 `event: asst-latency` SSE 이벤트 추가** (`assist-stream.service.ts`, 첫 sources 직전 1회, `ASSIST_STREAM_LATENCY_LOG=1` 게이트). data: receivedAt(KST)/backendMs/aicmConnectMs/aicmSearchMs/totalMs. 프론트가 받아 "백엔드 vs AICM" 분해 표시 가능. 기존 sources/generate/done 이벤트 무영향, 플래그 off 시 미전송(즉시 원복 가능). 프론트팀 작업 완료, 배포는 사용자가 진행. tsc/lint 0.
+- **보고서 작성**: `docs/assist-stream-latency-report.md` (한 줄 결론 → 구간정의 + Flow/KST타임라인 → 실측예시 → 통계 → 조치 → 모니터링 → 원본로그 부록). 관련자 공유용.
+- **재측정 회차들**: 16:49 KST 회차는 AICM 검색 1.8~1.9초 스파이크(부하), 17:11~13 회차는 ~1초로 회복 → AICM 부하 변동 재확인. 백엔드는 모든 회차 0~2ms.
+- **★ 미구현(메모리에 기록)**: 현재 측정은 "첫 조각(sources)까지=~1초"만. **스트림 완료(done)까지 = 답변생성(generate) 포함 AICM 전체시간(체감 ~9초)** 측정은 미구현. 추가하면 "AICM 느림"이 9초로 부각됨. (SSE라 AICM이 결과를 조각으로 전송: 첫조각 sources=1초, 마지막조각 done=~9초, 둘 다 순수 AICM 시간). 메모리 `assist-stream-latency` 참조.
+
+### 56. 신규 AWS 서버 배포 — DB 자동마이그레이션 트리거 시점 확인 + timestamp 9시간 오차 근본수정(tz-init) (tsc/lint 0, 런타임 검증)
+- **DB 반영 질문**: 새 서버 배포 후 추가 컬럼/테이블(coachings 3컬럼, emotions/callstat_voc 테이블)이 반영됐는지 불안 → 코드로 흐름 확정.
+  - `runSchemaMigrations`(dynamic-database.service.ts:448)는 **부팅 시 안 돔**. 부팅 시점 DB작업은 `database-init.service.ts`의 `CREATE SCHEMA IF NOT EXISTS advisor` **단 하나**(스키마 폴더만).
+  - 테이블/컬럼 생성은 **첫 연결 생성 시점**(`getConnection`:189 / `getStaticConnection`:351)에만. `AuthMiddleware`(:127)가 토큰 든 아무 요청이나 통과시키면 그때 첫 연결 생성→마이그레이션 실행→전부 멱등 생성. 즉 **"배포"가 아니라 "배포 후 첫 인증요청"이 트리거.**
+  - 멱등(IF NOT EXISTS/addColumnIfNotExists) → 두번째 연결부터 스킵. `getConnection` 실패해도 미들웨어가 요청 통과시키고 console.error만(:130) → 연결 실패 시 마이그레이션 아예 안 돌고 조용히 넘어감.
+  - **결과: 사용자 토큰 API 호출하니 정상 생성 확인됨.**
+- **timestamp 9시간 오차 (DB 읽은 시각이 KST로 9h 어긋남)**:
+  - 원인: `process.env.TZ='UTC'`가 `main.ts:29`(모든 import 뒤)에 있어 ① 실행 타이밍 늦음 ② 젠킨스 빌드캐시로 옛 dist(그 줄 없음)가 떠 있을 수 있음. compose `TZ=UTC`(docker-compose.dev.yml:21)는 **타팀 젠킨스 스크립트(수정·조회 불가)**라 보장 안 됨.
+  - pg `setTypeParser` 미설정(grep 0건) → timestamp(no-tz) 파싱이 프로세스 TZ에만 의존. timestamp 컬럼(callstat_call.started_at/ended_at, 다수 @CreateDateColumn)과 timestamptz 혼재.
+  - **수정(확정 후)**: `src/tz-init.ts` 신규(`process.env.TZ='UTC'` 한 줄) + `main.ts` 맨 첫 import `import '@app/tz-init'`로 **모든 import보다 먼저** 실행. 기존 늦은 할당 제거.
+  - 효과: 모든 timestamp 컬럼 일괄 해결(컬럼별 작업 0), compose env 무관, **코드 변경이라 젠킨스 빌드캐시 자동 무효화→옛 dist 문제 동시 해결**. timestamptz는 무영향.
+  - 검증: build/lint 0, dist/src/main.js 3번째 줄 `require("./tz-init")`(tracer보다 먼저), 런타임 `getTimezoneOffset()=0`(UTC) 확인. **develop 푸시→젠킨스 재빌드·배포 시 적용**(커밋은 사용자 확인 대기).
+
+### 57. assist-stream vs stream 응답지연 재분석 + 프론트 협업 (2026-06-22, 코드수정 없음·분석만)
+- **발단**: 집에서 작성한 `docs/backend-assist-stream-refactoring.md`(2주전 소스 기반) 검증 요청. 현재 소스와 대조.
+- **문서 vs 현재 소스 차이**:
+  - **distill 가설 무효화**: 문서는 "assist-stream만 `distill:false`, stream은 키없음→RAG기본값". 현재는 **둘 다 `enable_distill:false` 명시**(assist-stream.service.ts:54, search.service.ts:62) → distill은 두 API 속도차 변수에서 완전 제외. (필드명도 `distill`아닌 `enable_distill`)
+  - **호출경로 변경**: 문서 `${SEARCH_HOST}/api/v1/rag/assist-stream` → 현재 **둘 다 `${AICM_HOST}/api/aicm/v1/search/rag_assist`** 동일.
+  - **stream도 conversationHistory 받음**: search-request.dto.ts:40 + toRagHistory() 호출(:63), assist-stream과 동일 가공(화자당 3턴컷). util 공유.
+  - SSE 릴레이는 두 API 글자단위 동일(res.write(decoder.decode)) — 문서대로.
+  - 문서엔 없던 추가분: VOC 실시간분석, asst-latency SSE이벤트, assist-snapshot, company/turnIdx DTO필드.
+  - 사소버그: service.ts:20 주석은 `ASST_STREAM_LATENCY_LOG`인데 실제 읽는건 `ASSIST_STREAM_LATENCY_LOG`(:30). 켤땐 후자.
+- **VOC가 assist-stream 응답 막는지 재검증 → 안 막음 확정**: controller가 `setImmediate(()=>void handleUtterance())`로 다음틱 분리 → `await stream()`의 fetch가 먼저 출발. handleUtterance 내부 무거운작업(analyzeEmotion→LLM, persistVoc→DB, publish→redis) 전부 await I/O라 이벤트루프 양보. stream()은 순수 RAG프록시라 DB/redis/LLM 안 써서 자원경합 없음. 동기구간(accumulate/buildConversation)은 버퍼40턴 상한이라 ms미만. 단 ① `force:true`로 발화마다 LLM 도는 비용, ② assist-stream엔 DbCleanupInterceptor 없어 VOC의 DB연결 정리주체 불명확(누수 잠재리스크) — 속도와 별개 점검권장.
+- **프론트 실측 데이터(minimal body)**:
+  - asst-latency(첫 sources까지): API접수 0.00s · 연결 0.06s · 검색 1.08s = **합 1.14s** (우리서버 몫 0~0.06s)
+  - done.stages(답변완성까지): 의도 1.06s · 검색 1.00s · 선별(distill) 0.00s · **생성(generate) 1.76s** = **약 3.8s**
+- **핵심 결론**:
+  - done의 stages/token_usage/distill은 **asst-service가 아니라 RAG(AICM)가 생성**하는 값. asst-service는 가공없이 통과만(grep으로 생성코드 0건 확인). skip/채우기/generate분해는 모두 RAG 영역 → RAG 담당자 확인사항.
+  - **백엔드 무죄**(0~0.06s). 지연 2.7~3.8초는 전부 RAG 처리시간, **generate 1.76s가 최대 단일구간**.
+  - distill 0.00s는 우리가 false 보내서 정상.
+- **"한꺼번에 vs 타이핑" 증상**(stream은 타이핑처럼, assist-stream은 한꺼번에 펑):
+  - asst-service는 두 API 모두 버퍼링없이 즉시 릴레이 → 백엔드가 만드는 차이 아님.
+  - 후보 (A)프론트가 done까지 모아 렌더 / (B)RAG가 토큰 한덩어리 전송.
+  - **프론트 회신: (A) 배제** — 프론트는 per-token 즉시렌더(throttle/debounce 없음), stream도 동일로직. 단 토큰프레임이 네트워크에서 묶여 도착하면 1회 read로 합쳐져 "한꺼번에" 보일 수 있음 = (B) 가능성.
+- **★ 미완 액션(다음)**: asst-service reader 루프에 **청크 도착 시각+바이트 로그** 추가(ASSIST_STREAM_LATENCY_LOG 게이트). write가 시간차로 여러번→RAG 점진전송(프론트 정상) / 마지막 한덩어리→(B) RAG 전송방식 확정. stream에도 같이 넣어 나란히 비교. RAG 처리시간 단축은 통제밖이라 오늘은 여기까지 합의.

@@ -1,0 +1,972 @@
+event: intent
+data: {"search": true, "reason": "삼성코리아 펀드 수수료 사실 확인 질의", "latency_ms": 848, "skipped": false}
+
+event: query_analysis
+data: {"original_query": "삼성코리아 펀드 수수료", "rewritten_query": "삼성코리아 펀드 수수료", "keywords": ["삼성", "코리아", "펀드", "수수료"], "decomposed": {"is_complex": false, "category_names": [], "nature_filter": [], "time_filter": null, "entity_filter": null, "domain_hint": null}}
+
+event: sources
+data: {"sources": [{"ref_num": 1, "document_id": "a624bba4-00a1-488d-a4a0-8c628be7e1ff", "chunk_id": "e5eedcb8-d177-41a3-95ed-45cbb1544d9e", "document_title": "미래에셋차세대Fun인덱스증권자투자신탁[주식]Ce.pdf", "section_title": "미래에셋차세대Fun인덱스증권자투자신탁의 클래스별 투자실적 추이 및 운용인력 현황", "content": "[투자실적 추이 — 연평균 수익률 (단위: %)]\n※ 기간: 최근 1년(25.04.01~26.03.31), 최근 2년(24.04.01~26.03.31),\n        최근 3년(23.04.01~26.03.31), 최근 5년(21.04.01~26.03.31)\n\n|클래스 종류|최초 설정일|최근 1년|최근 2년|최근 3년|최근 5년|설정일 이후|\n|--|--|--|--|--|--|--|\n|수수료선취-오프라인(A)|2010.05.11|127.71|45.97|35.95|15.52|9.94|\n|수수료미징구-오프라인(C)|2015.09.01|-|-|-|-|-|\n|수수료미징구-오프라인-개인연금(C-P)|2014.04.23|126.97|45.43|35.56|15.22|11.25|\n|투자신탁|2007.04.05|127.99|46.11|36.20|15.77|9.65|\n|비교지수|2007.04.05|124.00|40.98|32.20|12.39|7.40|\n|수익률 변동성|2007.04.05|27.83|24.06|21.59|19.31|19.90|\n\n[주석] (주1) 이 상품의 비교지수는 KOSPI200X100% 입니다. \n- KOSPI200: 한국거래소에서 발표하는 지수로써 유가증권시장에 상장된 전체 종목 중 시장대표성 업종대표성 및 유동성\n등을 감안하여 선정된 200종목으로 구성된 지수\n한국거래소에서 발표하는 지수로써, 유가증권시장에 상장된 전체 종목 중 시장대표성, 업종대표성 및 유동성 등을 감안하\n여 선정된 200종목으로 구성된 지수\n(주2) 연평균 수익률은 해당 기간동안의 누적수익률을 기하평균방식으로 계산한 것으로 집합투자기구 총비용 지급후 해당\n기간동안의 세전 평균 수익률을 나타내는 수치입니다.\n(주3) 수익률 변동성(표준편차)은 해당기간 펀드의 연환산 주간수익률이 평균수익률에서 통상적으로 얼마만큼 등락했는지\n를 보여주는 수치로써, 변동성이 높을수록 수익률 등락이 빈번해 펀드의 손실위험이 높다는 것을 의미합니다.", "score": 0.5462, "token_count": 241, "page_info": "p.2", "source_location": {"file_path": "/data/uploads/00000000-0000-0000-0000-000000000001/2f3981d0-6a2c-4893-918e-5554f4e5b99e/3aae23238708425f9822e198da9e1b2b_미래에셋차세대Fun인덱스증권자투자신탁주식Ce.pdf", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/a624bba4-00a1-488d-a4a0-8c628be7e1ff", "page_number": 2, "page_range": null, "start_char_offset": null, "end_char_offset": null, "bbox": [20.028645833333332, 30.0, 574.0559214285704, 781.407], "heading_path": [], "sheet_name": null, "table_index": 0, "paragraph_index": null}}, {"ref_num": 2, "document_id": "605992a9-c59e-4fe4-a689-745f4adb0f8b", "chunk_id": "e733e950-ba1a-40ce-971e-07687cc49905", "document_title": "하나코리아증권자투자신탁[주식]종류A.pdf", "section_title": "펀드 클래스별(수수료선취 오프라인, 수수료미징구 오프라인, 수수료미징구 온라인) 보수 및 투자 기간별 예상 비용 비교", "content": "|  | 투자자가 부담하는 수수료, 총보수 및 비용 (연간, %) |  |  |  |  | 1,000만원 투자시 투자자가 부담하는 투자기간별 총보수•비용 예시(단위:천원) |  |  |  |  |\n| 클래스종류 | 판매수수료 | 총보수 | 판매보수 | 동종유형 총보수 | 총보수•비용 | 1년 | 2년 | 3년 | 5년 | 10년 |\n| -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |\n| 수수료선취-오프라인(A)  | 납입금액의 1.0% 이내 | 1.1054 | 0.5274 | 1.43 | 1.1077 | 212 | 330 | 454 | 721 | 1,513 |\n| 수수료미징구-오프라인-보수체감(C1) | 없음 | 1.8280 | 1.2500 | 1.59 | 1.8280 | 187 | 371 | 549 | 887 | 1,847 |\n| 수수료미징구-온라인(C-E) | 없음 | 1.0780 | 0.5000 | 1.19 | 1.0780 | 110 | 226 | 348 | 610 | 1,390 |\n|  |  |  |  |  |  |  |  |  |  |  |\n| * 상기 종류 수익증권을 제외한 나머지 종류 및 구체적인 투자비용 에 대해서는 투자설명서(제2부 13. 보수 및 수수료에 관한 사항)를 참고하시기 바랍니다.  |  |  |  |  |  |  |  |  |  |  |\n| * 상기의 도표의 총보수·비용은 ‘합성 총보수·비용’ 비율을 의미합니다. 합성 총보수·비용 비율은 이 투자신탁의 총보수∙비 용과 이 투자신탁의 모투자신탁에서 발생한 보수 및 기타비용을 모투자신탁에 대한 투자비율에 따라 안분한 값의 합을 순자산 연평균잔액(보수·비용 차감전 기준)으로 나누어 산출합니다. 실제 비용은 이와 상이할 수 있고 변동될 수 있습니 다.  |  |  |  |  |  |  |  |  |  |  |\n| * 종류 C1을 가입한 투자자는 1년 경과 시마다 C2→C3→C4→C5로 자동 전환되며 판매보수가 체감 적용됩니다.  |  |  |  |  |  |  |  |  |  |  |\n| * 해당 집합투자기구는 오프라인 클래스에 비해 일반적으로 투자비용이 저렴한 온라인 클래스(A-E)가 설정되지 않았습니 다.  |  |  |  |  |  |  |  |  |  |  |\n| * 투자자가 1,000만원 투자시 부담하는 총비용 예시 : 이익금은 모두 재투자하며, 연간 투자수익률은 5%, 판매수수료율 또는 총보수･비용비율은 일정한 것으로 가정합니다.  |  |  |  |  |  |  |  |  |  |  |\n| * [A형과 C형]의 총비용이 일치하는 시점은 [약 2년]이나, 이는 추가납입, 보수 등의 변경에 따라 달라질 수 있습니다.  |  |  |  |  |  |  |  |  |  |  |\n| * 동종유형 총보수는 한국금융투자협회에서 공시하는 동종유형 집합투자기구 전체의 평균 총보수비용을 의미합니다.  |  |  |  |  |  |  |  |  |  |  |", "score": 0.5133, "token_count": 365, "page_info": "p.2", "source_location": {"file_path": "/data/uploads/00000000-0000-0000-0000-000000000001/2f3981d0-6a2c-4893-918e-5554f4e5b99e/f4c057a3e1674485bf0d3cac44e64afc_하나코리아증권자투자신탁주식종류A.pdf", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/605992a9-c59e-4fe4-a689-745f4adb0f8b", "page_number": 2, "page_range": null, "start_char_offset": null, "end_char_offset": null, "bbox": [45.42545454545455, 64.12799999999993, 550.0600200000001, 749.9280079999999], "heading_path": [], "sheet_name": null, "table_index": 0, "paragraph_index": null}}, {"ref_num": 3, "document_id": "07c30e99-c989-4703-a010-5f6d4ff60fc0", "chunk_id": "c69e1a45-8e0f-4de3-aafa-3cb43d88738f", "document_title": "한국투자테크증권자투자신탁1호(주식)C.pdf", "section_title": null, "content": "[투자비용]\n※ 수수료·총보수·비용 단위: %  /  총비용 예시 단위: 천원 (1,000만원 투자 기준)\n\n|클래스 종류|선취 판매수수료|총보수(%)|총보수-판매보수(%)|동종유형 총보수(%)|총보수·비용(%)|1년(천원)|2년|3년|5년|10년|\n|--|--|--|--|--|--|--|--|--|--|--|\n|수수료선취-오프라인(A)|납입금액의 1.0% 이내|0.7731|0.5000|1.3500|0.7832|179|261|347|529|1,054|\n|수수료미징구-오프라인(C)|없음|1.2731|1.0000|1.6000|1.2793|131|267|408|706|1,552|\n|수수료선취-온라인(A-e)|납입금액의 0.5% 이내|0.5231|0.2500|1.0100|0.5337|104|161|220|346|714|\n|수수료미징구-온라인(C-e)|없음|0.7731|0.5000|1.0600|0.7843|80|164|251|437|974|\n\n(주1) 1,000만원 투자시 투자자가 부담하는 투자기간별 총보수･비용 예시는 투자자가 1,000만원을 투자 했을 경우 향후 투자기간별 지불하게 되는 총비용(판매수수료 + 총보수･비용)을 의미합니다. 판매 수수료 및 총보수･비용은 일정하고, 이익금은 모두 재투자하며, 연간 투자수익률은 5%로 가정하 였습니다. \n(주2) 종류A와 종류C에 각각 투자할 경우 총비용이 일치하는 시점은 약 1년 10개월이 경과되는 시점이며, 종류A-e와 종류C-e에 각각 투자할 경우 총비용이 일치하는 시점은 약 1년 10개월이 경과되는 시점이나 추가납입, 보수 등의 변경에 따라 달라질 수 있습니다. \n(주3) 종류형 집합투자기구의 구체적인 투자비용은 투자설명서 제2부 13. 보수 및 수수료에 관한 사항 을 참고하시기 바랍니다. \n(주4) 동종유형 총보수･비용은 한국금융투자협회에서 공시하는 동종유형 집합투자기구 전체의 평균 총 보수･비용을 의미합니다. \n(주5) 합성 총비용은 이 투자신탁(자투자신탁)에서 지출되는 보수와 기타비용에 이 투자신탁(자투자신 탁)이 모투자신탁에 투자한 비율을 안분한 모투자신탁의 보수와 기타비용을 합한 총액을 순자산 연평잔액(보수･비용 차감후 기준)으로 나누어 산출합니다.", "score": 0.5109, "token_count": 270, "page_info": "p.2", "source_location": {"file_path": "/data/uploads/00000000-0000-0000-0000-000000000001/2f3981d0-6a2c-4893-918e-5554f4e5b99e/d929f19b58bc45beb3b2a86e8ab96133_한국투자테크증권자투자신탁1호주식C.pdf", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/07c30e99-c989-4703-a010-5f6d4ff60fc0", "page_number": 2, "page_range": null, "start_char_offset": null, "end_char_offset": null, "bbox": [108.86121212121206, 86.13945945945957, 538.3967567567569, 284.21031250000016], "heading_path": [], "sheet_name": null, "table_index": 1, "paragraph_index": null}}, {"ref_num": 4, "document_id": "a624bba4-00a1-488d-a4a0-8c628be7e1ff", "chunk_id": "a554f49e-31ce-4402-9d97-323b9a781b1e", "document_title": "미래에셋차세대Fun인덱스증권자투자신탁[주식]Ce.pdf", "section_title": "투자신탁의 투자 목적, 전략, 분류 및 클래스별 보수와 기간별 예상 투자비용 안내", "content": "투자목적\n이 투자신탁은 국내주식에 주로 투자하는 모투자신탁을 법 시행령 제94조제2항제4호에서 규정하는 주된 투자대상자산으 로 하여 비교지수 대비 안정적인 초과수익을 추구하는 것을 목적으로 합니다.\n\n투자전략\n이 투자신탁은 모자형투자신탁의 자투자신탁으로서 KOSPI200 구성 종목 중 펀더멘탈 인덱스 기법과 시가총액식 층화추 출법을 통한 포트폴리오를 구성하여 투자하는 모투자신탁에 신탁재산의 70%이상 투자하여 비교지수 대비 초과수익을 추 구합니다. \n\n분류  투자신탁, 증권(주식형), 개방형(중도환매가능), 추가형(추가납입가능), 모자형, 종류형\n\n```\n[투자비용]\n※ 수수료·총보수 단위: %  /  총비용 예시 단위: 천원 (1,000만원 투자 기준)\n\n|클래스 종류|판매수수료|총보수(%)|총보수-판매보수(%)|동종유형 총보수(%)|총보수·비용(%)|1년(천원)|2년|3년|5년|10년|\n|--|--|--|--|--|--|--|--|--|--|--|\n|수수료선취-오프라인(A)|납입금액의 0.5% 이내|0.2775|0.1|1.37|0.2775|78|108|139|206|396|\n|수수료미징구-오프라인(C)|-|0.5775|0.4|1.60|0.5775|0|0|0|0|0|\n|수수료선취-온라인(Ae)|납입금액의 0.25% 이내|0.2275|0.05|1.03|0.2275|48|72|98|152|309|\n|수수료미징구-온라인(Ce)|-|0.2775|0.1|1.07|0.2775|28|58|89|156|346|\n|수수료미징구-오프라인-개인연금(C-P)|-|0.4825|0.305|-|0.4825|49|101|155|271|603|\n\n\n(주1) “1,000만원 투자시 투자자가 부담하는 투자기간별 총비용 예시“는 투자자가 1,000만원을 투자했을 경우 향후 투자기 간별 지불하게 되는 총비용(판매수수료 + 총보수비용(피투자 집합투자기구 보수 포함))을 의미합니다. 선취판매수수료 및 총보수비용은 일정하고, 이익금은 모두 재투자하며, 연간 투자수익률은 5%로 가정하였습니다.\n(주2) 종류 A형이 종류 C형보다 총비용이 지속적으로 높으며 종류 Ae형과 종류 Ce형에 각각 투자할 경우 총비용이 일치하 는 시점은 약 5년이 경과되는 시점이나 추가납입, 보수, 기타비용 변경에 따라 달라질 수 있습니다.\n(주3) 종류형 집합투자기구의 구체적인 투자비용은 투자설명서 제2부 13. 보수 및 수수료에 관한 사항(25페이지)을 참고하 시기 바랍니다.\n * 이 투자신탁은 투자기간에 따라 보수가 점차 낮아지는 다른 수익증권으로 전환되는 구조를 가지고 있습니다. 이 투자신 탁의 수익증권은 수익자의 전환청구와 관계없이 종류C1 수익증권을 최초 매수한 날로부터 매 1년마다 투자설명서에서 정 하는 바에 따라 자동으로 전환됩니다. 단, 수익자가 최초로 매입하는 수익증권은 종류C1 수익증권에 한합니다. 기타 세부사 항은 “투자설명서“를 참고하시기 바랍니다.\n(주4) “동종유형 총보수“는 한국금융투자협회에서 공시하는 동종유형 집합투자기구 전체의 평균 총보수비용을 의미합니다.\n(주5) “총보수·비용” 비율은 집합투자기구에서 지출되는 보수와 기타비용 총액을 순자산연평잔액으로 나누어 산출합니다.", "score": 0.5098, "token_count": 389, "page_info": "p.1", "source_location": {"file_path": "/data/uploads/00000000-0000-0000-0000-000000000001/2f3981d0-6a2c-4893-918e-5554f4e5b99e/3aae23238708425f9822e198da9e1b2b_미래에셋차세대Fun인덱스증권자투자신탁주식Ce.pdf", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/a624bba4-00a1-488d-a4a0-8c628be7e1ff", "page_number": 1, "page_range": null, "start_char_offset": null, "end_char_offset": null, "bbox": [20.03515217391304, 225.04133333333337, 574.1355679012347, 735.9898333333334], "heading_path": [], "sheet_name": null, "table_index": 2, "paragraph_index": null}}, {"ref_num": 5, "document_id": "605992a9-c59e-4fe4-a689-745f4adb0f8b", "chunk_id": "84156e21-f494-4f5b-b8f1-a10b0042839f", "document_title": "하나코리아증권자투자신탁[주식]종류A.pdf", "section_title": "집합투자기구의 판매 경로 및 클래스별 수수료, 보수 및 서비스 제공 특징 비교", "content": "집합투자 기구의 종류 : 이 집합투자기구는 종류형 집합투자기구입니다. 집합투자기구의 종류는 판매수수료 부과방식-판매경로-기 타 펀드특성에 따라 3단계로 구분되며, 본 집합투자기구의 종류 및 각 종류별 특징은 다음과 같습니다. \n\n| 종류(Class) |  | 집합투자기구의 특징 |\n| --- | --- | --- |\n| 판매수수료  | 수수료선취(A) | 집합투자증권 매입시점에 판매수수료가 일시 징구되는 반면 판매보수가 판매수수료 미징구형(C)보다 상대적으로 낮게 책정되므로 총비용이 판매수수료미징구형(C)과 일 치하는 시점은 약 2년이 경과되는 시점입니다. 따라서 2년 이전에 환매할 경우 판매 수수료미징구형(C)보다 높은 총비용을 지불하게 되는 집합투자기구입니다. |\n| 판매수수료  | 수수료미징구(C) | 집합투자증권 매입 또는 환매시점에 일시 징구되는 판매수수료는 없는 반면 판매보 수가 판매수수료선취형(A), 판매수수료후취형(B) 또는 판매수수료선후취형(AB)보다 상 대적으로 높게 책정되므로 총비용이 판매수수료선취형(A)과 일치하는 시점은 약 2년 이 경과되는 시점입니다. 따라서 2년 이전에 환매할 경우 판매수수료선취형(A)보다 낮은 총비용을 지불할 수 있는 집합투자기구입니다. |\n| 판매경로  | 온라인(E) | 판매회사의 온라인전용으로 판매되는 집합투자기구로 오프라인으로 판매되는 집합투 자기구보다 판매수수료 및 판매보수가 저렴한 집합투자기구입니다. 다만, 판매회사로 부터 별도의 투자권유 및 상담서비스는 제공되지 않습니다. | \n| 판매경로  | 오프라인 | 오프라인전용(판매회사 창구)으로 판매되는 집합투자기구로 온라인으로 판매되는 집 합투자기구보다 판매수수료 및 판매보수가 높은 집합투자기구입니다. 다만, 판매회사 로부터 별도의 투자권유 및 상담서비스가 제공됩니다. |\n| 판매경로  | 온라인슈퍼(S) | 집합투자업자의 공동판매채널로서의 역할 수행을 위해 모든 공모 종류 S 수익증권 (종류 S-T 및 종류 S-P 수익증권 포함)를 취급하고, 객관적 지표를 기준으로 상품을 노출 및 배열하는 온라인판매시스템을 통하여 판매되는 것으로서 다른 종류 수익증 권[가입 자격(기관 및 고액거래자 등)에 제한이 있는 종류 수익증권 제외] 보다 판매 보수가 낮고, 후취판매수수료가 부과되는 집합투자기구입니다. 다만, 판매회사로부터 별도의 투자권유 및 상담서비스는 제공되지 않습니다. | \n| 기타  | 보수체감(CDSC) |  판매수수료미징구형(C) 집합투자기구이며 이연판매보수(CDSC) 프로그램에 따라 판매 보수를 적용하기 때문에 별도의 전환 청구 없이 집합투자증권의 보유기간이 경과함 에 따라 판매보수가 낮은 종류의 집합투자기구로 자동 전환됩니다\n| 기타  | 무권유저비용(G) | 별도의 투자권유 없이 집합투자기구를 매수하는 경우 일반적인 창구 판매수수료 및 판매보수보다 낮은 판매수수료 및 판매보수가 적용되는 집합투자기구입니다. |\n| 기타  | 기관(F) | 기관 및 법인 전용 집합투자기구입니다. |", "score": 0.5056, "token_count": 368, "page_info": "p.4", "source_location": {"file_path": "/data/uploads/00000000-0000-0000-0000-000000000001/2f3981d0-6a2c-4893-918e-5554f4e5b99e/f4c057a3e1674485bf0d3cac44e64afc_하나코리아증권자투자신탁주식종류A.pdf", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/605992a9-c59e-4fe4-a689-745f4adb0f8b", "page_number": 4, "page_range": null, "start_char_offset": null, "end_char_offset": null, "bbox": [116.49636363636364, 576.670005, 541.3149925, 733.8261523076922], "heading_path": [], "sheet_name": null, "table_index": 2, "paragraph_index": null}}], "confidence": 0.5462, "search_latency_ms": 252, "total_candidates": 5}
+
+event: token
+data: {"text": "참"}
+
+event: token
+data: {"text": "고자"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "에"}
+
+event: token
+data: {"text": " '"}
+
+event: token
+data: {"text": "삼성"}
+
+event: token
+data: {"text": "코"}
+
+event: token
+data: {"text": "리아"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "펀"}
+
+event: token
+data: {"text": "드"}
+
+event: token
+data: {"text": "'"}
+
+event: token
+data: {"text": "에"}
+
+event: token
+data: {"text": " 대한"}
+
+event: token
+data: {"text": " 정보"}
+
+event: token
+data: {"text": "는"}
+
+event: token
+data: {"text": " 명"}
+
+event: token
+data: {"text": "시"}
+
+event: token
+data: {"text": "되어"}
+
+event: token
+data: {"text": " 있지"}
+
+event: token
+data: {"text": " 않습니다"}
+
+event: token
+data: {"text": "."}
+
+event: token
+data: {"text": "\n\n"}
+
+event: token
+data: {"text": "다"}
+
+event: token
+data: {"text": "만"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " 유사"}
+
+event: token
+data: {"text": "한"}
+
+event: token
+data: {"text": " 명"}
+
+event: token
+data: {"text": "칭"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " 다른"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "펀"}
+
+event: token
+data: {"text": "드"}
+
+event: token
+data: {"text": " 정보"}
+
+event: token
+data: {"text": "는"}
+
+event: token
+data: {"text": " 다음과"}
+
+event: token
+data: {"text": " 같습니다"}
+
+event: token
+data: {"text": "."}
+
+event: token
+data: {"text": "\n"}
+
+event: token
+data: {"text": "*"}
+
+event: token
+data: {"text": " **"}
+
+event: token
+data: {"text": "하나"}
+
+event: token
+data: {"text": "코"}
+
+event: token
+data: {"text": "리아"}
+
+event: token
+data: {"text": "증"}
+
+event: token
+data: {"text": "권"}
+
+event: token
+data: {"text": "자"}
+
+event: token
+data: {"text": "투자"}
+
+event: token
+data: {"text": "신"}
+
+event: token
+data: {"text": "탁"}
+
+event: token
+data: {"text": "["}
+
+event: token
+data: {"text": "주"}
+
+event: token
+data: {"text": "식"}
+
+event: token
+data: {"text": "]"}
+
+event: token
+data: {"text": "**:"}
+
+event: token
+data: {"text": " 클래"}
+
+event: token
+data: {"text": "스"}
+
+event: token
+data: {"text": "별"}
+
+event: token
+data: {"text": "로"}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "선"}
+
+event: token
+data: {"text": "취"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "오"}
+
+event: token
+data: {"text": "프"}
+
+event: token
+data: {"text": "라인"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "A"}
+
+event: token
+data: {"text": ")"}
+
+event: token
+data: {"text": "은"}
+
+event: token
+data: {"text": " 납"}
+
+event: token
+data: {"text": "입"}
+
+event: token
+data: {"text": "금"}
+
+event: token
+data: {"text": "액"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "1"}
+
+event: token
+data: {"text": "."}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "%"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": "내"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "미"}
+
+event: token
+data: {"text": "징"}
+
+event: token
+data: {"text": "구"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "오"}
+
+event: token
+data: {"text": "프"}
+
+event: token
+data: {"text": "라인"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "보"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "체"}
+
+event: token
+data: {"text": "감"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "C"}
+
+event: token
+data: {"text": "1"}
+
+event: token
+data: {"text": ")"}
+
+event: token
+data: {"text": " 및"}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "미"}
+
+event: token
+data: {"text": "징"}
+
+event: token
+data: {"text": "구"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "온"}
+
+event: token
+data: {"text": "라인"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "C"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "E"}
+
+event: token
+data: {"text": ")"}
+
+event: token
+data: {"text": "은"}
+
+event: token
+data: {"text": " 판매"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "가"}
+
+event: token
+data: {"text": " 없습니다"}
+
+event: token
+data: {"text": " ["}
+
+event: token
+data: {"text": "2"}
+
+event: token
+data: {"text": "]."}
+
+event: token
+data: {"text": "\n"}
+
+event: token
+data: {"text": "*"}
+
+event: token
+data: {"text": " **"}
+
+event: token
+data: {"text": "미"}
+
+event: token
+data: {"text": "래"}
+
+event: token
+data: {"text": "에"}
+
+event: token
+data: {"text": "셋"}
+
+event: token
+data: {"text": "차"}
+
+event: token
+data: {"text": "세대"}
+
+event: token
+data: {"text": "Fun"}
+
+event: token
+data: {"text": "인"}
+
+event: token
+data: {"text": "덱"}
+
+event: token
+data: {"text": "스"}
+
+event: token
+data: {"text": "증"}
+
+event: token
+data: {"text": "권"}
+
+event: token
+data: {"text": "자"}
+
+event: token
+data: {"text": "투자"}
+
+event: token
+data: {"text": "신"}
+
+event: token
+data: {"text": "탁"}
+
+event: token
+data: {"text": "["}
+
+event: token
+data: {"text": "주"}
+
+event: token
+data: {"text": "식"}
+
+event: token
+data: {"text": "]"}
+
+event: token
+data: {"text": "**:"}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "선"}
+
+event: token
+data: {"text": "취"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "오"}
+
+event: token
+data: {"text": "프"}
+
+event: token
+data: {"text": "라인"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "A"}
+
+event: token
+data: {"text": ")"}
+
+event: token
+data: {"text": "은"}
+
+event: token
+data: {"text": " 납"}
+
+event: token
+data: {"text": "입"}
+
+event: token
+data: {"text": "금"}
+
+event: token
+data: {"text": "액"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "."}
+
+event: token
+data: {"text": "5"}
+
+event: token
+data: {"text": "%"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": "내"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "선"}
+
+event: token
+data: {"text": "취"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "온"}
+
+event: token
+data: {"text": "라인"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "Ae"}
+
+event: token
+data: {"text": ")"}
+
+event: token
+data: {"text": "은"}
+
+event: token
+data: {"text": " 납"}
+
+event: token
+data: {"text": "입"}
+
+event: token
+data: {"text": "금"}
+
+event: token
+data: {"text": "액"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "."}
+
+event: token
+data: {"text": "2"}
+
+event: token
+data: {"text": "5"}
+
+event: token
+data: {"text": "%"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": "내"}
+
+event: token
+data: {"text": "이며"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "미"}
+
+event: token
+data: {"text": "징"}
+
+event: token
+data: {"text": "구"}
+
+event: token
+data: {"text": " 클래"}
+
+event: token
+data: {"text": "스"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "C"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " Ce"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " C"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "P"}
+
+event: token
+data: {"text": ")"}
+
+event: token
+data: {"text": "는"}
+
+event: token
+data: {"text": " 판매"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "가"}
+
+event: token
+data: {"text": " 없습니다"}
+
+event: token
+data: {"text": " ["}
+
+event: token
+data: {"text": "4"}
+
+event: token
+data: {"text": "]."}
+
+event: token
+data: {"text": "\n"}
+
+event: token
+data: {"text": "*"}
+
+event: token
+data: {"text": " **"}
+
+event: token
+data: {"text": "한국"}
+
+event: token
+data: {"text": "투자"}
+
+event: token
+data: {"text": "테"}
+
+event: token
+data: {"text": "크"}
+
+event: token
+data: {"text": "증"}
+
+event: token
+data: {"text": "권"}
+
+event: token
+data: {"text": "자"}
+
+event: token
+data: {"text": "투자"}
+
+event: token
+data: {"text": "신"}
+
+event: token
+data: {"text": "탁"}
+
+event: token
+data: {"text": "1"}
+
+event: token
+data: {"text": "호"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "주"}
+
+event: token
+data: {"text": "식"}
+
+event: token
+data: {"text": ")**"}
+
+event: token
+data: {"text": ":"}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "선"}
+
+event: token
+data: {"text": "취"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "오"}
+
+event: token
+data: {"text": "프"}
+
+event: token
+data: {"text": "라인"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "A"}
+
+event: token
+data: {"text": ")"}
+
+event: token
+data: {"text": "은"}
+
+event: token
+data: {"text": " 납"}
+
+event: token
+data: {"text": "입"}
+
+event: token
+data: {"text": "금"}
+
+event: token
+data: {"text": "액"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "1"}
+
+event: token
+data: {"text": "."}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "%"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": "내"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "선"}
+
+event: token
+data: {"text": "취"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "온"}
+
+event: token
+data: {"text": "라인"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "A"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "e"}
+
+event: token
+data: {"text": ")"}
+
+event: token
+data: {"text": "은"}
+
+event: token
+data: {"text": " 납"}
+
+event: token
+data: {"text": "입"}
+
+event: token
+data: {"text": "금"}
+
+event: token
+data: {"text": "액"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "."}
+
+event: token
+data: {"text": "5"}
+
+event: token
+data: {"text": "%"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": "내"}
+
+event: token
+data: {"text": "이며"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " 수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "미"}
+
+event: token
+data: {"text": "징"}
+
+event: token
+data: {"text": "구"}
+
+event: token
+data: {"text": " 클래"}
+
+event: token
+data: {"text": "스"}
+
+event: token
+data: {"text": "("}
+
+event: token
+data: {"text": "C"}
+
+event: token
+data: {"text": ","}
+
+event: done
+data: {"model_used": "gemma-4-31B-it", "confidence": 0.5462, "token_usage": {"context_tokens": 1843, "prompt_tokens": 2083, "completion_tokens": 115, "total_tokens": 2198}, "latency_ms": 3882, "stages": {"intent": 848, "search": 252, "distill": 0, "generate": 3625}}
+
