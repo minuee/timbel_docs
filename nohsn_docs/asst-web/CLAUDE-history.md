@@ -484,3 +484,140 @@
 - 사용자 의도(최종 확정): **그래프/누적타임라인의 생성(프론트 실측)이 정답**, AICM 실측 줄도 그 값을 노출해야 함. (백엔드 보고값 노출이 잘못)
 - ⚠️ 시행착오: 처음에 "그래프 생성 막대를 sources→done으로 키워 완성과 합치자"로 오해(거꾸로), 다음엔 latencyLine에서 tokM-srcM 새 수식으로 계산(=사용자가 "수식 바꾸지 마" 거부). → **정답: 새 수식 금지, `rows`의 generate 행 `deltaSec`(이미 화면에 표시되는 그래프 값)을 그대로 재사용.**
 - 구현(`SearchFlowModal.vue` latencyLine): `const genRow = rows.value.find(r => r.key === "generate"); genPart = ' · 생성 ${genRow.deltaSec}s'; sum = lat.totalMs + parseFloat(genRow.deltaSec)*1000`. 접수/연결/검색은 asst-latency 그대로. → 그래프 생성과 AICM 실측 생성 항상 동일. 검증 완료(사용자 확인).
+
+### 6. 문서 조기표시(sources) + AI답변 스테일 제거 + 생성중 인디케이터 (구현 완료, 사용자 검증 OK)
+- 배경: assist-stream "한꺼번에 펑" 증상. 백엔드도 동의 — trace 분석상 sources(+4.91s)와 첫 token(+9.10s)이 4.19s 차이 = **(가) sources는 일찍 오는데 프론트가 늦게 그림**. (백엔드 청크 로그 불필요 — assist-stream.api.ts markStage가 이벤트별 도착시각 이미 측정)
+- 원인(코드): sources 핸들러는 문서를 `pendingAllItems`에 **버퍼링만** 하고, 실제 화면 칩/패널은 **distilled 핸들러**에서 생성(keywordDetailData + detailItemClick 자동오픈). distilled가 token 직전(~9s)에 와서 문서도 그때 뜸. (버퍼링 이유 = distilled.selected_refs로 참고문서만 골라 깜빡임 없이 표시하려고)
+- distilled 역할 확인(백엔드 질문 답): **트리거 아님, 내용도 씀** — selected_refs(참고문서 필터/하이라이트) + summary(1차요약 표시/캐시). 그래서 distilled는 계속 받아야 함.
+- 구현(`useChatAssist.ts` handleAssistStream):
+  - 공통 렌더 함수 `showAssistDocs(displayItems)` 추출(칩 생성+자동오픈+streamingSummaryItems 동기화).
+  - **sources**: `showAssistDocs(pendingAllItems.slice(0, MAX_DOCS))`로 상위 3개 즉시 렌더 + 이 버블 요약영역 비움(`emit updateChatSummary ""`) → 직전 버블 요약 잔존 방지.
+  - **distilled**: selected_refs로 필터한 displayItems로 `showAssistDocs` 재호출(보정) + `distilledReceived=true`. 0건이면 조기표시 문서 제거(keywordDetailData delete + 선택 해제).
+  - done fallback 판정을 keywordDetailData 유무 → `distilledReceived` 플래그로 교체(조기표시 때문).
+- AI답변 생성중 인디케이터(`DocumentContentPanel.vue`): chat탭(`alwaysShowAnswer`)이고 summary 비었을 때 `summary-spinner` + "AI 답변 생성 중…" 표시, 요약 도착하면 텍스트로 교체. 검색탭 무영향(always-show-answer는 chat탭에만).
+- 트레이드오프(인지): distilled 보정 시 sources 상위3개 → 참고문서로 재정렬 깜빡임 가능. 사용자 수용.
+- 최종 동작: 발화 → 문서 먼저 + "생성중" 스피너 → distilled에서 참고문서 보정+요약 채움. 2번째+ 발화도 스테일 없음. 사용자 검증 완료.
+
+### 7. 키워드 상세 문서(최대 3개) 하이라이트 클릭 이동 + 추천/비추천 손모양 숨김
+- 대상: 발화 → 키워드 클릭 시 펼쳐지는 **상세 문서 목록**(`chat/index.vue` 376~491). 참고문서 패널(DocumentList) 아님 — 혼동 주의(거긴 thumb 없음).
+- 버그: `chat/index.vue:381` `:class="{ 'first-active': detailIndex === 0 }"` 로 **0번째에 보라 테두리 고정**. `handleDetailItemClick`은 지식저장소 표시만 하고 **클릭 문서 추적 상태가 없어** 클릭해도 테두리 안 옮겨감. (CSS는 `.first-active`/`.selected`/`:hover` 모두 `border:2px solid primary` 동일 — index.vue:1934)
+- 수정(`useChatKeywordInteraction.ts`):
+  - 상태 `selectedDetailItemForBubble: Record<bubbleId, "type_itemId"|null>` 추가.
+  - 헬퍼 `isDetailItemActive(bubbleId, type, itemId, detailIndex)`: 선택값 null이면 `detailIndex===0`(첫 문서 강조 유지), 있으면 `type_itemId` 일치.
+  - `handleDetailItemClick` 진입 시 `selectedDetailItemForBubble[bubbleId] = type_itemId` 기록.
+  - `handleKeywordClick` 진입 시 `= null`로 리셋(키워드 바꾸면 새 목록 첫 문서 다시 강조).
+  - return에 둘 다 export.
+- 수정(`chat/index.vue`): destructure에 `isDetailItemActive` 추가, 381줄 class를 `isDetailItemActive(item.id, detailGroup.type, detailItem.id, detailIndex)`로 교체.
+- 사용자 확정: **클릭 전 첫 문서 강조는 유지**가 맞음.
+- 추천/비추천(thumb_up/down) 손모양 숨김: `chat/index.vue:418` 문서별 up/down 버튼 래퍼 `<div class="flex gap4">` → `<div v-if="false" ...>`. **삭제 아님**, v-if만 떼면 복구. (※ SpeechBubble.vue의 키워드 옆 thumb는 별개 — 건드리지 않음)
+- 진단 클린(useChatKeywordInteraction의 `isAdmin` unused Hint는 기존부터 있던 것, 무관). 라이브 검증은 사용자 직접.
+
+### 8. (정정·최종) Top3 하이라이트 안 옮겨간 진짜 원인 = `v-memo` + 위치 삽질 + 탭 초기화
+> ⚠️ #7은 첫 시도 기록. 실제로는 **두 번 헤맴**(위치 오인 → 원복 → 재적용) 끝에 진짜 원인은 따로 있었음. 아래가 최종.
+
+**(1) 화면 위치 — 처음부터 맞았는데 중간에 의심해서 원복하는 삽질**
+- 사용자가 말한 "발화 말풍선 아래 문서 3개 카드"(예: "지식정보" 헤더 + 미래에셋/하나/한국투자 펀드 3개 + 소제목·p.2)는 **`chat/index.vue` 키워드 상세(376~491)가 맞음**. 절대 헷갈리지 말 것.
+- 중간에 사용자가 "지식저장소 탭에 이전 기록 남음" 얘기를 꺼내자 **TabTypeKnowledgeIndex로 착각**해 #7 하이라이트 수정을 통째로 원복했다가 다시 넣음. → 두 화면은 별개 이슈. (탭 초기화는 아래 (3))
+
+**(2) 진짜 원인 = `v-memo` (★핵심 교훈)**
+- `chat/index.vue:304` 채팅 아이템 `v-for`에 `v-memo="[item.content, item.isStreaming, selectedKeywordForBubble[item.id], keywordDetailLoading[item.id], assistSearching[item.id]]"`.
+- `v-memo`는 나열된 값이 안 바뀌면 **그 서브트리 리렌더를 통째로 스킵**. 클릭으로 하이라이트 상태만 바꿔도 v-memo 의존성이 안 바뀌어 **`:class` 재평가가 아예 안 일어남** → 보더가 1번째에 박힘. id 기반이든 인덱스 기반이든 헛수고였던 이유.
+- **해결**: 하이라이트 상태를 v-memo 의존성에 추가.
+  - `useChatKeywordInteraction.ts`: 인덱스 기반 `activeDetailByBubble: Record<bubbleId, "type_detailIndex"|null>` + `setActiveDetail(bubbleId,type,idx)` + `isDetailItemActive(bubbleId,type,idx)`(null이면 idx===0). `handleKeywordClick`에서 `=null` 리셋. return에 `activeDetailByBubble`/`setActiveDetail`/`isDetailItemActive` 노출.
+  - `chat/index.vue`: 381 `:class="{ 'first-active': isDetailItemActive(item.id, detailGroup.type, detailIndex) }"`, 382 `@click="handleDetailItemClick(...); setActiveDetail(item.id, detailGroup.type, detailIndex)"`, **304 v-memo 배열 끝에 `activeDetailByBubble[item.id]` 추가**(이게 결정타).
+- 인덱스 기반 선택 이유: 발화 스트리밍 중 문서 객체가 새로 생겨 id가 흔들려도 0/1/2 인덱스는 안정. (사실 진짜 막은 건 v-memo였지만 인덱스 기반이 더 견고하므로 유지)
+- 사용자 검증 **OK("잘된다")**.
+
+**(3) thumb(추천/비추천) 숨김 — 유지**
+- `chat/index.vue:418` 문서별 up/down `<div v-if="false">`, `SpeechBubble.vue:112` 키워드 옆 `<template v-if="false && !isCallHistoryModal">`. 삭제 아님(`false &&`/`v-if` 떼면 복구).
+
+**(4) 지식저장소 탭 "이전 기록 남음" → 상담뷰 복귀 시 초기화 (별개 이슈, TabType)**
+- 진짜 화면: 상담 페이지(`agent/index.vue`)가 쓰는 지식저장소는 `knowledge/index.vue`가 아니라 **`TabTypeKnowledgeIndex.vue`**. 발화 문서는 `selectedDetailItems`에 push → `allTabs`의 chat 탭(문서제목 라벨)으로 생성.
+- 원인: 상담뷰는 라우트가 아니라 **`isFirstMount` 토글로 대시보드↔상담뷰 스왑**(컴포넌트 안 죽음) → 로컬 ref `selectedDetailItems`가 안 비워짐. 진입 처리 `handleOnReady`(agent/index.vue, `:onReady`로 전달)의 `if(isFirstMount){ vocStore.clear() }` 블록이 진입 초기화 지점인데 지식저장소 탭은 안 비웠음.
+- 수정: 그 블록에 `clearChatSelection()`(chat 탭=selectedDetailItems 비움) + `nextTick(()=>knowledgeRef.value?.resetKnowledgeTabs?.())` 추가. `TabTypeKnowledgeIndex.vue`에 `resetKnowledgeTabs()`(searchSessions=[]·searchText=""·searchSelectedDoc=null·selectedDoc=null·activeTab="") 추가·expose. 사용자 확정: **모든 탭(발화+검색) 전부 초기화**.
+
+---
+
+## 2026-06-23 — AWS 고객사 "AICM 응답속도 상세 모달만 옛날 소스" 미스터리 → 실은 백엔드 데이터 누락
+
+### 1. 증상/의심
+- 사용자 보고: 로컬·사내 dev는 배포 즉시 반영되는데, **AWS 고객사 서버만 AICM 응답속도 상세 모달이 옛날 소스로 보임**. "왜 한 페이지만?" 으로 시작.
+- 초기 가설: 캐싱/스테일 번들. 구조 파악 결과:
+  - 모듈 페더레이션(`advisor_app`, `remoteEntry.js`) + webpack contenthash + nginx no-cache(index.html/remoteEntry.js) — **캐시버스팅 세팅은 정상**.
+  - `SearchFlowModal`(AICM 모달) → `TabTypeKnowledgeIndex` → `agent/index.vue` 까지 **전부 정적 import**. 동적 청크/서비스워커 없음 → "한 페이지만 stale"은 구조상 불가. 옛날이면 앱 전체가 옛날이어야 함.
+- 배포 방식: **Dockerfile 빌드 → ArgoCD deploy**. 1차 결론(가설): Argo가 같은 이미지 태그면 sync 안 해서 옛 파드 유지 = 운영 이슈 의심.
+
+### 2. 검증 — 배포 마커 박고 재배포 (사용자 요청)
+- `SearchFlowModal.vue` 에 **DEPLOY-CHECK 마커 3중** 임시 삽입: ① 모듈 로드 console.log ② 모달 오픈 console.log ③ 모달 하단 화면에 🔴 빨간 박스(`DEPLOY_TAG`). 콘솔 안 열어도 눈으로 확인 가능하게.
+- 사용자 재배포 후 캡쳐 2장(`docs/aws.png`, `docs/local_dev.png`) 제공.
+- **결과: 양쪽 다 🔴 마커가 떠 있음** → AWS도 최신 프론트 서빙 중. **프론트 배포/Argo 문제 아님이 확정.** (옛날 소스 가설 기각)
+
+### 3. 진짜 원인 = 백엔드 `asst-latency` SSE 이벤트 누락 (AWS만)
+- 캡쳐 차이: 로컬은 `API접수/AICM연결/AICM검색/결과전송/생성` **5단계 펼침 + 'AICM 실측' 줄** 표시. AWS는 **`검색(AICM) 처리` 단일 막대로 폴백** + 'AICM 실측' 줄 없음.
+- 코드 근거(`SearchFlowModal.vue`): 5단계 펼침은 `if (lat && srcM && reqM)` 일 때만. `lat = tr.asstLatency`. 'AICM 실측' 줄(`latencyLine`)도 **오직 `asstLatency` 있을 때만** 출력 → AWS에서 이 줄이 없다 = **`asstLatency` 가 안 옴**.
+- `asstLatency` 출처: 프론트가 만드는 게 아니라 **백엔드 asst-service 가 SSE 로 보내는 `event: asst-latency`** (`assist-stream.api.ts:113`). 타입 `AsstLatencyEvent`(`backendMs/aicmConnectMs/aicmSearchMs/totalMs`, `assist-stream.type.ts:110`).
+- `done` 이벤트의 `stages`(의도/검색/선별/생성=backendLine)는 AWS도 정상 수신 → 게이트웨이·스트림 자체는 동작. **딱 `asst-latency` 이벤트 하나만 누락.**
+- 결론: **AWS 고객사 asst-service 가 옛 버전이거나(이 이벤트 없던 시절) 설정으로 꺼짐, 혹은 게이트웨이가 SSE 이벤트 버퍼링/필터.** → 백엔드 팀 확인요청 사항으로 정리해 전달.
+
+### 4. 마무리
+- DEPLOY-CHECK 마커 3곳 전부 제거(원상복구). grep 확인 "마커 흔적 없음".
+- 백엔드 확인요청은 파일 안 만들고 채팅으로만 정리(사용자 요청).
+
+### (부수 발견) `.env.aws` 파일 없음
+- `build:aws` = `MODE=aws` → `.env.aws` 읽는데 repo·gitignore 어디에도 없음(추적 env: `.env`, `.env.192.dev`, `.env.5f.dev`, `.env.dev`, `.env.prd`). 빌드서버에만 따로 두는 게 아니면 aws 빌드가 빈 env로 빌드될 위험. 이번 stale 건과는 별개. (확인 미완)
+
+---
+
+## 2026-06-23 (이어서) — VOC 종합 위험지수 고도화 (단순평균 → 가중치+피크 보정)
+
+### 1. 배경/현황 파악
+- 헤더(상담내용 영역) VOC 인라인의 "위험도" 숫자 = `chat/index.vue:735 vocAverage`. 클릭 시 「고객 감정 변화」모달(`VocHistoryModal.vue`, SVG 그래프+타임라인) 진입.
+- 기존 종합위험도가 **3군데**에서 제각각 단순평균(÷N)으로 계산됨:
+  - ① `voc.ts:51 averageScore` = (감정+민원+이탈)/3 → `isDanger`(≥0.8) + `CustomerVocPanel` "종합 위험도" 표시.
+  - ② `chat/index.vue:735 vocAverage` = 같은 ÷3 → 헤더 숫자(소수2자리).
+  - ③ `emotionVoc.ts:147 buildTotalRisk` = 존재 score 평균(÷N) → 상담이력/요약(`resolveVocView`) 종합위험도 게이지.
+- 단순평균 약점 3가지: (a)동일가중 (b)**피크 희석**(0.1/0.1/0.95→0.38 "안전"으로 위험 은폐, 최악) (c)최신 1 turn만(추세 무시).
+
+### 2. 사용자 결정
+- 가중치 **감정0.4 / 민원0.4 / 이탈0.2** 확정.
+- 2번(피크 보정) 채택 — 가중치만으론 (b) 피크 희석 안 풀려서 같이 가야 의미 완성(내 추천). 3번(추세/누적)·4번(비선형 합성)은 보류·비추천(4번=과잉경보로 0.5/0.8 기준선 직관 깨짐).
+- 적용 범위 = **세 군데 다 통일**(화면별 숫자 일관성).
+
+### 3. 구현 (공용 함수 단일 소스)
+- `emotionVoc.ts` 에 추가: `VOC_RISK_WEIGHTS{emotion0.4,complaint0.4,churn0.2}`, `VOC_DANGER_THRESHOLD=0.8`, `computeVocRisk(emotion,complaint,churn)`.
+  - 가중평균(없는 지표는 가중치 재정규화) → `peak=max(...)` → **peak≥0.8 이면 max(가중평균, peak)** 반환, 아니면 가중평균. 전부 없으면 null.
+  - `buildTotalRisk` 를 `computeVocRisk` 호출로 리팩터(level/pct/color 산출은 유지). scores 순서 = [감정,민원,이탈].
+- `voc.ts`: `import { computeVocRisk }` + `averageScore` 가 호출하도록 교체(`?? 0`). isDanger 로직(≥0.8) 그대로.
+- `chat/index.vue`: import 에 `computeVocRisk` 추가, `vocAverage` 가 호출(`?? 0).toFixed(2)`.
+- 전/후 예: 0.1/0.1/0.95 → 기존0.38(안전) → 신규0.95(위험). 0.6/0.7/0.2 → 0.50→0.56. 0.5/0.5/0.5 → 0.50 동일.
+- vue-tsc: 내 파일 에러 없음(뜬 건 기존 tsconfig deprecation 2건뿐).
+
+### 4. 미결(사용자 답 대기)
+- `CustomerVocPanel.vue:61` 가 비위험 시 **무조건 "· 안정"** 하드코딩 → 0.5~0.8(주의)도 "안정"으로 표시되는 기존 버그. warn 단계 반영할지 사용자 확인 요청함.
+
+### 5. (이어서) CustomerVocPanel 종합위험도 3단계화 + 모달 인포 안내 추가
+- **패널 하드코딩 수정**(`CustomerVocPanel.vue`): 기존 위험(≥0.8)/안정 2단계 → **안정/주의/위험 3단계**. `emotionVoc.ts` 에 `resolveRiskLevel(score)` export(임계값·라벨·색 단일 소스, `buildTotalRisk` 도 이걸 재사용) 추가. 패널은 `totalRisk = resolveRiskLevel(vocStore.averageScore)` 로 판정, 템플릿 `voc-total--{level}` + "종합 위험도 NN% · {label}". warn 스타일(앰버 #fef3c7/#b45309, 펄스 없음) 추가. danger(빨강 펄스)·safe(회색) 기존 유지. `isDanger` getter 는 남겨둠(미사용이나 임계값 문서·재사용 목적).
+- **모달 인포 보강**(`VocHistoryModal.vue` 범례 툴팁): 기존 "기준: …" 아래에 lg-note 한 줄 추가 — "종합 위험지수 = 감정·민원위험 각 40% + 이탈징후 20% 가중평균. 단, 한 지표라도 0.8↑이면 그 값으로 끌어올림(위험 은폐 방지)." (40%/20%/0.8 `<b>` 강조).
+- vue-tsc 관련 파일 에러 없음. 라이브 검증은 사용자.
+
+### 6. (진단) "화남인데 종합 0.0" — 프론트 계산 정상, 백엔드 emotion.score 손상이 원인
+- 사용자 테스트: 상담내용 패널 종합지수가 "화남"인데 0.0. 점수계산 검증 요청(+실시간 VOC publish 로그).
+- 프론트 경로 확인: display(헤더 vocAverage / 패널 currentItem)는 항상 **마지막 수신 메시지** 기준. `setVoc`(useChatMessageParser.ts:299 호출)가 모든 publish 를 history 에 쌓고 `currentIdx=마지막`. 중복 turn dedup 은 모달(dedupedHistory)만, 헤더/패널은 raw last.
+- **계산식 정상 증명**: turn13 정상 publish(emotion0/complaint0.7/churn0.9) → 가중평균0.46, peak0.9≥0.8 → 0.90(위험). 식 OK. all-zero publish 면 당연히 0.00.
+- **근본 원인 = 백엔드 데이터 손상 (스모킹건)**: 로그 `[SummaryService] CE emotion API 응답 원문 {"output":{"emotionType":"angry","emotionScore":"。8"}}` — `"0.8"` 의 앞 `0` 이 **전각 마침표 `。`** 로 깨짐 → `parseFloat("。8")=NaN`→0 으로 publish. 그래서 angry/dissatisfied 턴이 type↔score 모순(score 0)으로 옴. emotion 가중치 0.4가 0으로 깔려 종합 위험 deflate(예: turn12 emotion실제화남→0,complaint0.5,churn0.7 → 0.34 안정. 정상이면 peak보정 0.8 위험).
+- 부차 원인: 같은 turn_idx 중복 publish 중 all-zero 재평가가 last-wins 로 화면 덮음.
+- **결론: 프론트 무수정.** 백엔드에 (1)emotionScore `。8`→`0.8` 파싱 깨짐 수정 (2)score↔type 일치 검증 (3)all-zero 중간 재평가 publish 자제 요청. 프론트 방어(중복 turn 축별 max 병합)는 옵션으로 보류(사용자 선택).
+
+### 7. (추가 증거) score 손상 = 상습·다종 문자·3축 전부 — 원인 ②도 여기로 통합
+- 새 로그: `CE emotion API 응답 원문 {"emotionType":"dissatisfied","emotionScore":"،7","churnRiskScore":"،2","complaintRiskScore":"،6"}` → 결과 `VOC 분석 완료(CE): emotion=dissatisfied(0), complaint=0, churn=0` (3축 전부 NaN→0).
+- 깨지는 문자 다종 확인: `。`(U+3002 전각마침표, 0.8→。8), `،`(U+060C 아랍쉼표, 0.7/0.6/0.2→،7/،6/،2). 공통 = 앞 `"0."` 이 비-ASCII 구두점 1글자로 치환 → parseFloat NaN → 0. LLM 출력 아티팩트(상습).
+- 6번의 원인②(all-zero 중복 publish)가 사실 이 손상의 결과 = **원인 하나로 통합**.
+- 영향: emotion 만 아니라 complaint/churn 까지 동시 0 가능 → 위험 고객이 "안정"으로 둔갑(silent 0).
+- 백엔드 권고 구체화: parseFloat 전 정규화(비-ASCII 소수점유사글자→`.`, `/-?\d*\.?\d+/` 추출, `.8`→`0.8` 보충), 파싱 실패 시 0으로 떨구지 말고 skip/이전값유지/로그, 근본은 LLM score 를 숫자타입·ASCII로 출력 제약. 프론트는 이미 숫자 0 수신이라 무대응.
+
+### 8. VOC 인라인 기본노출 + 상세아이콘 로컬전용 (chat/index.vue)
+- **VOC 인라인 기본 노출**: `adv-voc-inline` 의 `v-if="vocLatest"` 제거 → 데이터 없어도 항상 표시. 기본값 = `resolveEmotionType(undefined)`→**일반**(#94a3b8), `vocAverage`→**0.00**. 실제 수신 시 자동 갱신.
+- **감정 변화 상세 아이콘(타임라인 버튼)**: 노출 조건 변천 = `vocHasHistory` → (요청)`v-if="false"` 숨김 → (로컬전용 시도, env방식 검토) → (사용자가 env방식 취소) → 최종 **`v-if="isLocalDev"`**.
+  - `isLocalDev = computed(() => location.hostname==="localhost"||"127.0.0.1")`. 로컬(yarn local/local5f, localhost:8173)만 true, 배포(사내 dev/aws 실도메인)는 false. ※ env(VITE_USER_NODE_ENV)는 로컬·사내dev 둘 다 "dev"라 구분 불가 → hostname 방식 채택.
+  - 누적 2건(vocHasHistory) 조건은 뺌(로컬선 데이터 없어도 항상 보이게). `vocHasHistory` getter 는 잔존.
+  - 사용자 localhost 확인 OK. 임시 콘솔 로그 심었다 제거.

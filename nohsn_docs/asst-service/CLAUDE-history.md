@@ -777,3 +777,77 @@ docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configServic
   - 후보 (A)프론트가 done까지 모아 렌더 / (B)RAG가 토큰 한덩어리 전송.
   - **프론트 회신: (A) 배제** — 프론트는 per-token 즉시렌더(throttle/debounce 없음), stream도 동일로직. 단 토큰프레임이 네트워크에서 묶여 도착하면 1회 read로 합쳐져 "한꺼번에" 보일 수 있음 = (B) 가능성.
 - **★ 미완 액션(다음)**: asst-service reader 루프에 **청크 도착 시각+바이트 로그** 추가(ASSIST_STREAM_LATENCY_LOG 게이트). write가 시간차로 여러번→RAG 점진전송(프론트 정상) / 마지막 한덩어리→(B) RAG 전송방식 확정. stream에도 같이 넣어 나란히 비교. RAG 처리시간 단축은 통제밖이라 오늘은 여기까지 합의.
+
+### 58. assist-stream 속도개선 결론 + distill 토글 시도→전면 원복 (2026-06-22, 최종 소스 변경 없음)
+- **프론트 실측(minimal body, done.stages)**: 의도 1.06s·검색 1.00s·선별 0·생성 1.76s ≈ 3.8s. asst-latency: 접수 0.00·연결 0.06·검색 1.08 = 1.14s(첫 sources). → **백엔드 몫 0~0.06s(무죄), 지연=RAG. done.stages/token_usage/distill 은 RAG(AICM) 생성값, asst-service는 통과만**(grep 0건 재확인).
+- **"한꺼번에 vs 타이핑" 증상**: asst-service는 버퍼링없이 즉시 릴레이 → 백엔드가 만드는 차이 아님. 프론트 회신=프론트는 per-token 즉시렌더(throttle 없음)라 (A)프론트 배제. SSE 이벤트 순서 `intent→query_analysis→sources→distilled(옵션)→token×N→done`.
+- **속도 비교 실측(curl, dev AICM 124.194.32.36:8173)**:
+  - `internal/document`(무인증, 검색만) **0.24s**
+  - `rag_assist`(검색+AI요약, SSE) **3.5~3.9s** → 차이 ≈ **generate(AI요약) 비용**. 검색 자체는 빠름.
+- **distill on/off 실측 비교(같은 query, rag_distill.txt vs rag_distill_false.txt)**:
+  - false: distilled 이벤트 **없음**, 전체 3882ms (stages intent848/search252/**distill0**/generate3625)
+  - true: distilled **옴**(`{selected_refs, summary, rationale, latency_ms}`), 전체 4481ms (distill 664 추가, **generate 동일 ~3.6s**)
+  - → **distill 켜면 +0.6초 느려짐(generate는 그대로). distilled 는 프론트 1차요약/참고문서 조기렌더용 데이터지 속도개선 아님.** 테스트 query("삼성코리아 펀드")가 매칭문서 없어 distilled.summary 빈 값이라 이점 미입증.
+- **시도→원복**: assist-stream 에 `ASSIST_STREAM_ENABLE_DISTILL` env 토글 추가(enable_distill=플래그) + .env.development=true 넣었다가, "속도개선과 무관·오히려 +0.6초"로 판단 → **assist-stream.service.ts·.env.development 전부 원복**(git diff로 service.ts 원본 동일 확인). distill 미사용(enable_distill:false) 기존 상태 유지.
+- **★ 최종 결론**:
+  1. **백엔드는 응답속도 못 줄임** — 병목은 RAG generate(~3.6s), asst-service 오버헤드 0~0.06s. RAG/LLM(모델·출력길이·스트리밍) 최적화는 AICM 담당 영역.
+  2. **채택된 해법(프론트)**: distill 무관하게 **sources 오면 문서 먼저 노출(~1초) + done에서 AI요약 노출** → 체감개선. (옵션: token을 done 대기말고 올 때마다 타이핑 렌더하면 요약이 더 일찍 차오름)
+- **(별개) AWS 새 고객서버 /stream 403 "조회 가능한 분류가 없습니다"**: AICM `PermissionEnforcer`가 그 토큰 계정(agent)의 **할당 분류 0개**로 판정(문서 `docs/callbot_advisor_api.md` §1). `rag_assist`만 권한체크, `internal/document`(무인증)는 통과 → 같은 workspace에서 검색은 되는데 rag_assist만 403. **우리 코드 무관, AICM 권한세팅(계정↔분류 매핑) 영역**. 로컬/dev는 정상, AWS만 발생(권한데이터 미세팅 추정).
+
+### 59. assist-stream 속도개선 — generate 병목 재확인 + 캐싱 방향 합의(미완, 내일 이어서) (2026-06-22)
+- **사용자 의도**: assist-stream이 RAG 호출이 느리다 → "검색문서 요약(distill)"이 느린 줄 알고 수정하려 함. 검토 결과 인식 교정:
+  1. 코드는 **이미 `enable_distill:false`**(`assist-stream.service.ts:54`) — distill 안 탐.
+  2. done.stages 재비교: distill은 켜도 664ms뿐, **진짜 병목은 `generate` 3625ms(전체의 93%)**. → 사용자도 generate가 범인임 인정.
+- **RAG 담당자 제약**: **LLM 모델 변경 불가**(담당자 회신). 모델 `gemma-4-31B`, completion 115토큰에 3625ms(토큰당 ~31ms).
+- **핵심 합의(중요)**: RAG가 **이미 token 스트리밍**(rag_distill_false.txt: token 이벤트 320개) + asst 릴레이도 버퍼링 없음 → **백엔드 최적**. 그러나 **상담사는 "요약 전체"가 필요** → TTFT(첫 글자) 개선은 **무의미**, 실질 대기 = `generate` 완료(마지막 글자 송신) + 프론트 렌더 시간. 사용자 표현: "끝까지 다 넘겨준 시간 + 프론트가 추가로 그리는 시간".
+- **결론: generate 절대시간은 우리 코드로 못 줄임**(RAG가 답변 생성하는 순수 LLM 시간, 모델·프롬프트·GPU 영역인데 막힘). asst-service가 RAG 안 건드리고 쓸 카드 2개:
+  1. **캐싱(우리 영역, 1순위)**: `workspace_id` + 정규화 `query` 키로 완성답변 저장 → 반복/FAQ 질문은 RAG 호출 자체 스킵, generate 3.6초 통째 제거. 단 질문 반복률에 효과 갈림.
+  2. **프론트 렌더링 시간 분리 측정**: "다 받고도 프론트가 더 그리는 시간"이 실측 안 됨. 토큰마다 마크다운 통째 재렌더면 느려지는 흔한 케이스 → 측정해서 프론트팀에 근거 제공.
+- **★ 미완(내일 이어서 결정)**:
+  1. 사용자가 원래 하려던 수정이 캐싱인지 다른 접근인지 확인.
+  2. 실제 상담 질문 **반복률**(캐싱 효과 좌우).
+  3. 프론트가 답변을 **토큰마다 다시 그리는 구조**인지 확인.
+  → 위 답에 따라 [캐싱 / 측정부터 / 프론트 이관] 방향 확정.
+
+### 60. VOC 테이블(emotions/callstat_voc) 고객 AWS 생성 실패 — 마이그레이션 견고화 (2026-06-23)
+- **증상**: `/summary` 의 VOC 테이블(`advisor.emotions`, `advisor.callstat_voc`)이 로컬/사내개발은 정상인데 **고객 AWS(Jenkins 배포)에서만 생성 안 됨**. (코드는 origin/develop·develop_nohsn 동일, 4개 엔티티 등록도 모두 정상)
+- **질문2(기존 summary 저장 영향 여부) → 영향 없음 확인**:
+  - 요약 본 저장 `saveSummaryData`(summary/keyword/category)는 emotions/callstat_voc 를 아예 안 건드림 → 무관.
+  - VOC 저장 `saveEmotion` 은 `summarizeCall` 148~161 에서 try/catch → 실패해도 요약 응답 정상.
+  - VOC 조회는 핫픽스 `16bdb0c`(getSummaryData 1052~, findByCallstatsId)로 try/catch → 500 안 나고 emotion=null/404. → **VOC 깨져도 summary 안전.**
+- **질문1(생성 실패 원인)**: `runSchemaMigrations`(dynamic-database.service.ts:448~)가 연결 시마다 raw SQL로 생성하나 전체 try/catch라 실패해도 경고만. 로컬/dev OK·고객만 실패 = 환경차. 유력순: ①앱 DB유저 advisor 스키마 CREATE 권한 없음(permission denied) ②advisor 스키마 미존재(마이그레이션에 CREATE SCHEMA 없었음) ③gen_random_uuid() 미지원(callstat_voc만, PG13미만/pgcrypto). + 구조문제: emotions→callstat_voc→CHECK 가 한 try라 앞 실패가 뒤 막음.
+- **조치(전체 견고화, 사용자 로그접근 어려워 방어적으로)**: dynamic-database.service.ts `runSchemaMigrations` 수정
+  ① `CREATE SCHEMA IF NOT EXISTS advisor` 선행 추가 ② `CREATE EXTENSION IF NOT EXISTS pgcrypto` 시도(PG13미만 대비) ③ emotions / callstat_voc 각각 독립 try/catch 로 격리 ④ 실패 시 원인 힌트 포함 명확 로그(permission/schema/gen_random_uuid). tsc 통과.
+- **남은 확인**: 다음 배포 후 고객서버 로그의 `[마이그레이션] ... 실패` 메시지로 진짜 원인 확정. 만약 `permission denied` 면 코드로 못 풀고 **고객 DBA가 앱유저에 advisor CREATE 권한 부여 or 테이블 선생성(migrations/*.sql)** 필요.
+
+### 61. VOC 테이블 미생성 원인 = 테넌트 DB 권한(CREATE 없음) 확정 + 진단로그 보강 (2026-06-23)
+- **흐름**: 고객서버(ArgoCD/k8s) emotions/callstat_voc 미생성 디버깅. 배포구조부터 확인됨 — Jenkins(`docker build --no-cache`→harbor push, 여기까진 이미지만) → ArgoCD `app set image=:v142` + `app sync`(aicc ns) 롤아웃. 초기 404는 롤아웃 Progressing 과도기였고, 새 코드(persistEmotion) 정상 배포 확인.
+- **진단 로그 보강**(dynamic-database.service.ts runSchemaMigrations): ①진입 `[마이그레이션] 시작: user/db` ②`advisor 스키마 권한 CREATE/USAGE`(has_schema_privilege) ③emotions/④callstat_voc 생성 성공로그 ⑤최종 `to_regclass` 존재확인 `emotions=O/X`. (query 제네릭으로 lint 통과)
+- **★ 원인 확정(로그)**: `[마이그레이션] 시작` 정상 → 근데 `permission denied for database`(CREATE SCHEMA), `permission denied for schema advisor`(CREATE TABLE), `permission denied to create extension pgcrypto` → `emotions=X, callstat_voc=X`. 즉 **테넌트 접속계정(user=db=company_xxx)은 advisor 기존테이블 읽기/쓰기만 되고 CREATE 권한 없음**. 기존 테이블은 프로비저닝 시 마스터계정이 미리 생성한 것; 신규 테이블은 앱이 자동생성 불가. 로컬/사내개발은 권한 있어 정상이었던 것.
+- **해결방향(코드 불가, DBA 영역)**: ①프로비저닝 DDL스크립트(사내개발DB 기준)에 두 테이블 추가(영구) ②DBA가 기존 테넌트 DB에 수동 CREATE+GRANT ③앱계정에 GRANT CREATE ON SCHEMA advisor(자동생성 작동, 보안상 비권장). summary 조회는 try/catch로 emotion=null 정상응답 중이라 서비스 안 죽음.
+- **현재 상태**: 사용자가 권한 정책 체크 중. DDL은 이미 있음(사내개발 기준). 권한 결정되면 마무리.
+
+### 62. 실시간 VOC 미노출 원인=채널 prefix prd↔dev 불일치 → dev 고정으로 해결 (2026-06-23)
+- **emotions/callstat_voc 권한**: DBA가 수동 테이블 생성(+GRANT)으로 해결. POST /emotion/data 200, assist-stream voc-test saved=true 로 테이블/저장 확인.
+- **★ 실시간 VOC 화면 미노출 진짜 원인**: `publishVoc` 채널 prefix가 `NODE_ENV==='production'→'prd'` 였는데, 이 시스템의 다른 소켓채널(nlp:complete/events/orchestrator)은 NODE_ENV 무관 **전부 `dev`**. 프론트도 `dev:4609686:56356659:call:voc` 구독. → 우리 VOC만 `prd:` 로 튀어 **채널 불일치 → 프론트 미수신**. (publish 는 ok=true 라 백엔드만 보면 정상으로 착각)
+- **시도→실패**: ①`VOC_CHANNEL_ENV ?? NODE_ENV fallback` + `.env.development=dev` → 고객서버(k8s, NODE_ENV=production)는 `.env.development` 안 읽힘(.dockerignore 제외 + production 이라 미로드[[env-load-priority]]) → 여전히 prd.
+- **★ 최종(채택)**: voc-realtime.service.ts ~565 `const env = process.env.VOC_CHANNEL_ENV ?? 'dev'` — **NODE_ENV 의존 제거, 기본 dev**(다른 채널과 일관). 코드배포만으로 해결(chart.git 미접근 우회). voc-test 로그 `channel=dev:...` 확인. 커밋 56b9eab/8189237/cb2cff9.
+- **CLI 단독 테스트**: `POST /assist-stream/voc-test` (force:true, reset:true) → 응답 published/saved + 로그 channel prefix 확인. 단 published:true 는 dev/prd 무관(채널명은 로그로만 판별).
+- **남음**: 실제 통화에서 프론트 화면 실시간 VOC 노출 최종확인.
+
+### 63. asst-latency SSE 이벤트 게이트 제거 — AWS 5단계 모달 누락 해결 (2026-06-23)
+- **증상(프론트 보고)**: AWS 고객사만 AICM 응답속도 상세모달이 5단계(API접수/AICM연결/AICM검색/결과전송/생성)로 안 펼쳐지고 단일막대 폴백. 로컬/사내dev는 정상. `done.stages`는 AWS도 정상수신 → **`asst-latency` 이벤트만 누락**.
+- **원인**: asst-latency 전송이 `if(this.latencyLog)` 게이트(env `ASSIST_STREAM_LATENCY_LOG===1`) 안에 있었음. 이 env가 레포 어느 .env에도 없음 → 배포 configmap 주입값이라 AWS엔 미설정 → 그 환경만 누락.
+- **조치**: `assist-stream.service.ts` 게이트 제거 — `asst-latency`는 **환경변수 무관 항상 전송**, 콘솔 구조화로그(`[assist-stream-latency]`)만 env 게이트 유지. tsc 통과. 커밋·배포는 사용자.
+
+### 64. assist-stream-new 신규 엔드포인트 — RAG 검색만 + 답변은 LLM Orchestrator(gpt-4o-mini) (2026-06-23)
+- **목적**: assist-stream 병목 = RAG 내부 sLLM(gemma)의 `generate`(0.5~10s 편차, [[항목59]]). 이걸 우회 — RAG는 검색까지만, 답변생성은 우리가 제어하는 orchestrator로.
+- **검색소스 검토(curl은 사용자가 실행 [[external-curl-user-runs]])**: 프론트는 `rag_assist`의 `event:sources` 포맷에 의존. `internal/document`(청크+score 유사하나 chunk_id·source_location.file_url 부족 → 프론트 문서활용 제한), `retrieve_doc`(문서 전체 덤프, score/chunk 없음 → 부적합). → **rag_assist 그대로 호출 후 sources까지만 받고 generate(token) 끊기** 채택(프론트 무수정·포맷 100% 일치).
+- **구현(신규 2파일)**: `controllers/assist-stream-new.controller.ts`(`POST /assist-stream-new`), `services/assist-stream-new.service.ts`. advisor.module 등록 + app.module AuthMiddleware exclude 추가. 기존 assist-stream/search 무수정.
+  - 흐름: rag_assist 호출 → SSE파싱(intent/query_analysis/sources 릴레이) → sources 직후 `reader.cancel()+abort` → sources content + conversationHistory 를 `customComplete(openai/gpt-4o-mini, serviceName:'adv')` 로 답변생성 → `event:token`(통짜 1회)+`done`(stages:{search,generate}, latency_ms, source) 릴레이. **비스트리밍 1단계**.
+  - tenantId: `dto.company?.id` 우선(빈번호출 user-service 왕복 회피), 없으면 token→`UserInfoService.getCurrentUser().agent.company_id`.
+  - `asst-latency` 이벤트도 추가(항목63과 동일 포맷, 항상 전송).
+  - 요청 바디 = 기존 `AssistStreamRequestDto` 동일 → **프론트는 URL만 `/assist-stream`→`/assist-stream-new` 변경**.
+- **실측(테스트환경 상이 → 기존과 직접비교 부적합)**: search593+gen1026=1620ms / 552+1259=1814ms / 914+**8968**=9884ms(generate 편차 큼). 비스트리밍이라 "수초 빈화면→통짜 출력" 체감 답답.
+- **★ 미완(나중에, 사용자 보류)**: ①`done`에 `completion_tokens`/`tps` 추가(generate 9초 원인=출력길이 확인 + TPS 실측) ②프롬프트 개선(`max_tokens`+간결화 + **STT 유사발음 교정** 의도 반영: 부정확 발화를 문서 정확용어로 이해/정정) ③2단계 SSE 스트리밍(체감속도). **커밋 안 함(사용자가 직접)**.
+- **TPS 메모**: TPS=Tokens Per Second=`completion_tokens ÷ generate초`. 기존 RAG샘플 ~31.7tok/s(gemma). 고객사 제출용 가공데이터(평균응답 1.5s/min1.0/max2.5 → 평균 ~89tok/s) 별도 제공.
