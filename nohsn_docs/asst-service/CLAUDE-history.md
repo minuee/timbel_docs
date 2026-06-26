@@ -851,3 +851,97 @@ docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configServic
 - **실측(테스트환경 상이 → 기존과 직접비교 부적합)**: search593+gen1026=1620ms / 552+1259=1814ms / 914+**8968**=9884ms(generate 편차 큼). 비스트리밍이라 "수초 빈화면→통짜 출력" 체감 답답.
 - **★ 미완(나중에, 사용자 보류)**: ①`done`에 `completion_tokens`/`tps` 추가(generate 9초 원인=출력길이 확인 + TPS 실측) ②프롬프트 개선(`max_tokens`+간결화 + **STT 유사발음 교정** 의도 반영: 부정확 발화를 문서 정확용어로 이해/정정) ③2단계 SSE 스트리밍(체감속도). **커밋 안 함(사용자가 직접)**.
 - **TPS 메모**: TPS=Tokens Per Second=`completion_tokens ÷ generate초`. 기존 RAG샘플 ~31.7tok/s(gemma). 고객사 제출용 가공데이터(평균응답 1.5s/min1.0/max2.5 → 평균 ~89tok/s) 별도 제공.
+
+## 2026-06-24
+
+### 65. callstat_voc 조회 API 추가 (call_id 기준, turn_idx asc 전체컬럼) (2026-06-24)
+- **목적**: 실시간 저장된 VOC(advisor.callstat_voc)를 콜 이력에서 사후조회. 엔티티/4스팟 등록은 이미 완료돼 있었음.
+- **엔드포인트**: `GET /callstat/calls/by-call-id/:call_id/voc` (기존 by-call-id/:call_id/turns·/stt 패턴과 일관). callstats_call 조인 없이 **callstat_voc.call_id 직접 매칭**(call_id=varchar128, raw call id). turn_idx ASC, 전체컬럼 그대로. 데이터 없으면 빈배열 `[]`(404 아님).
+- **변경 2파일**: `advisor.service.ts` `findVocByCallId()` + CallstatVoc import / `callstat.controller.ts` 엔드포인트 + import. build 통과.
+- **프론트 전달**: base path 포함 `GET /api/asst/v1/callstat/calls/by-call-id/{call_id}/voc`, call_id 그대로 param. 리턴 필드명세 전달(sentiment_*/complaint_risk_*/churn_risk_* score는 0~1 nullable, description nullable → null 가드).
+
+### 66. 배포 env 주입 구조 규명 + ArgoCD 요청 가이드 문서화 (2026-06-24)
+- **발단**: 신규 env `CE_API_KEY`/`CE_API_LLM_URL` 가 배포에 미적용. 고객사=k8s+ArgoCD(접속만 가능).
+- **★ 규명**: 배포 Pod env는 `.env.development` 가 아니라 **k8s Deployment가 주입**. 근거 — `.dockerignore`가 `.env.*` 제외(이미지 미포함) + ConfigModule이 파일없으면 process.env 사용 + 코드레포에 k8s manifest 없음. → **`.env.development` 수정은 배포에 무효**.
+- **Deployment env 구조(Live Manifest 확인)**: `containers[].env` 직접나열(envFrom 안씀). 평문=`value:`(REDIS_HOST 등), 비밀=`valueFrom.secretKeyRef`→Secret `asst-service-secret-v147`. 그 Secret은 **CSI SecretProviderClass `asst-service-spc-v147`**(secrets-store.csi.k8s.io, /mnt/secrets, SA secrets-sa)가 외부저장소에서 채움. value/valueFrom은 택일(값은 Secret/외부저장소에만, Deployment엔 주소만).
+- **GitOps 소스(App DETAILS→SOURCE)**: `gitlab.timbel.dev/apps/devops/langsa/chart` path `ecp/chart/apps`, 계층형 values 5개(뒤가 앞 덮음). asst-service는 `values/aicc/asst-service/base-values.yaml`(공통)·`dev-values.yaml`(dev전용). Secret/SPC/이미지 전부 `-v{BUILD_NO}` → CI 템플릿 자동생성 → **Argo UI Live Manifest 직접 EDIT 금지**(sync/빌드 덮어씀). 사용자 차트레포 접근권한 없음 → DevOps 요청 필요.
+- **금지방법**: ①.dockerignore에서 .env 빼서 이미지에 굽기(비밀 노출, .env.development 이미 git커밋됨) ②Argo Live EDIT(임시). ✅정석=차트 values 수정→MR→Sync.
+- **산출물**: `docs/argocd-request.md` 생성(구조·금지방법·절차·DevOps 요청문 템플릿). 메모 [[deploy-architecture]] 에 env 주입방식 추가.
+
+### 67. CE env 미주입 임시 하드코딩 fallback (담당자 부재, 추후 원복) (2026-06-24)
+- **상황**: 요청은 넣었으나 DevOps 담당 부재중. CE_API_KEY/CE_API_LLM_URL 없으면 CE 연동 동작불가 → 임시로 소스에 기본값 박고 나중에 env 주입되면 재배포 원복.
+- **읽는 곳**: `summary.service.ts` 2곳뿐(633 CE_API_LLM_URL, 693 CE_API_KEY). emotion.controller는 doc스트링만.
+- **발견**: CE_API_LLM_URL은 이미 `CE_EMOTION_FALLBACK_URL`로 fallback 존재(사실상 하드코딩됨). **진짜 빠진건 CE_API_KEY**(키없으면 x-api-key 헤더 자체 미부착→인증실패).
+- **조치**: 임시상수 2개(`CE_API_LLM_URL_FALLBACK`/`CE_API_KEY_FALLBACK`, `[임시/TODO 원복]` 주석) 추가 + `configService.get(key, 기본값)` 2번째인자로 적용. env 주입시 env우선, 없으면 fallback. build 통과. 사용자 커밋·배포 완료, 테스트 진행중.
+- **★ 원복 체크리스트**: env 차트반영·재배포되면 → 상수2개 삭제 + get() 기본값인자 제거(`get<string>('CE_API_KEY')`로) + 재배포. `CE_API_KEY_FALLBACK` grep으로 위치추적 가능.
+
+### 68. LLM Orchestrator 호스트 마이그레이션(langsa 삭제 대비) + CE 하드코딩 원복 + LLM 문서화 (2026-06-24)
+- **배경**: 인프라가 langsa 도메인(`dev-ecp-llm-orchestrator-service.langsa.ai`) 다음주 삭제 예정. "langsa는 게이트웨이 통해서만 접근" 안내. asst-service가 LLM_ORCHESTRATOR_HOST로 쓰는 중(요약/키워드/상담유형/자동todo).
+- **영향범위 규명**: LlmOrchestratorService 사용처 = summary(요약/키워드/상담유형), todo(자동생성). assist-stream-new는 사용자가 다른걸로 교체. 감정/VOC는 orchestrator 아님(기본 CE, `VOC_ANALYZER=llm`일 때만 orchestrator).
+- **인프라 회신**: 5층=langsa 도메인 / AWS내부=`http://llm-orchestrator-service-svc.aicc` / 게이트웨이외부=`https://ecpad.etaas.co.kr/aicc/llm-orchestrator-service` (k8s내부는 http 주의).
+- **배치 정리**: `.env.development`(내부DNS세트)=내부DNS, `.env.5f/.192`(5층,클러스터밖)=게이트웨이주소. 내부 DNS는 5층서 resolve 불가. AWS배포 env는 차트가 결정(인프라가 이미 적용)이라 .env 수정은 배포 무효 — 사용자가 .env.development=AWS세트라고 정정.
+- **경로 prefix**: 내부직접접근은 `/api/llm-orchestrator/v1` 유지 필요(게이트웨이 없어 prefix 안붙음). 게이트웨이 외부주소는 `/api`·끝슬래시 빼는게 맞음(게이트웨이가 prefix 부여). asst-service 자신의 `/api/asst/v1` 와 동일 패턴.
+- **★ 직접 검증(사용자 명시 요청으로 curl 실행)**: `POST https://ecpad.etaas.co.kr/aicc/llm-orchestrator-service/llm/custom/complete` (X-Tenant-Id=company_71900448.., X-Service-Name=adv, Bearer) → **HTTP 201 success:true, gpt-4o-mini 실제응답, latency 964ms**. 게이트웨이 주소 정상 확정. `.env.5f.development` 끝슬래시 제거 + (테스트용)VOC_ANALYZER=llm 추가.
+- **혼동정리**: emotion/analyze 는 orchestrator 아니라 CE를 탐(VOC_ANALYZER 기본 ce). analyzeVocViaOrchestrator는 등록프롬프트 없이 코드내장프롬프트로 /llm/custom/complete 직접호출. orchestrator 실패해도 200+중립fallback이라 응답내용 봐야함.
+- **CE 하드코딩 원복**: 인프라가 차트에 CE_API_KEY/CE_API_LLM_URL 주입완료 → summary.service.ts 임시 하드코딩 상수2개 + get() 기본값 제거(원위치 `get('CE_API_KEY')`). build 통과, 잔여 0. 메모 ce-env-temp-hardcode 삭제. (.env.5f/.192 의 CE_API_KEY는 5층 도커용이라 유지)
+- **문서화**: `docs/advisor-summary-llm.md`(요약/자동todo API 명세), `docs/advisor-llm-orchestartor.md`(LLM 호출경로·호스트·등록프롬프트·상담유형 전문/스키마). 프롬프트는 요약/키워드/자동todo=Orchestrator 등록(레포에 없음, 이름만), 상담유형=코드 하드코딩(분류체계 목록까지)·customComplete(provider/model만, temp/maxTokens 미지정). 키워드 system/user 2개=ChatCompletion 표준(system=역할규칙고정, user=대화데이터).
+- **callstat_voc 조회 API**(항목65) 도 이 세션 작업: `GET /callstat/calls/by-call-id/:call_id/voc`, call_id 직접매칭, turn_idx ASC, 전체컬럼.
+
+### 69. AWS 통화일시(started_at/ended_at) +9 어긋남 — KST저장 no-tz를 UTC+Z로 환산 (2026-06-24)
+- **증상**: AWS 배포 화면(대시보드 최근콜·콜이력 리스트)에서 통화일시가 정확히 **+9시간** 어긋남(15:27 통화 → 화면 00:27). 로컬/5층은 정상.
+- **★ 진짜 원인**: `started_at`/`ended_at`은 `raw_call.callstats_call`의 **`timestamp`(no-tz)** 컬럼인데 **AWS DB는 KST 벽시계로 저장**(예 "15:27"), **로컬/5f DB는 UTC(-9h)로 저장**. 프론트는 보정 안 하고 `new Date(raw).toLocaleString("ko-KR")` 만 함 → **타임존(Z) 없는 값은 깨짐**. `created_at`(timestamptz)은 UTC절대시각이라 `...Z`로 나가 정상이었음.
+- **삽질 경로(교훈)**: ① process TZ(tz-init/`docker-compose TZ=UTC`/ArgoCD `TZ=UTC`)는 **무관**(formatDateTime이 벽시계 라운드트립이라 TZ 독립). ② TimezoneInterceptor(+9) 삭제·main.ts 등록제거 → 효과 없었음(화면이 그 응답경로를 안 씀). ③ by-call-id 목록을 formatDateTime→평문으로 바꿔도 평문은 Z가 없어 프론트가 또 +9. **결정타는 "화면이 실제 호출하는 엔드포인트를 못 짚은 것"** — 대시보드/콜이력 리스트는 `GET /callstat/agent-summary`(`CallStatsService.getCallStatsByAgentAndDate`, getRawMany→`row.started_at as Date` 그대로)를 씀. 거기가 진짜 수정처였음.
+- **★ 해결**: started_at/ended_at(KST 벽시계)을 **`created_at`과 동일한 UTC ISO(...Z)** 로 환산. 헬퍼 `toUtcIso(date)` = 저장된 벽시계를 `+09:00`로 해석 → `new Date(...).toISOString()` → `...Z`. (TZ 독립, AWS=KST저장 기준. 5f=UTC저장이라 5f엔 안 맞지만 테스트데이터라 무시)
+- **수정 파일**: ① `advisor.service.ts` — `toUtcIso` 추가, started_at/ended_at 6군데(일반목록/by-call-id목록/상세-by-id call+turns/상세-by-callnumber call+turns) 적용. ② **`call-stats.service.ts`(agent-summary)** — `toUtcIso` 추가, `row.started_at/ended_at` 적용 ← **실제 화면 수정처**. created_at/updated_at(timestamptz)은 raw `...Z` 유지(정상).
+- **부수**: `TimezoneInterceptor` 파일 삭제 + main.ts 등록/import 제거(되돌릴 필요 없음, created_at류는 raw Z로도 정상). `tz-init.ts` import는 사용자가 main.ts에서 제거(무영향). 검증: agent-summary curl에서 `started_at: "2026-06-24T06:27:26.000Z"`(=15:27 KST) 확인.
+- **남은 것(주의)**: turn raw 반환 엔드포인트(`/callstat/calls/:id/turns`, `findTurnsByCallId/ByCallNumber`, entities/keywords 등)는 started_at을 raw로 내보내 +9 가능 — 그 화면 쓰면 동일 패턴(toUtcIso)으로 추가수정 필요.
+
+### 70. 실시간 VOC 디버깅 로그 추가 + LLM Orchestrator ENOTFOUND(env 로드 함정) (2026-06-25)
+- **요청 2건**: ① VOC가 LLM에 보내는 대화 구조 재확인 ② "첫 대화인데 감정점수 크게 나옴" 디버깅용 상세로그 추가.
+- **① 구조 확인**: assist-stream 경로 `VocRealtimeService.handleUtterance`(voc-realtime.service.ts:258)는 **누적분 전부 + 현재발화**를 보냄(마지막 1개 아님). 첫호출만 `conversationHistory`로 시드(:269) → `dto.query`를 **무조건 'customer'로** 누적(:282) → `buildConversation`(전체 join '\n', :411) → `analyzeEmotion`→CE emotion API `{conversation}`(summary.service.ts:712). MAX_BUFFER=40. **점수는 코드가 안 만들고 CE 응답을 clamp(0,1)만**(mapCeEmotionResponse:749, toScore:587) → 첫발화 고점수면 CE 프롬프트/스케일 문제 or stale버퍼(states맵 프로세스잔존, assist-stream경로엔 clear 안불림).
+- **② 로그 추가**(handleUtterance, 분석 로직 무수정): 진입상태(firstContact/seededHistoryCount/totalTurns/customerTurns/force/query100자) + LLM전송(lines/chars/head) + 결과3축(emotion/complaint/churn). PII 최소화로 head는 100자(사용자 선택 B)→후에 500자로 늘림. 필터태그 **`[민누이로그분석]`** 전체 prepend(grep용). **임시 디버깅 로그 — 원인 다 잡으면 제거 예정(놔두기로 함, grep `민누이로그분석`으로 추적).**
+- **head 잘림 착시**: `chars=68`인데 head가 짧아보임 = 100자제한 아님. `conversation`이 `join('\n')`이라 **개행이 로그를 다음줄로 밀어** 잘려보인 것. → `.replace(/\n/g,' | ')` 한줄화로 해결. lines=3/5턴은 정상(assist-stream 호출수≠STT턴수, agent발화 미누적·customer만 쌓임 → 감정 부정편향 가능 단서).
+- **★ LLM Orchestrator 503 "연결할 수 없습니다"**: Request `…/aicc/asst-service/summary` → 503. 코드상 503=`error.request`만(연결단계 실패), 502=`error.response`(경로/4xx) (llm-orchestrator.service.ts:197-210). **경로404 아니라 DNS/연결 문제로 확정.**
+- **★ 진짜원인 = env 로드 우선순위 함정([[env-load-priority]])**: 로그 스택 `getaddrinfo ENOTFOUND dev-ecp-llm-orchestrator-service.langsa.ai` → 실제 호출호스트가 **`.env`의 langsa값**(.env:19), 사용자가 `.env.development`에 박은 `http://llm-orchestrator-service-svc.aicc`(:25)가 **안 먹음**. 이유: **`.env`가 최우선 로드**(NODE_ENV별 `.env.{env}` 우선 안되는 배포구성). langsa는 이 클러스터(aicc)서 resolve 불가라 ENOTFOUND. → **`.env` 직접 수정으로 해결, 잘 됨.** 교훈: 이 배포 LLM_ORCHESTRATOR_HOST 등 바꿀 땐 `.env.development` 아니라 **`.env`**를 고쳐야 함.
+
+### 71. VOC emotion score 재정렬 — CE 최초순서 → 위험 단조순서 변환 (2026-06-26)
+- **배경**: VOC 3축(emotion/complaintRisk/churnRisk)을 프론트가 평균내 **종합위험지수** 산출. 그런데 emotion 5단계가 `normal-thanks-satisfied-dissatisfied-angry`(최초순서)면 score축이 **비단조**(satisfied(만족,0.5)가 normal(중립,0.1)보다 위험 높게 평균됨) → 평균 왜곡. 핵심 발견: **종합위험지수 평균계산은 백엔드에 없고 프론트가 함**, CE도 종합지수 안 줌(우리는 3축 전달자).
+- **설계 결론(논의 끝)**: ① emotionType **신뢰**(LLM이 angry라 했으면 그 감정 맞다고 봄), 그 type 구간 안에서 강도로 score. ② 5단계를 **위험 단조 순서** `thanks<satisfied<normal<dissatisfied<angry`(thanks=0.0~ … angry=0.8~1.0)로 재배치하면 프론트 평균이 정상화. ③ 백엔드 변환은 **균등 0.2폭**으로 단순하게(비균등 가중치는 실데이터로 튜닝, 지금 매직넘버 금지). normal 베이스라인(0.5)이 위험에 떠있는 우려는 **프론트 평균 정책**에서 풀 일(레이어 분리).
+- **★ CE 실제 입력 확정**(CE담당자 회신): CE가 최초순서 절대값으로 보냄 — normal `0.0~0.19` / thanks `0.2~0.39` / satisfied `0.4~0.59` / dissatisfied `0.6~0.79` / angry `0.8~1.0` (+ emotionType). 즉 우리가 받는 score는 "type내 강도 0~1"이 아니라 **5구간 절대값**.
+- **★ 구현**(`summary.service.ts`): `remapEmotionScore(rawType, rawScore)` 추가 — **emotionType 신뢰 + 구간 내 강도(상대위치) 보존**으로 새 구간 재배치. 테이블 `ORDER{type:{ceLower, lo, hi}}`: thanks(0.2→0.0~0.19) satisfied(0.4→0.2~0.39) normal(0.0→0.4~0.59) dissatisfied(0.6→0.6~0.79) angry(0.8→0.8~1.0) — hi에 0.01갭 미러링해 경계 비겹침. 식 `shifted=lo+(ceScore-ceLower)` → 새구간 clamp → 소수2자리. **폴백: type이 5종 아니거나 score 숫자불가면 normal/0.5**(`parseScoreOrNull`로 0과 구분). `mapCeEmotionResponse`가 이 변환 사용(emotionScore의 `toScore` 직접호출 대체). complaintRisk/churnRisk는 단조축이라 무수정.
+- **적용범위**: `analyzeVocByCeApi` 경유라 realtime(통화중 handleUtterance)·summary(통화후) **양쪽 자동 적용**. 검증: normal0.1→0.5 / thanks0.3→0.1 / angry0.9→0.9 / 구간벗어난 angry0.5→clamp0.8 / weird·"abc"→normal0.5. tsc 통과.
+- **CE팀 당부**: score는 해당 emotionType 안에서의 강도로 일관되게 줘야 변환 정확(프롬프트 수정중). 재시작 필요(코드변경).
+
+### 72. PostCall-LLM — 상담사후처리 4개 LLM을 독립 테스트 엔드포인트로 신설 (시작) (2026-06-26)
+- **목표**: summary API가 내부에서 개별호출하는 LLM 4종을 emotion `analyze` 패턴처럼 **conversation 직접입력 → 호출 → 결과반환** 독립 엔드포인트로 신설. **기존 흐름(`summarizeCall`/`autoCreateTodos`)은 무수정**, 스웨거에서 호출만으로 테스트 가능하게.
+- **대상 4종**(현 호출방식): ① 할일자동생성 `todo.service.ts:436 callLlmAutoCreateTodos` complete `adv-auto-create-todos` ② 내용요약 `summary.service.ts:236 callLlmSummarize` complete `adv-conversations-summarize`(4필드→마크다운조립) ③ 키워드 `:291 callLlmKeywords` complete `adv-conversations-summarize-keyword`(count) ④ 상담유형 `:340 classifyCounselingType` **customComplete openai/gpt-4o-mini + 인라인 systemPrompt(~120줄 카탈로그) + JSON파싱**. 1·2·3는 오케스트레이터 등록프롬프트, 4만 코드하드코딩.
+- **호출구조 확인**: 전부 개별 axios.post(배치 없음). summary 1콜=Promise.all로 요약·키워드·상담유형(+VOC) 동시발사, 할일은 별도 API. 프론트→asst 2API / asst→LLM 4~5개 개별호출.
+- **패턴 레퍼런스**: `emotion.controller.ts` `@ApiTags('VOC-LLM')` `analyze`/`analyze/ce-raw` — conversation body 받아 LLM/CE 직접호출, DbCleanupInterceptor, @ApiBearerAuth('bearer').
+- **확정**: 스웨거 그룹명 **`PostCall-LLM`**(상담사후처리). request body/endpoint/return은 사용자가 4개 순차 제공 예정. **첫번째 입력 대기중.**
+
+- **① 할일자동생성 구현 완료 + 스웨거 테스트 OK**: 신규 모듈 `src/advisor/postcall/`(기존 summary/todo 무수정). `dto/ce-todolist-test.dto.ts`(conversation·maxLength:number·includeSimple:string) / `services/postcall-llm.service.ts`(`runTodolistRawByCe` — emotion `analyzeVocRawByCe` 패턴 복제: base=`CE_API_LLM_URL` 공유 path=`/ai-apps/advisor-todolist/runs` fallback full, 헤더 x-api-key+Authorization+X-Tenant-Id, getCompanyIdFromToken 복제) / `controllers/postcall-llm.controller.ts`(`@ApiTags('PostCall-LLM')` `POST /postcall/todolist`). advisor.module 3곳 등록. **CE 응답 원본 그대로 노출**(split 안함 — 실제 서비스 교체 시점에 `|` split). 응답 `{output:{todos:"a|b|c"},outcome:"success"}`. 함정: 서비스 파일 상단 주석에 `ai-apps/*/runs` 쓰면 `*/`가 블록주석 조기종료 → "하위 runs"로 회피. tsc 통과. 나머지 3개(요약/키워드/상담유형) 같은 모듈에 path만 바꿔 추가 예정.
+
+- **②③④ + emotion path 변경 완료(스웨거 테스트 OK)**: 모두 같은 `PostCall-LLM` 모듈에 추가. service에 CE 호출 공통메서드 `postToCe<T>(path, fallbackUrl, body, token, label)` 추출(헤더 x-api-key+Auth+X-Tenant-Id, 502변환, conversation 80자 로그) — todolist도 이걸 쓰게 리팩토링.
+  - ② **내용요약** `POST /postcall/summary` path `/ai-apps/advisor-summary/runs`, body `{conversation}`(공용 `CeConversationDto`), 응답 `output.{customerInquiry,handlingResult,followUp,notes}`+outcome.
+  - ③ **키워드** `POST /postcall/keywords` path `/ai-apps/advisor-keywords/runs`, body `{conversation,count:number}`(`CeKeywordsTestDto`), 응답 `output.keywords`=파이프문자열.
+  - ④ **상담유형** `POST /postcall/category` path `/ai-apps/advisor-category/runs`, body `{conversation, categories}`(`CeCategoryTestDto`) — **categories=파이프구분 후보카탈로그를 클라가 넘김**(기존 코드 하드코딩 카탈로그를 외부화), 응답 `output.{id:"1|2|3", categoryPath:"A>B>C|..."}`+outcome.
+  - 전부 **CE 원본 그대로 노출**(파이프 split 안함 — 실서비스 교체 시 적용). 기존 summary/todo 흐름 무수정.
+  - **기존 emotion(VOC) CE path 변경**: `/ai-apps/emotion/runs` → `/ai-apps/advisor-emotion/runs` (summary.service 동작상수 2곳 CE_EMOTION_PATH/FALLBACK + 주석 7곳 일괄). 적용에 서버 재시작 필요.
+  - 최종 PostCall-LLM 4개(todolist/summary/keywords/category) 전부 tsc 통과 + 스웨거 테스트 정상.
+
+- **④ category request body 수정 + 파이프 응답 배경**: 처음에 잘못 만들어 body에 `categories`(후보 카탈로그)를 넣었으나 **제거** — 올바른 구조는 body `{conversation}`만 보내면 CE가 **자체 프롬프트의 카탈로그**로 분류. 전용 `CeCategoryTestDto` 삭제하고 `CeConversationDto` 재사용. service `runCategoryRawByCe(conversation, token)` body `{conversation}`만.
+  - **현 구조 정리**: 기존 운영 `classifyCounselingType`은 카탈로그+분류규칙+응답형식(**배열** `[{id,categoryPath}]`)을 전부 **asst-service 코드 systemPrompt(:347~471)에 하드코딩** → LLM오케스트레이터(customComplete). 새 CE `advisor-category`는 동일 카탈로그가 **CE 쪽 프롬프트로 이동**(우리 눈엔 안 보임, 우리는 conversation만 전송). "하드코딩 위치만 우리→CE 이동", 둘 다 하드코딩.
+  - **★ 응답형식 차이(중요)**: CE 개발자가 배열을 못 줘서 사용자가 **파이프 문자열로 타협** — `output.{id:"1|2|3", categoryPath:"A>B>C|D>E>F|..."}`. 실서비스 교체 시 **id·categoryPath 각각 `|` split 후 같은 index끼리 zip**해서 기존 배열 `[{id,categoryPath}]`로 복원 필요(todos/keywords는 단일필드 split, category만 2필드 split+zip). 지금 테스트 4개는 전부 **원본 그대로**(변환 없음), split·zip은 실서비스 교체 시점에 일괄 적용 예정.
+
+### 73. PostCall-LLM 4종 신설 + VOC 실시간 "화남 오표시" 원인규명(프론트 채널 필터) (2026-06-26)
+- **PostCall-LLM 4종 신설**(`src/advisor/postcall/`, 기존 summary/todo 무수정): CE service `/ai-apps/advisor-*/runs` 직접호출 테스트 엔드포인트. 그룹명 `PostCall-LLM`(상담사후처리). emotion `analyze/ce-raw` 패턴 복제, 전부 **CE 원본 그대로 반환**(split 안함).
+  - ① `POST /postcall/todolist` (advisor-todolist, body conversation+maxLength+includeSimple, 응답 output.todos 파이프) ② `POST /postcall/summary` (advisor-summary, body conversation, output 4필드) ③ `POST /postcall/keywords` (advisor-keywords, body conversation+count, output.keywords 파이프) ④ `POST /postcall/category` (advisor-category, body **conversation만** — categories는 CE 프롬프트 자체보유, output.{id,categoryPath} 파이프).
+  - service 공통부 `postToCe<T>()`. 스웨거 summary에 CE path 노출(목록 가시성), description에 full URL. 실서비스 교체 가이드는 `CLAUDE.todo.md` 참조.
+  - **emotion(VOC) CE path 변경**: `/ai-apps/emotion/runs` → `/ai-apps/advisor-emotion/runs`(summary.service 상수2+주석 일괄).
+- **★ VOC 실시간 "프론트에 화남(0.85) 표시" 원인규명 (코드수정 없음, 진단만)**:
+  - **증상**: ce-raw 직접호출은 normal(0.1)인데 프론트 실시간 화면엔 angry/0.85.
+  - **경로 확인**: 프론트 실시간 = `handleNlpComplete`(Redis nlp:complete 구독)가 프로덕션 경로(voc-realtime.service.ts:255 주석). `handleUtterance`는 테스트/단발(voc-test). head500 conversation 로그는 handleUtterance(305)에만 있어 실경로엔 안 찍힘.
+  - **점수차 원인**: ce-raw=CE원본(remap 없음), 실시간=`remapEmotionScore`(오늘아침 작업) 거침. normal은 0.4~0.59로 재배치돼 **normal/0.1 → normal/0.5**. 단조축(complaint/churn)은 toScore(clamp)만. → ce-raw vs 실시간 점수 다른 건 **의도된 설계**(버그 아님).
+  - **0.85의 진짜 정체**: type이 **angry**. remap/프론트 아니라 **CE가 실제 angry 판정**. 원인=해당 call_id 버퍼에 부정발화 누적("어쩌라고/왜 손실이 커요" 등 40턴, 전부 customer·2배중복). 누적분 전체를 CE로 보내(buildConversation) angry 나옴.
+  - **★★ 핵심 버그(프론트 해결)**: publish 채널이 **상담사(cc_cti_id) 단위**(`dev:{vendor_tenant_id}:{cc_cti_id}:call:voc`)라 call_id 없음. 4개 화면(로컬/개발/양산/관리자)을 같은 계정으로 열어 각각 call_id 생성→4콜이 같은 채널로 publish→모든 화면이 8메시지(4콜×2턴) 다 수신, 남의 콜(화난 콜)까지 표시. **payload엔 call_id 있음** → 프론트가 `payload.call_id===내call_id` 필터로 해결(채널 cc_cti_id 단위 유지). 백엔드 무수정.
+- **남은 개선(미적용, todo)**: 실시간 VOC 버퍼 누적→슬라이딩 윈도우(최근 6~10발화, agent발화 포함, 중복제거, 통화종료 clear). `CLAUDE.todo.md` 등록됨. 커밋은 사용자가 직접.

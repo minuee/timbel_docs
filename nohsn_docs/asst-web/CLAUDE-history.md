@@ -621,3 +621,302 @@
   - `isLocalDev = computed(() => location.hostname==="localhost"||"127.0.0.1")`. 로컬(yarn local/local5f, localhost:8173)만 true, 배포(사내 dev/aws 실도메인)는 false. ※ env(VITE_USER_NODE_ENV)는 로컬·사내dev 둘 다 "dev"라 구분 불가 → hostname 방식 채택.
   - 누적 2건(vocHasHistory) 조건은 뺌(로컬선 데이터 없어도 항상 보이게). `vocHasHistory` getter 는 잔존.
   - 사용자 localhost 확인 OK. 임시 콘솔 로그 심었다 제거.
+
+### 9. 감정 미니 스파크라인 (헤더 인라인) — 위험도 숫자 → 감정 점수 + 추이 그래프
+- 사용자 요청(voc.png 참고): 위험도(종합) 숫자 제거 → `● VOC {감정라벨}` 옆에 **감정 추이 미니 스파크라인** + **감정 점수(숫자)**. 상세버튼은 localhost 전용 유지.
+- chat/index.vue 변경:
+  - import 에서 `computeVocRisk` 제거(헤더는 더 이상 종합위험 안 씀). `vocAverage` 삭제.
+  - `clampScore` 헬퍼 + `vocEmotionScore`(최신 turn emotion.score, 0.00 기본).
+  - `vocEmotionPoints`(같은 turn 중복은 최신 1건으로 dedup → turn당 1점), `vocShowSpark`(≥2건), `vocSparkPoints`(SVG polyline), `SPARK_W=56/SPARK_H=18`.
+  - 템플릿: `.adv-voc-score`(위험도 ⋯ 리더) 블록 → `.adv-voc-spark`(svg polyline, 선색=현재 감정색 vocSentimentMeta.color) + `.adv-voc-emotion-score`(숫자). 컨테이너 gap16→gap12.
+  - CSS: `.adv-voc-score` 제거, `.adv-voc-spark`/`__svg`/`__line`(non-scaling-stroke) + `.adv-voc-emotion-score` 추가.
+- **valign "붕 뜸" 수정**: 고정 0~1 스케일이라 낮은 점수들이 박스 하단에 붙어 떠 보임 → `vocSparkPoints` 를 **데이터 자체 min~max 정규화**(평탄하면 중앙선, pad=3)로 변경해 박스 높이 꽉 채움. (절대값은 옆 숫자가 담당)
+- **폭 동적화 + 80px 컷**: `sparkWidth` computed = `min(80, max(36, (n-1)*12+12))`. svg 에 `:style="{ width: sparkWidth+'px' }"`, CSS 고정 width 제거. viewBox(56) 고정 + preserveAspectRatio=none 으로 렌더폭에 맞춰 가로 stretch. 헤더 우측(margin-left:auto) 안 밀리게 cap.
+- vue-tsc 통과. ⚠️ 사용자가 "에러 나고 있다" 보고했으나 메시지 확인 전 마무리 결정 → 미진단(다음 세션에 콘솔/터미널 에러 텍스트 확인 필요).
+
+## 2026-06-24 — 상담이력 상세에 감정변화 그래프(VOC 상세) 모달 연결
+
+### 1. 요청/목표
+- 상담이력 상세 페이지의 "감정(VOC탐지)" 옆에 그래프 아이콘 추가 → 클릭 시 VOC 상세내역 모달 노출.
+- 실시간 화면에서 쓰던 모달 재사용 가능하면 재사용, 데이터형식 다르면 참고해 신규.
+
+### 2. 현황 파악
+- 실시간 화면(`chat/index.vue`): 상담내용 헤더에 `timeline` 아이콘(`v-if="isLocalDev"` 로컬전용) → `vocStore.openHistoryModal()` → **`chat/VocHistoryModal.vue`**(SVG 꺾은선 + 턴 타임라인). 이 모달은 **`vocStore.history`(실시간 메모리 `VocMessage[]`)만** 소비.
+- 상담이력 상세(`ChatHistoryModal.vue`): `CustomerPanel` 에 `VocDetailBox`(감정/민원위험/이탈징후/종합위험도 정적 박스)만 있고 그래프 없음.
+- **데이터 형식 차이**: 신규 API `GET /callstat/calls/by-call-id/{call_id}/voc` 는 **평면형**(`sentiment_type/score/description`, `complaint_risk_*`, `churn_risk_*`), 모달은 **중첩형 `VocMessage`**(`emotion.{type,score,summary}` …). → 매퍼 필요.
+
+### 3. 사용자 확정
+- (A) 그래프 아이콘 **항상 노출**(실시간의 isLocalDev 게이트 없이).
+- (B) 모달 안내 문구를 이력모드에선 "저장본" 표현으로 교체.
+
+### 4. 구현 (5개 파일)
+- `api/apis/callstat.api.ts`: `getVocByCallId(callId)` 추가 — 기존 `getCallSttByCallId`(`/calls/by-call-id/{id}/stt`)와 동일 패턴의 `/voc`. import `VocApiRecord`.
+- `api/types/voc.type.ts`: `VocApiRecord`(평면 응답 타입) + `mapVocRecordsToMessages(records)`(→ `VocMessage[]`, turn_idx 오름차순 정렬, description 누락 빈문자열·score 누락 0).
+- `chat/VocHistoryModal.vue`: **prop 옵셔널 리팩터링** — `props{modelValue,history,controlled}` + `emit('update:modelValue')`. `controlled=true` 면 v-model·history prop 사용, 아니면 기존처럼 store(`isHistoryModalOpen`/`history`). `sourceHistory` computed 신설(dedupedHistory 가 이걸 참조), replay watch 를 `visible` 기준으로. 안내 툴팁·하단 note 를 `isHistoryMode` 면 "저장된 감정 분석 내역" 문구로. **오버레이 z-index 10000**(`modal-class="voc-history-overlay"` + 비-scoped 스타일) — 콜이력 모달(9999) 위로 뜨게.
+- `ChatHistoryModal/CustomerPanel.vue`: "감정(VOC탐지)" 라벨 옆 `timeline` 아이콘(`adv-icon-button voc-history-btn`) + `emit('open-voc-history')`. `defineEmits` 추가.
+- `ChatHistoryModal.vue`: import(VocHistoryModal, mapVocRecordsToMessages/VocMessage). state `isVocHistoryOpen/vocHistory/vocHistoryLoading`. `handleOpenVocHistory` = `loadedCall.call_id` 로 lazy 조회 → 매핑 → **데이터 로드 후 오픈**(빈화면 깜빡임·라인 애니 누락 방지). 콜 전환 watch 에서 상태 초기화. CustomerPanel 에 `@open-voc-history`, 템플릿에 `<VocHistoryModal v-model :history controlled />`.
+- 실시간 화면(chat/index.vue) **무수정** — store 모드 그대로. IDE 진단 4개 파일 에러 0.
+
+### 5. (확인 메모) 아이콘 위치
+- 아이콘이 "감정(VOC탐지)" 섹션(`v-if="voc"`) 안이라 voc 박스 있을 때만 보임. demo4콜·API요약 감정 있으면 OK. voc 없어도 그래프 떠야 하면 위치 분리 필요(보류, 사용자 확인).
+
+### 6. (배포 후 의문 해소) call_id 형태 환경차 = 정상
+- 사용자: 로컬/사내dev 는 `test-call-id-1781594701682913912`, AWS 운영은 `698591242540` 로 call_id 형태 다름. base 경로도 `/api/asst/v1/...`(로컬) vs `/aicc/asst-service/...`(AWS) 차이. 둘 다 200.
+- 결론 = **프론트 무관, 정상**. call_id 는 우리가 만드는 값이 아니라 `getCallStatById` 응답의 `data.call.call_id` 그대로(오디오 재생 recKey 에도 동일 사용). 환경별 DB 콜 데이터(시드 더미 vs 실 CTI 콜키) 차이일 뿐. 경로 차이는 환경별 `API_PREFIX`(로컬 직접 vs 게이트웨이 경유). 사용자 납득.
+
+### 7. 마무리
+- 라이브 검증은 사용자 몫(배포 후 확인). 코드 변경 그대로 두고 기록만. git 미사용.
+
+## 2026-06-24 — workspace_id 하드코딩(env)을 설정 화면 셀렉트/직접입력으로 전환 (store+persist)
+
+### 1. 배경/요청
+- 로그인 상담사에게 할당되는 workspace 구조가 미완성 → `.env`의 `VITE_MOCK_WORKSPACE_ID`로 하드코딩해 직접 바라보던 중.
+- 우측 LNB "설정" 팝업(현재 "알림" 탭만)에 **WorkSpace설정 탭**을 추가해 셀렉트/직접입력으로 지정. 값은 store(persist)로 보관해 기존 env 활용처에 반영.
+
+### 2. 분석(서브에이전트 3개 병렬)
+- env single source: `src/utils/workspace.ts` `getWorkspaceIdOverride()`/`resolveWorkspaceId()`. 소비처 3곳(`agent/index.vue` assignedWorkspaceId computed, `useChatAssist.ts:385`, `ChatHistoryModal.vue:343`). → **utils 한 곳만 store 참조로 바꾸면 3곳 자동 반영**, 소비처 무수정.
+- 설정 팝업: `components/layout/Drawer/components/Setting/Setting.vue` — ECPTabs/ECPTabPane 하드코딩(배열X). 알림 탭 1개.
+- store: option store, `persist: piniaPersistConfig("키", [paths])` 헬퍼(localStorage), auto-import. UI 컴포넌트 ECPSelect(`:options=[{label,value}]`,`full-width`,`v-model`) / ECPTextField(`v-model`,`placeholder`,`full-width`) 글로벌 등록.
+
+### 3. 사용자 확정
+- env 처리: store 저장값 우선 → 없으면 env 기본값(=기본설정). 설정 화면에서 store 갱신.
+- UI: 셀렉트(env 기반 프리셋) + 직접입력 둘 다. 라벨은 env `VITE_MOCK_WORKSPACE_LABEL`(추가됨, 대신증권) 활용, env 미인식 시 "기본값". **라벨 필수값**.
+- 적용: 저장 후 "새로고침하면 적용됩니다" 안내.
+
+### 4. 구현 (3파일, 소비처 무수정)
+- **신규 `src/stores/modules/workspace.ts`**: `ENV_WORKSPACE_ID`/`ENV_WORKSPACE_LABEL`(없으면 ""/"기본값"), `WORKSPACE_CUSTOM_VALUE="__custom__"`, `WORKSPACE_PRESET_OPTIONS`(env 기반 1개, 추후 push). state `selectedWorkspaceId/Label`(빈값=env 사용). getter `effectiveWorkspaceId/Label`(저장값||env). action `setWorkspace/reset`. `persist: piniaPersistConfig("ecp-asst-workspace")`.
+- **`src/utils/workspace.ts`**: `getWorkspaceIdOverride()` = `useWorkspaceStore().selectedWorkspaceId || ENV_WORKSPACE_ID`(try/catch env 폴백). `resolveWorkspaceId` 동일 우선순위. `getWorkspaceLabel()` 신설(store||env||"기본값").
+- **`Setting.vue`**: `WorkSpace설정` 탭(name="workspace") 추가 — ECPSelect(`wsSelectOptions`=프리셋+직접입력) + isWsCustom 시 id/라벨 ECPTextField. script: workspaceStore + ref(wsSelectValue/wsCustomId/wsCustomLabel) + `initWorkspaceTab`(watch isActive 진입 시 store값 복원, 프리셋 매칭/커스텀 분기, 미저장 시 첫 프리셋) + `handleSaveWorkspace`(커스텀이면 id/label 필수검증, 프리셋이면 label 자동 → `setWorkspace` → "새로고침 적용" info 메시지).
+
+### 5. env 주입 확인
+- webpack.config.js:14-15 `dotenv.config({path:.env.${MODE}})`의 모든 키를 DefinePlugin으로 `process.env.*` 주입 → `VITE_MOCK_WORKSPACE_LABEL`도 자동 주입(별도 처리 불필요). 각 env 파일 LABEL 추가는 사용자가 진행.
+
+### 6. 마무리
+- 라이브 검증은 사용자 몫. git 미사용.
+
+### 7. (후속) 프리셋 추가 → 강제 새로고침 → env 진단 → workspace_ids 연동
+- **다이소 프리셋 추가 + "(현재값)" 표기**: `WORKSPACE_PRESET_OPTIONS` 에 다이소(`019bfe5d-...`) 추가. `Setting.vue` `wsSelectOptions` 에서 `effectiveWorkspaceId` 매칭 옵션 라벨 뒤에 " (현재값)" suffix(표시용, 저장은 원본 라벨).
+- **저장 시 강제 새로고침**: `handleSaveWorkspace` 에서 `setWorkspace` 후 토스트 제거하고 `window.location.reload()`(persist localStorage 동기 저장이라 안전). 안내문구 "※ 저장 시 자동으로 새로고침됩니다." 로 변경.
+- **"기본값" 노출 원인 = dev 서버 재시작 누락(코드 무관)**: `webpack.config.js:14` `dotenv.config({path:.env.${MODE}})` + DefinePlugin 은 **빌드타임 주입**. `ps` 로 실행중 MODE=5f.local 확인 → `.env.5f.local` 에 LABEL 있으나 서버 시작(오전)이 LABEL 추가(오후)보다 앞서 미반영. 서버 재시작으로 해결. (※ MODE별 파일: local→.env.local[LABEL 누락], local5f→.env.5f.local, dev→.env.development)
+- **셀렉트 소스를 get_user `agent.workspace_ids` 로 전환**(궁극 목표):
+  - get_user 응답 agent 는 `AppInitializer.ts` getUserInfo → `userProfileStore.setUserProfile` 로 `userProfileStore.agent` 에 저장됨(persist 아님, init 시 채워짐). `agent.workspace_ids` 직접 사용.
+  - `workspace.ts`: 하드코딩 `WORKSPACE_PRESET_OPTIONS` **제거**, `labelForWorkspaceId(id)` 추가 = `id === ENV_WORKSPACE_ID ? ENV_WORKSPACE_LABEL : "-"`(라벨 체계 없어 env 매칭 1개만 라벨, 그 외 "-" 고정 — 추후 보완).
+  - `Setting.vue`: `wsSelectOptions` = `workspaceIds(=agent.workspace_ids)` 동적 매핑. 라벨이 "-"로 겹쳐 구분 불가 → **"라벨 · workspace_id" 형태로 id 병기** + 현재값 "(현재값)". `initWorkspaceTab` 우선순위 저장값(목록내)>현재 적용값(env)>목록 첫번째, 목록 밖 저장값이면 직접입력 복원. 저장 시 목록항목 라벨은 `labelForWorkspaceId` 자동.
+  - IDE 진단 0. ⚠️ 예시 응답 workspace_ids 엔 env id(019eca26…) 미포함이라 전부 "-" 표시 — 실제 환경 응답에 env id 있어야 "대신증권" 매칭.
+
+### 8. 마무리
+- 라이브 검증·env 파일 수정은 사용자 몫. git 미사용. 코드 그대로 두고 기록만.
+
+---
+
+## 2026-06-25 — 상담이력 상세 모달 오디오 재생 버튼 아이콘 토글 안 되는 문제
+
+### 1. 증상
+- 상담이력 상세 모달(`ChatHistoryModal.vue`) 하단 오디오 플레이어: 재생 버튼 클릭 시 소리는 정상 재생되는데 **아이콘이 계속 `play_arrow`** (pause로 안 바뀜).
+
+### 2. 진단 (임시 로그로 원인 분리)
+- `useAudioPlayer.ts` 에 임시 `console.log` 삽입: `togglePlay`(클릭/Promise resolve·reject), `handlePlay`/`handlePause`(audio 이벤트).
+- (초반 로그 안 뜸 → 브라우저 캐시였고, 새로고침 후 정상 출력)
+- 로그 결과: `togglePlay 클릭(isPlaying=false)` → `event:play 발생 → isPlaying=true` → `play() Promise 성공` → (재클릭) `event:pause → isPlaying=false`.
+- **결론: 상태(`isPlaying` ref)는 완벽히 토글됨. 아이콘만 화면 반영 안 됨.**
+
+### 3. 원인
+- `ECPIcon`(UI킷 `@timbel-aicc/ecp-ui-kit`)은 `icon` 을 `toDisplayString` 동적 텍스트(patch flag 1)로 렌더 → prop만 바뀌면 갱신돼야 정상.
+- `ECPButton` 의 `#append` 슬롯이 내부적으로 Element Plus `ElButton` 을 거쳐 **forwarding(`_:3`)** 되는데, 이 경로에서 `isPlaying` 변경이 슬롯 안 `ECPIcon` 의 `icon` prop 리렌더로 안 이어짐(슬롯 forwarding 리렌더 누락).
+- node_modules(UI킷)는 수정 불가 → 호출부에서 해결.
+
+### 4. 조치 (확정·적용)
+- `ChatHistoryModal.vue` 의 재생버튼 `ECPIcon` 에 `:key="isPlaying ? 'pause' : 'play'"` 추가 → isPlaying 바뀔 때 아이콘 강제 remount 시켜 현재 prop 반영. (아이콘 1개 remount라 비용 무시)
+- 위치: `ChatHistoryModal.vue:146` 부근, `:icon="isPlaying ? 'pause' : 'play_arrow'"` 바로 위에 `:key` 라인 추가.
+
+### 5. 상태 / 남은 정리 (사용자 테스트 대기)
+- 사용자가 바로 테스트 못 해서 기록만 먼저. **현재 임시 로그는 그대로 둠**(아직 미제거).
+- 사용자 테스트 후 OK 확인되면 → ① `useAudioPlayer.ts` 임시 `[audio]` 콘솔 로그 제거, ② (선택) **이중 이벤트 바인딩** 정리 — template `@play/@pause/@ended...`(ChatHistoryModal.vue:130-142) + `setupAudioEventListeners()` `addEventListener`(useAudioPlayer.ts:100-110)가 같은 핸들러 중복 등록 중. 동작엔 무해하나 정리 후보.
+- `:key` 로도 안 바뀌면 대안: 아이콘을 슬롯 밖으로 빼거나 computed 분리.
+- git 미사용, 라이브 검증은 사용자 몫.
+
+---
+
+## 2026-06-25 — 어드바이저 고객사 제안서(PPT) 콘텐츠 가이드 작성
+
+### 1. 요청 배경
+- 어드바이저 소스를 분석해 고객사 제출용 **제안서 중 "어드바이저" 섹션(4장)** 의 PPT 제작 가이드를 만들어 달라(다른 클로드에게 PPT 작성을 맡길 예정). 전체 제안서가 아니라 어드바이저 한정. 톤: 격식·간결, 마케팅 과장 지양.
+- 구성 합의: ①어드바이저 안내 ②주요 기능 ③시스템 아키텍처 ④주요 장점/도입효과.
+
+### 2. 산출물
+- `ADVISOR-PPT-GUIDE.md` (asst-web 루트) 생성. 슬라이드별 확정본문 + 시각요소 지시 + 부록A(본문↔소스 매핑) + 부록B(유의사항).
+
+### 3. ⚠️ 미해결 — 슬라이드 1·2 분류 오류 (다음 작업 시 최우선 수정)
+- 초기 가이드는 첫 Explore 에이전트 결과를 검증 없이 받아써서 **상담 중/상담 후 분류가 틀림**. 직접 소스 확인 후 정정한 사실관계는 아래(가이드 파일엔 아직 미반영, 그대로 둠).
+- **정확한 동작(소스 검증 완료):**
+  - **상담 중·실시간(자동)**: ①실시간 대화표시(STT, WebSocket — `useChatMessageParser.ts`) ②AI 실시간 제안 = 발화 끝(EOU) 시 자동으로 의도파악→지식검색→답변 스트리밍(`callAssistStream`, `assist-stream.api.ts`) ← **진짜 핵심, 초기 가이드에서 누락** ③실시간 의도감지 = STT `nlu_result.intent` 매칭(`chat/index.vue:1207`). ※`intent.api.ts`는 의도 마스터목록 조회일 뿐 실시간 분류기 아님.
+  - **상담 중·수동**: AI 지식검색 = 상담사 직접 질의(`callDocumentStream`, `document-search.api.ts`).
+  - **상담 후·"상담요약" 버튼 트리거**: 버튼 1회로 요약(`createSummary`)+키워드(요약응답 포함)+상담유형 자동분류(요약응답)+감정VOC(요약응답 emotion, 현재 하드코딩)+자동 할일생성(`autoCreateTodo`, 요약 성공 후 연쇄).
+  - **이력/관리**: 콜이력·STT조회·채팅이력 / 다중모니터링·성과통계·코칭.
+- **초기 가이드 오류 3가지**: ①요약·키워드·감정을 "상담 중 실시간"으로 분류(실제는 요약버튼 후 사후) ②실시간 핵심(발화기반 자동 AI제안) 누락 ③키워드·의도를 묶어 실시간기능처럼 표기(키워드는 요약응답, 의도만 실시간).
+- **수정 방향(확정 대기)**: 축을 [상담 중(실시간): 대화표시·AI실시간제안·실시간의도감지·지식검색(수동)] / [상담 후(요약버튼): 요약·키워드·상담유형분류·감정VOC·자동할일] / [관리·이력: 콜이력STT·다중모니터링·성과통계·코칭] 으로 재작성.
+
+### 4. 기타
+- "Text Analyzer 시스템" 한 줄 카피 제안: "상담 대화 속에 묻혀 있는 인사이트를 캐내는 분석 시스템"(제안서용 격식: "상담 빅데이터 기반 인사이트 도출 엔진").
+
+### 5. 마무리
+- "마무리하자" → 추가 변경 금지, 가이드 파일 그대로 둠(슬라이드 1·2 오류 미수정 상태). 기록만 남김. git 미사용.
+
+## 2026-06-26 — 원본문서 모달 PDF 페이지 단위 위치이동(바로가기) 구현
+
+### 1. 배경/분석
+- "원본문서" 모달(`src/view/advisor/components/knowledge/DocOriginalViewerModal.vue`)의 책갈피/인덱스 자동이동 기능 분석.
+- **결론: 백엔드 위치정보(offset/anchor/#id) 없음. 순수 프론트 텍스트 매칭 방식.**
+  - 이동 대상 = `extractContentFromItem()`(DocumentDetailView.vue:224)이 뽑은 블록 "첫 줄 텍스트"(`activeContent`).
+  - `getDocumentOriginal(documentId)`는 원본 파일 바이너리만 받음(위치정보 X).
+  - `focusActiveContent()`(DocOriginalViewerModal.vue)가 mammoth 변환 HTML의 `p/li/td/h1~h6`를 `normalizeText` 후 `includes`로 매칭 → 첫 매칭 `scrollIntoView`.
+- DOCX만 동작했음. **PDF는 canvas(pdf.js) 렌더라 텍스트 단락 요소가 없어 위치이동 미지원**이었음.
+
+### 2. 결정
+- 사용자 요청으로 PDF도 위치이동 구현. 범위는 **"페이지 단위 이동"** 선택(줄 단위 text-layer 방식은 복잡/정확도 들쭉날쭉이라 보류).
+
+### 3. 구현 (DocOriginalViewerModal.vue, +54줄, DOCX 로직 불변)
+- `pdfPageTexts: string[]` 추가 — 페이지별 텍스트 보관(index0=1p).
+- `renderPdf()`: 페이지 렌더 시 `page.getTextContent()`로 텍스트 추출 보관 + canvas에 `dataset.page` 부여.
+- `focusActivePdfPage()` 신규: `activeContent`(100→60→30자 점진 재시도)가 포함된 페이지를 `normalizeText`+`includes`로 찾아 해당 canvas `scrollIntoView({block:"start"})` + `.kms-focus-page`(주황 테두리) 강조.
+- `loadDocument` 끝 / `activeContent` watch에 `docKind==="pdf"` 분기 추가.
+- CSS `.pdf-page-canvas.kms-focus-page { outline:3px solid #f9c825 }`.
+
+### 4. 한계/주의
+- 페이지 "상단"으로 이동(페이지 내 정확한 줄까진 안 감).
+- 스캔 PDF(이미지) 등 텍스트 추출 불가 시 이동 안 함(에러 없음).
+- pdfjs-dist 3.11.174 사용. lint 에러 11개는 기존 코드(worker import/normalizeText)의 prettier 건으로 변경분과 무관 → 미수정.
+- 라이브 검증은 사용자 몫.
+
+## 2026-06-26 — 감정(VOC) 상세모달 상단을 상담이력 상세 종합과 일치시킴
+
+### 1. 문제
+- 같은 콜의 감정정보가 세 곳에서 다르게 표시됨: 실시간 미니그래프("화남 0.85") / 상담이력 상세 종합("일반") / VOC 상세모달("불만").
+- 사용자 범위: 상담이력 상세(종합) vs VOC 상세모달 불일치.
+
+### 2. 원인 (분석)
+- **상담이력 상세 종합**: `GET /summary/data/{id}` 응답의 종합 emotion 1개. `ChatHistoryModal.vue:261` `vocView`=`resolveVocView({callIds, api})` (하드코딩 4콜 우선, 그 외 API).
+- **VOC 상세모달 상단**: `GET /callstat/calls/by-call-id/{call_id}/voc` 턴별 기록의 **맨 마지막 턴**. `VocHistoryModal.vue:227` `latest = points[points.length-1]`.
+- 즉 API도 다르고(요약 vs 턴별), 산출 기준도 다름(전체 종합 vs 마지막 턴) → 다를 수밖에 없는 구조.
+
+### 3. 결정/수정
+- VOC 상세모달 상단(마지막 턴 1줄)을 **상담이력 상세 종합과 동일한 3항목(감정·민원위험·이탈징후)+종합위험도**로 교체.
+- `VocHistoryModal.vue`: `summaryVoc?: VocView` prop 추가 → 있으면 상단을 `<VocDetailBox :voc="summaryVoc">` 로, 없으면(실시간) 기존 latest 1줄 유지(실시간 호환). import: VocView, VocDetailBox.
+- `ChatHistoryModal.vue:178`: `:summary-voc="vocView"` 전달.
+- 그래프/턴별 타임라인은 그대로. 상단만 종합으로 통일됨(같은 vocView 소스라 100% 일치).
+
+### 4. 주의
+- 상단 종합=/summary/data, 아래 그래프=/by-call-id/voc 라 백엔드 두 API 산출이 다르면 "상단 vs 그래프 마지막 점"이 미세하게 다를 수 있음 → 백엔드 정합성 이슈.
+- lint 에러는 기존 코드(tooltip 문구/console.log/template 헤더)의 prettier 건으로 변경분과 무관 → 미수정. 라이브 검증은 사용자 몫.
+
+## 2026-06-26 — 상담헤더 VOC 미니 스파크에 기본 골격(점선 베이스라인) 추가
+
+### 1. 배경/요청
+- 상담내용 헤더 인라인 VOC는 "VOC {감정} 0.00"이 항상 노출되는데, 옆 미니 스파크 그래프는 turn 2건 이상 쌓여야 노출됨(`chat/index.vue` `vocShowSpark = vocEmotionPoints.length >= 2`).
+- 사용자 요청: 2건 쌓이기 전(대기 구간)에도 "기본 그래프"를 노출해 휑함/레이아웃 들썩임 방지.
+- 협의 결과: 미니(56x18)라 가이드선(0.5/0.8)은 과함 → **회색 점선 베이스라인 1줄** 골격으로 결정.
+
+### 2. 수정 (chat/index.vue)
+- template(228~): `v-if="vocShowSpark"`로 span 통째 숨기던 것 → span은 항상 두고 내부에서 분기. 2건↑이면 `<polyline>`(추이선, 감정색), 미만이면 `<line class="adv-voc-spark__baseline">`(가운데 수평 점선).
+- script: `sparkBoxWidth` computed 추가 — 추이선이면 동적 `sparkWidth`, 골격이면 고정 36px. svg width를 이 값으로.
+- style: `.adv-voc-spark__baseline` 추가(#d1d5db, stroke-dasharray 3 3, non-scaling-stroke).
+
+### 3. 주의
+- prettier 경고(229/230 줄바꿈)는 이 파일 원래 관행(template svg 한 줄) + 프로젝트 기존 prettier 미준수(1768 등)와 동일 성격 → 변경분만 관행 따름, 전체 --fix는 미적용(무관 diff 방지). 빌드/동작 무관.
+- 라이브 검증은 사용자 몫.
+
+## 2026-06-26 — 관리자 멀티뷰에 상담사별 VOC 위험 비상표시(border 깜빡+토스트)
+
+### 1. 배경/요청
+- 고객: "어드바이저가 상담내용을 보는 만큼, 상담사들의 민원 위험을 관리자 페이지에도 표출해야 한다."
+- 조사 결과: VOC는 Socket.IO `{env}:{tenant}:{cc_cti_id}:call:voc` 채널로 실시간 수신. 관리자 멀티뷰(`admin/index.vue`)는 `selectedConsultants` v-for로 Chat 인스턴스를 상담사 수만큼 렌더(최대4). Chat(isAdmin=true)은 이미 voc 채널 구독 + 헤더 감정 뱃지 노출 중.
+- 두 함정: (1) 헤더는 "감정"만 표시, 민원위험 미표출. (2) `vocStore`가 단일 전역 history라 멀티뷰에서 상담사 VOC가 섞임(모든 카드가 마지막 수신 1건만 봄).
+
+### 2. 확정 스펙 (사용자 결정)
+- 위치: 실시간 모니터링 멀티뷰. 시점: 실시간 위주.
+- 판정: 종합위험지수(`computeVocRisk`, 피크보정) ≥ `VOC_DANGER_THRESHOLD`(=0.8) 단일 기준. 주의(주황) 단계 없이 **0.8↑ 하나만 비상**. 임계값은 상수 1줄로 조절 가능.
+- 알림 A(border): 위험 진입 시 카드 외곽 빨강 깜빡 → **30초 자동 정지 + 카드 클릭 시 즉시 정지**(정지 후 정적 빨강 유지). 0.8 밑→위 재진입 시 재깜빡.
+- 알림 B(토스트): `showCustomMessage` 재사용, **위험 재진입(전이)마다 1회** "상담사 OOO이 상담 중 위험 수준에 도달했습니다. 모니터를 확인하세요".
+- vocStore는 **정식 per-agent 분리**(사용자 선택). 관리자 간 동기화(한명 확인→전체 끔)는 백엔드 필요 → 범위 밖.
+
+### 3. 핵심 검증 (구현 전)
+- `useChatMessageParser.ts:157~172` 가 이미 `resolvedAgentId !== messageData.agent_id` 면 메시지 **drop** → 각 Chat parser는 자기 상담사 메시지만 처리. 따라서 `setVoc`의 `msg.agent_id` = 그 카드 `consultant.agentId` 보장.
+- `VocMessage.agent_id` = `consultant.agentId`(`ConsultantDrawer/index.vue:456` `agentId: fallbackAgent.cc_cti_id`) = `cc_cti_id`. 키 일치 확정.
+- 멀티뷰에서 전역 store 실제 소비처는 헤더 감정 뱃지뿐(CustomerVocPanel은 비관리자 본인화면 전용, VocHistoryModal 진입버튼은 localhost-dev 전용) → 비관리자 회귀 위험 최소.
+
+### 4. 구현 (additive — 기존 단일 store API 100% 유지)
+- `stores/modules/voc.ts`: state에 `byAgent: Record<agentId,{callId,active,history}>` 추가. `setVoc`가 `msg.agent_id`로 슬라이스 분리 저장(call_id 바뀌면 이전 콜 잔상 리셋). getter 추가 `latestOf/historyOf/riskOf/isEmergencyOf(통화중 AND risk≥0.8)`. `endCall(agentId?)`로 종료 시 슬라이스 active=false(비상 해제). `clear()`에 byAgent 초기화. `VOC_DANGER_THRESHOLD` import해 `isDanger`도 상수화.
+- `useChatMessageParser.ts:285`: `vocStore.endCall((messageData.agent_id||messageData.agentId||agentId.value))` 로 종료 상담사 키 전달.
+- `chat/index.vue`: `vocUseByAgent`(admin/viewer && props.agentId)면 헤더 뱃지/스파크가 `latestOf/historyOf(props.agentId)` 사용, 비관리자는 기존 전역 history 그대로. → 멀티뷰 감정뱃지 섞임 버그도 동시 해결.
+- `admin/index.vue`: `.chat-item`에 `:class="vocCardClass(consultant)"` + `@click="acknowledgeEmergency(agentId)"`. `emergencySnapshot`(selectedConsultants×isEmergencyOf) watch로 전이감지→토스트+깜빡, 해제→정지. `emergencyBlink`/`blinkTimers`/`prevEmergency` 맵. onUnmounted 타이머 정리. CSS `.voc-emergency`(box-shadow 링, 레이아웃 밀림 없음)+`--blink`(@keyframes vocEmergencyBlink).
+
+### 5. 상태/주의
+- IDE 진단(vue-tsc) 4개 파일 모두 클린.
+- 라이브 검증은 사용자 몫. agent_id 매칭은 코드상 보장되나 실데이터로 border 점등은 사용자 확인 필요.
+- 비상 단계 시점 조절은 `emotionVoc.ts`의 `VOC_DANGER_THRESHOLD` 한 줄.
+
+## 2026-06-26 — assist top3 추천문서 강조(테두리) 미리셋 버그 수정
+
+### 1. 증상
+- 상담 중 STT 버블 아래 추천문서 top3가 뜨고 기본 1번 문서에 테두리. 2번 클릭하면 오른쪽 패널에 그 문서 + 테두리도 2번으로.
+- 같은 버블에 새 top3가 갱신되면 오른쪽 패널은 1번으로 가는데 테두리는 직전 클릭(2번 위치)에 남음 → 불일치.
+
+### 2. 원인 (useChatAssist.ts showAssistDocs, 새 top3 공통 렌더 함수)
+- 새 문서목록을 `keywordDetailData[messageId]`에 갱신 + 첫 문서로 오른쪽 패널 자동 emit(357~375)은 하는데, 강조상태 `activeDetailByBubble[messageId]`만 리셋 안 함.
+- 테두리는 `isDetailItemActive`가 `activeDetailByBubble[bubbleId]`(`"타입_인덱스"`, 위치 기반)로 판정 → 옛 "지식정보_1" 유지 → 새 2번 문서로 테두리가 옮겨붙음.
+
+### 3. 수정 (2파일)
+- `useChatAssist.ts`: `UseChatAssistParams`에 `activeDetailByBubble` 추가 + 구조분해. `showAssistDocs` 안에 `activeDetailByBubble.value[Number(messageId)] = null;` 한 줄(자기 messageId 버블만 기본=첫문서로 리셋).
+- `chat/index.vue`: `useChatAssist({...})` 인자에 `activeDetailByBubble` 전달(이미 useChatKeywordInteraction이 제공).
+
+### 4. 동작/주의
+- 버블별 독립 보존: 리셋은 새 top3를 받는 그 버블(messageId)만. 과거 대화 버블들의 사용자 클릭 선택은 그대로 유지(사용자 확인 요청 반영).
+- 한 run 내 sources(미리보기)→distilled(최종) 둘 다 showAssistDocs 호출 → 최종 도착 시 1번으로 정렬(문서목록 자체가 최종본으로 바뀌므로 의도된 동작).
+- IDE 진단 2파일 클린. 배포 후 라이브 검증은 사용자 몫.
+- (이번 세션 규칙) 코드 수정/문서 저장 전 사용자 confirm 필수.
+
+### 5-1. (후속) 비상 테두리 잘림 수정
+- 증상: 라이브 테스트 결과 토스트/깜빡/로직(화남 0.85→비상) 정상인데 카드 테두리가 카드 사이(gap)만 보이고 바깥쪽은 안 보임.
+- 원인: `box-shadow` 링은 요소 바깥으로 퍼지는데 부모 `.chat-wrapper { overflow:hidden }`(admin/index.vue)가 잘라냄.
+- 수정: `box-shadow` → `border` 로 교체. `.chat-item`에 `box-sizing:border-box; border:2px solid transparent; border-radius:16px`(자리 예약→레이아웃 불변, overflow 안 잘림), `.voc-emergency`는 border-color, 깜빡은 border-color 펄스(#ef4444↔#ffb4b4). 로직 변경 없음.
+- 참고: VOC realtime 미표출은 브라우저 캐시 이슈였고 재배포/캐시클리어 후 정상.
+
+### 5-2. (후속) 관리자 비상표시 임계값 0.8→0.6 (관리자 전용)
+- 요청: 관리자 쪽 알림은 0.6부터. 적용범위는 "관리자 비상표시만"(상담사 본인 화면은 0.8 유지) 선택.
+- 수정: `emotionVoc.ts`에 `VOC_EMERGENCY_THRESHOLD = 0.6` 신설(VOC_DANGER_THRESHOLD=0.8은 그대로). `voc.ts`의 `isEmergencyOf`가 VOC_DANGER_THRESHOLD → VOC_EMERGENCY_THRESHOLD 사용. `isDanger`(본인화면용)는 0.8 유지.
+- 효과: 관리자 멀티뷰 테두리/토스트는 종합위험 0.6↑부터 발동(더 빨리 경고), 상담사 본인 화면 위험판정은 0.8 그대로.
+
+### 5-3. (후속) 관리자 비상 임계값을 env로 관리
+- 요청: 임계값을 env로 관리. 변수명 `VITE_VOC_EMERGENCY_THRESHOLD`(사용자가 .env.dev에 0.6 설정, 다른 env는 사용자가 처리).
+- 빌드구조: 본 프로젝트는 webpack(`webpack.config.js`) + `dotenv` + `DefinePlugin` 으로 `.env.${MODE}`의 모든 키를 `process.env.키`로 주입(접두사 무관). 기존 `LANGSA_GATEWAY_URL` 등과 동일 패턴.
+- 수정: `emotionVoc.ts`의 `VOC_EMERGENCY_THRESHOLD` 를 하드코딩 0.6 → `Number(process.env.VITE_VOC_EMERGENCY_THRESHOLD)` 로 읽고, 미설정/비정상(≤0/NaN)이면 0.6 폴백. voc.ts/admin 로직은 그대로(상수만 env 소스로 교체).
+- 주의: 빌드타임 주입이라 값 변경 시 재빌드/재배포 필요. 각 env 파일(.env.dev/.env.prd 등)에 변수 없으면 0.6으로 동작.
+
+### 5-4. (후속·중요) 0.6이 안 먹던 진짜 원인 = 판정식, peak 기준으로 변경
+- 증상: 임계값 0.6으로 내렸는데도 "0.8 이상일 때만" 비상 발동.
+- 원인: isEmergencyOf 가 종합위험지수(computeVocRisk=가중평균+피크보정) 기준이었음. 피크보정은 0.8↑에서만 켜지므로, 0.8 미만에선 감정 단일 고득점이 민원위험·이탈(0)에 희석돼(예: 화남0.7→종합≈0.28) 0.6에 못 닿음 → 사실상 0.8 게이트.
+- 결정(사용자): 관리자 비상은 "세 지표(감정/민원위험/이탈) 최대값(peak) ≥ 임계값" 기준. → 화남 0.6도 민원위험 0.6도 잡힘.
+- 수정: voc.ts isEmergencyOf 를 riskOf(종합) → latestOf의 peak(Math.max, NaN가드) ≥ VOC_EMERGENCY_THRESHOLD 로 변경. riskOf(종합 getter)는 잔존(미사용, 무해). 임계값/통화중 게이트는 동일.
+- env: VITE_VOC_EMERGENCY_THRESHOLD 모든 env파일(.env.dev/local/prd/5f/192)에 0.6 존재 확인. 미설정시 폴백 0.6.
+
+### 5-5. (후속) 실시간 헤더 감정 "이전 콜 잔상" 버그 — 현재 call_id로 스코프
+- 증상: 상세/요약은 현재 콜(normal 0.5) 정상인데, 상담사 화면 실시간 헤더만 이전 콜(angry 0.85)이 남음.
+- 원인 확정(사용자 로그): 같은 상담사의 서로 다른 콜 2개.
+  - call 698591332011 → angry 0.85 / call 698591339066 → normal 0.5.
+  - voc 채널은 상담사(cc_cti_id) 단위라 그 상담사 모든 콜이 같은 채널로 옴. vocStore는 call_id 구분 없이 latestItem(마지막 수신)만 표시 → 이전 콜 voc가 늦게/겹쳐 들어오면 잔상.
+- 수정(임시방편): useChatMessageParser voc 분기에서 `messageData.call_id !== currentCallId.value` 면 setVoc 스킵(드롭). 현재 콜 voc만 헤더/byAgent에 반영 → 잔상 제거. currentCallId 미설정 시엔 통과(과필터 방지).
+- 효과: 헤더가 항상 현재 콜 감정만 표시. 관리자 비상(byAgent)도 덤으로 이전 콜 잔상 방지. IDE 진단 클린.
+- 근본개선 여지: vocStore 자체를 call_id 스코프로(콜 바뀌면 確실히 리셋) 두는 것. 지금은 파서 단 드롭으로 처리.
+
+### 5-6. (후속) currentCallId set-once 버그 수정 (voc 필터 정상화)
+- 발견: useChatMessageParser 의 currentCallId 가 call:start(229)·nlp:complete(401) 모두 `if(!currentCallId.value)`=비었을때만 세팅 → 첫 call_id에 한번 묶이면 안 바뀜. 그래서 5-5의 call_id 필터가 옛 call_id 기준으로 헛돌아 "현재 콜 normal인데 헤더는 이전 콜 angry" 불일치 발생.
+- 수정: call:start(229)에서 `currentCallId.value = call_id` 무조건 갱신(set-once 제거). 새 콜마다 갱신되어 voc 필터가 "지금 보여주는 콜" 기준으로 동작. (nlp:complete 401의 set-if-empty 폴백은 안전망으로 유지)
+- 효과: 헤더 감정 = 현재 표시 중인 콜과 일치. 실제 운영(1상담사 1콜)에선 정상.
+- 한계(미해결): 같은 상담사 계정으로 4탭(local/dev/prd/admin) 동시 → 같은 per-agent voc 채널을 공유, 4개 call:start를 다 받아 마지막 콜로 수렴. 프론트만으론 "내 콜" 식별 불가. 진짜 해결은 각 화면이 "자기가 만든 call_id"를 브로드캐스트 아닌 생성 시점에서 직접 알아야(또는 백엔드가 채널을 call 단위로 스코프). 사용자에게 own-call_id 출처 확인 요청함.
+
+### 5-7. (마무리) 실시간 헤더 콜 격리 검증 완료 + 속도는 백엔드 이슈로 결론
+- 검증: currentCallId(=assist-stream callId)와 voc.call_id 일치할 때만 표시. 실콜 340030(실제 화남 대화)은 표시, 다른 콜 339764는 drop 확인. 헤더가 "현재 보고있는 콜"의 감정만 보여주는 것 정상 동작 확인.
+- 다른 VOC 소비처 영향 점검: 필터는 setVoc만 게이트 → 실시간 vocStore 소비처(헤더, 관리자 비상 isEmergencyOf, CustomerVocPanel, VocHistoryModal) 전부 "현재 콜"로 정리됨(개선). 요약/상세(CounselingStatus·ChatHistoryModal)는 resolveVocView=API 경로라 무관.
+- 속도(미니그래프/점수가 3~5초 늦게 변함): 숫자+그래프가 동기로 같이 갱신됨 → 프론트 반응성 정상. 지연은 voc 메시지 자체가 늦게 도착(백엔드 감정분석 LLM turn당 3~5초). 프론트에서 고칠 것 없음 → 백엔드 latency 최적화 영역.
+- 잔존: 디버그 로그 3개(`[voc] call:start`, `[voc] received`, `[voc] drop stale`) 사용자 요청으로 그대로 둠(동작 영향 없음, 콘솔만 verbose). 추후 운영 정리 시 제거.
+- 미해결(범위 밖): 같은 상담사 계정 다중 탭 동시 실콜은 per-agent 채널 공유라 프론트만으론 완전 격리 불가(백엔드가 call 단위 채널 분리 필요). 실운영 1상담사 1콜에선 정상.
