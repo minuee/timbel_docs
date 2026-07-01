@@ -1,0 +1,47 @@
+skill:
+  id: note_capture
+  version: "1.1"
+  domain: personal
+  description: "개인 메모 캡처 — 자유 텍스트 저장"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: capture_note
+
+slots:
+  - name: note_text
+    type: text
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: note_capture_greet_on_enter.md
+    transitions:
+      - when: has_intent(capture_note)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [note_text]
+    transitions:
+      - when: slot_filled(note_text)
+        to: save
+      - llm_fallback: true
+
+  - id: save
+    on_exit:
+      llm_respond:
+        template: note_capture_save_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

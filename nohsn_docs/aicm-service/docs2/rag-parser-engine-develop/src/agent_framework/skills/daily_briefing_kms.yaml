@@ -1,0 +1,34 @@
+skill:
+  id: daily_briefing_kms
+  version: "1.1"
+  domain: kms
+  description: "오늘의 KMS 활동 요약 브리핑 (업로드·검색·변경)"
+
+availability:
+  scope: all
+  visibility: auto
+
+triggers:
+  - intent: daily_briefing
+
+slots: []
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: daily_briefing_kms_greet_on_enter.md
+    transitions:
+      - when: has_intent(daily_briefing)
+        to: summarize
+      - llm_fallback: true
+
+  - id: summarize
+    on_exit:
+      llm_respond:
+        template: daily_briefing_kms_summarize_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

@@ -1,0 +1,82 @@
+{
+  "id": "aligo.sms_send",
+  "name": "aligo.sms_send",
+  "display_name": "알리고 SMS 발송",
+  "description": "알리고(Aligo) SMS API 를 사용하여 국내 휴대폰에 문자 메시지를 발송합니다. 한국 SMB 에서 가장 많이 사용하는 SMS 솔루션입니다. 요금: SMS 건당 약 10원 (부가세 별도).",
+  "category": "SMS/메일",
+  "vendor": "Aligo",
+  "vendor_url": "https://smartsms.aligo.in/admin/api/info.html",
+  "endpoint_url": "https://apis.aligo.in/send/",
+  "method": "POST",
+  "auth_headers": {
+    "Content-Type": "application/x-www-form-urlencoded"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["user_id", "key", "sender", "receiver", "msg"],
+    "properties": {
+      "user_id": {
+        "type": "string",
+        "description": "알리고 계정 아이디"
+      },
+      "key": {
+        "type": "string",
+        "description": "알리고 API Key (마이페이지 → API KEY 발급)"
+      },
+      "sender": {
+        "type": "string",
+        "description": "발신자 번호 (사전 등록된 번호, 예: 0212345678)"
+      },
+      "receiver": {
+        "type": "string",
+        "description": "수신자 번호 (예: 01012345678, 복수 시 쉼표 구분)"
+      },
+      "msg": {
+        "type": "string",
+        "description": "SMS 본문 (한글 45자 / 영문 90자 초과 시 LMS 처리)",
+        "maxLength": 2000
+      },
+      "title": {
+        "type": "string",
+        "description": "LMS/MMS 제목 (SMS 는 불필요)"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "알리고 응답 ({\"result_code\": \"1\", \"message\": \"success\", \"msg_id\": \"...\"})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": true,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "static_secret_token",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "user_id + key 가 form body 로 전송됨 — TLS 외 별도 서명 없음. 발신번호는 사전 등록 필수 (010 직접발송 불가, 사전 인증 필요)."
+  },
+  "operational_notes": {
+    "rate_limit": "기본 30 req/sec — 충전·발신번호 한도 내",
+    "retry_semantics": "result_code != '1' 시 즉시 fail, 5xx 지수 백오프",
+    "response_sla_sec": null,
+    "cost_label": "paid (SMS ~10원/건, LMS ~30원/건)",
+    "biz_account_required": true
+  },
+  "setup_instructions": [
+    "1. https://smartsms.aligo.in 회원가입 후 충전 (선불 방식)",
+    "2. 마이페이지 → 'API KEY 발급' 클릭 → Key 복사",
+    "3. 발신번호 등록: 마이페이지 → 발신번호 관리 → 번호 인증 후 등록",
+    "4. input_schema 의 user_id, key, sender 는 runtime 에 입력하거나 고정값 세팅",
+    "5. auth_headers 는 위 기본값(Content-Type) 그대로 유지",
+    "6. 테스트 발송 후 알리고 대시보드에서 발송 이력 확인 가능",
+    "7. 보안: API key 는 평문 저장 금지 — config_encrypted 컬럼 또는 KMS 사용. 사업자등록증 + 발신번호 등록 (사전심사 1~3 영업일).",
+    "8. 인바운드 (사용자 답장 수신) 미지원 — 양방향이 필요하면 카카오톡 채널 / 네이버 톡톡 / 통신사 비즈메시지 별도 계약."
+  ]
+}

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>문서 상세 (MVP) · KMS-Plus</title>
+  <style>
+    body { margin:0; padding:0; background:var(--bg,#0e1117); color:var(--text,#e6edf3); font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif; }
+    .mvp-header { display:flex; align-items:center; gap:12px; padding:12px 18px; background:var(--surface,#161b22); border-bottom:1px solid var(--border,#30363d); }
+    .mvp-header h1 { font-size:15px; font-weight:600; margin:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mvp-header button { padding:5px 12px; border-radius:4px; border:1px solid var(--border,#30363d); background:transparent; color:inherit; cursor:pointer; font-size:12px; }
+    .mvp-body { display:flex; height:calc(100vh - 50px); }
+    .mvp-left { flex:1; overflow-y:auto; padding:12px; }
+    .mvp-right { flex:1; overflow-y:auto; padding:12px; border-left:1px solid var(--border,#30363d); }
+    .mvp-empty { padding:40px; text-align:center; color:var(--text2,#8b8fa3); font-size:13px; }
+    .kbe-block.kbe-selected { box-shadow:0 0 0 2px var(--accent,#6c8cff); }
+  </style>
+</head>
+<body>
+  <header class="mvp-header">
+    <button type="button" id="mvp-back">목록</button>
+    <h1 id="mvp-title">문서 상세 (MVP)</h1>
+    <span id="mvp-doc-status" style="font-size:11px; color:var(--text2,#8b8fa3);"></span>
+  </header>
+
+  <main class="mvp-body">
+    <section class="mvp-left" id="mvp-pdf-container">
+      <div class="mvp-empty">PDF 로딩 대기...</div>
+    </section>
+    <section class="mvp-right" id="mvp-block-list">
+      <div class="mvp-empty">블럭 로딩 중...</div>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="nav.js"></script>
+  <script src="/lib/api.js"></script>
+  <script src="/components/citation_viewer.js"></script>
+  <script src="/components/block_editor.js"></script>
+  <script src="/components/table_editor.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    const params = new URLSearchParams(location.search);
+    const docId = params.get('doc_id') || params.get('id');
+    const docTitle = params.get('title') || '문서 상세 (MVP)';
+    document.getElementById('mvp-title').textContent = docTitle;
+    document.getElementById('mvp-back').addEventListener('click', function () {
+      history.length > 1 ? history.back() : (location.href = '/knowledge.html');
+    });
+
+    if (!docId) {
+      document.getElementById('mvp-pdf-container').innerHTML = '<div class="mvp-empty">doc_id 가 URL 에 없습니다 (?doc_id=...)</div>';
+      document.getElementById('mvp-block-list').innerHTML = '';
+      return;
+    }
+
+    let blocks = [];
+    let viewer = null;
+    const editors = {}; // blockId -> editor handle
+
+    async function loadBlocks() {
+      const limit = 100;
+      let offset = 0;
+      let all = [];
+      while (true) {
+        const page = await window.KmsApi.get('/documents/' + docId + '/blocks?limit=' + limit + '&offset=' + offset + '&include_noise=false');
+        const items = (page && page.items) || page || [];
+        all = all.concat(items);
+        offset += limit;
+        if (!items.length || items.length < limit) break;
+      }
+      return all;
+    }
+
+    function renderBlocks() {
+      const container = document.getElementById('mvp-block-list');
+      if (!blocks.length) {
+        container.innerHTML = '<div class="mvp-empty">블럭이 없습니다.</div>';
+        return;
+      }
+      container.innerHTML = '';
+      blocks.forEach(function (b) {
+        const wrap = document.createElement('div');
+        wrap.dataset.blockId = b.id;
+        wrap.style.cursor = 'pointer';
+        wrap.addEventListener('click', function (e) {
+          // ignore clicks on form controls
+          const t = e.target;
+          if (t.tagName === 'SELECT' || t.tagName === 'BUTTON' || t.tagName === 'INPUT') return;
+          highlightBlock(b.id);
+          if (viewer) viewer.jumpToBlock(b);
+        });
+        container.appendChild(wrap);
+
+        if ((b.block_type || '').toLowerCase() === 'table') {
+          editors[b.id] = window.KmsTableEditor.mount(wrap, {
+            block: b,
+            onSave: function (updated) {
+              const idx = blocks.findIndex(function (x) { return x.id === updated.id; });
+              if (idx >= 0) blocks[idx] = Object.assign({}, blocks[idx], updated);
+            },
+          });
+        } else {
+          editors[b.id] = window.KmsBlockEditor.mount(wrap, {
+            block: b,
+            onSave: function (updated) {
+              const idx = blocks.findIndex(function (x) { return x.id === updated.id; });
+              if (idx >= 0) blocks[idx] = Object.assign({}, blocks[idx], updated);
+            },
+            onValiditySave: function (updated, status) {
+              const idx = blocks.findIndex(function (x) { return x.id === updated.id; });
+              if (idx >= 0) {
+                if (!blocks[idx].metadata) blocks[idx].metadata = {};
+                blocks[idx].metadata.validity_status = status;
+              }
+            },
+          });
+        }
+      });
+    }
+
+    function highlightBlock(blockId) {
+      document.querySelectorAll('#mvp-block-list .kbe-block, #mvp-block-list .kte-block').forEach(function (el) {
+        el.classList.remove('kbe-selected');
+      });
+      const target = document.querySelector('#mvp-block-list [data-block-id="' + blockId + '"] .kbe-block, #mvp-block-list [data-block-id="' + blockId + '"].kbe-block, #mvp-block-list [data-block-id="' + blockId + '"].kte-block');
+      if (target) target.classList.add('kbe-selected');
+      const wrap = document.querySelector('#mvp-block-list [data-block-id="' + blockId + '"]');
+      if (wrap) {
+        const inner = wrap.firstElementChild;
+        if (inner && inner.classList) inner.classList.add('kbe-selected');
+      }
+    }
+
+    async function loadDocMeta() {
+      try {
+        const doc = await window.KmsApi.get('/documents/' + docId);
+        const statusEl = document.getElementById('mvp-doc-status');
+        if (statusEl && doc) statusEl.textContent = doc.status || '';
+        if (doc && doc.title && docTitle === '문서 상세 (MVP)') {
+          document.getElementById('mvp-title').textContent = doc.title;
+        }
+      } catch (_) {/* ignore */}
+    }
+
+    async function init() {
+      loadDocMeta();
+      try {
+        blocks = await loadBlocks();
+      } catch (e) {
+        document.getElementById('mvp-block-list').innerHTML =
+          '<div class="mvp-empty">블럭 로딩 실패: ' + (e.message || e) + '</div>';
+        return;
+      }
+      renderBlocks();
+      viewer = window.KmsCitationViewer.mount(
+        document.getElementById('mvp-pdf-container'),
+        { docId: docId, blocks: blocks },
+      );
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

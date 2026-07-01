@@ -1,0 +1,29 @@
+template:
+  category_id: other
+  name: "기타 업종 (직접 작성)"
+  description: "위 카테고리에 해당하지 않는 업종 — tenant 관리자가 직접 작성."
+  goal: |
+    [tenant 관리자가 이 업종의 핵심 목표를 직접 작성하세요.
+    예: 고객의 문의를 응대하여 서비스 예약 또는 정보 제공을 완수한다.]
+
+  guidelines: |
+    ## rules
+    - [업종별 기본 응대 규칙을 직접 작성하세요.]
+
+    ## slot_completeness_rules
+    - [예약/주문 시 필수 수집 정보를 직접 작성하세요.]
+
+    ## escalation_rules
+    - [에스컬레이션 기준을 직접 작성하세요.]
+
+  knowledge_zone_hints:
+    - role: rules
+      description: "[업종 규칙/정책 문서를 등록하세요.]"
+    - role: data
+      description: "[상품/서비스 데이터 문서를 등록하세요.]"
+
+  allowed_tools:
+    - schedule.create
+    - kms_rag.search
+
+  done_when: "[목표 달성 조건을 직접 작성하세요.]"

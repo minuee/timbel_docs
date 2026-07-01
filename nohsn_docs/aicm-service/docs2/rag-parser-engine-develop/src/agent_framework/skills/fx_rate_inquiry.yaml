@@ -1,0 +1,46 @@
+skill:
+  id: fx_rate_inquiry
+  version: "1.1"
+  domain: finance
+  description: "환율 조회 (주요 통화)"
+
+availability:
+  scope: business_only
+  business_type: finance
+  visibility: opt-in
+
+triggers:
+  - intent: inquire_fx_rate
+
+slots:
+  - name: currency
+    type: enum
+    values: [USD, EUR, JPY, CNY, GBP, AUD, HKD, SGD, CHF]
+    required: true
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: fx_rate_inquiry_greet_on_enter.md
+    transitions:
+      - when: has_intent(inquire_fx_rate)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [currency]
+    transitions:
+      - when: slot_filled(currency)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: fx_rate_inquiry_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

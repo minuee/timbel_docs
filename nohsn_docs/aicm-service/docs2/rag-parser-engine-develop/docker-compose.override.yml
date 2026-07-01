@@ -1,0 +1,32 @@
+# 운영 서버(rag_parser_server) override — 로컬 working-tree 파일을 컨테이너에 ro 마운트.
+# 이미지가 구버전이어도 최신 src 파일을 덮어쓰기 위한 장치.
+# 주의: 이미지를 현재 소스로 재빌드하면 아래 마운트는 동일 내용이라 사실상 redundant(무해).
+services:
+  lucas-kms-api:
+    volumes:
+      - ./src/common/storage_tenant.py:/app/src/common/storage_tenant.py:ro
+      - ./src/common/time_utils.py:/app/src/common/time_utils.py:ro
+      - ./src/common/agent_hook.py:/app/src/common/agent_hook.py:ro
+      - ./src/core/models/__init__.py:/app/src/core/models/__init__.py:ro
+      - ./src/core/models/tenant_synonym.py:/app/src/core/models/tenant_synonym.py:ro
+      - ./src/api/routers/documents.py:/app/src/api/routers/documents.py:ro
+
+  lucas-kms-worker-large:
+    volumes:
+      - ./src/common/storage_tenant.py:/app/src/common/storage_tenant.py:ro
+      - ./src/common/time_utils.py:/app/src/common/time_utils.py:ro
+      - ./src/common/agent_hook.py:/app/src/common/agent_hook.py:ro
+      - ./src/core/models/__init__.py:/app/src/core/models/__init__.py:ro
+      - ./src/core/models/tenant_synonym.py:/app/src/core/models/tenant_synonym.py:ro
+
+  lucas-kms-worker-small:
+    volumes:
+      - ./src/common/storage_tenant.py:/app/src/common/storage_tenant.py:ro
+      - ./src/common/time_utils.py:/app/src/common/time_utils.py:ro
+      - ./src/common/agent_hook.py:/app/src/common/agent_hook.py:ro
+      - ./src/core/models/__init__.py:/app/src/core/models/__init__.py:ro
+      - ./src/core/models/tenant_synonym.py:/app/src/core/models/tenant_synonym.py:ro
+
+  lucas-kms-frontend:
+    volumes:
+      - ./frontend/config.js:/usr/share/nginx/html/config.js:ro

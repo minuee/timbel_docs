@@ -1,0 +1,73 @@
+# =============================================================================
+# Lucas-KMS Docker build context filter
+# =============================================================================
+# spec: Phase 3 packaging round — agent_framework 디렉토리 자체를 build context
+# 에서 제외하여 docker 이미지에 잔여 흔적 0 보장.
+# scan.sh 의 4-layer 검사 (history / filesystem / pip / import) 와 함께
+# 정적 + 동적 격리 이중 안전망 구성.
+# =============================================================================
+
+# Agent framework — Lucas-KMS 분리 핵심 제외 항목
+src/agent_framework/
+tests/agent_framework/
+
+# 빌드 산출물 / nested 잔여물 (src/src/... 재귀 구조 차단)
+src/src/
+
+# Frontend / 개발용 무거운 자산
+frontend/
+frontend-v3/
+
+# 테스트 자산 (full suite + eval doc)
+tests/full/
+Doc/TestDoc/
+Doc/eval/
+
+# Python 캐시 / build artifact
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+*.whl
+
+# 가상환경
+.venv/
+venv/
+env/
+
+# Git / IDE / OS
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Secrets — image 에 절대 들어가면 안됨
+.env
+.env.local
+.env.production
+.env.prod
+.env.staging
+*.pem
+*.key
+
+# 로그 / 캐시
+*.log
+logs/
+hf_cache/
+data/
+uploads/
+*.bak
+
+# Docker 자체 산출물
+Dockerfile.*
+docker-compose*.yml
+!Dockerfile

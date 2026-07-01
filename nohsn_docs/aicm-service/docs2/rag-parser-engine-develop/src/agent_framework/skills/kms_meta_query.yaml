@@ -1,0 +1,36 @@
+skill:
+  id: kms_meta_query
+  version: "1.1"
+  domain: kms
+  description: "현재 tenant 의 자료 인벤토리 자기 소개 — 문서·저장소·외부 에이전트·일정/일기/뉴스·활성 스킬"
+
+availability:
+  scope: all
+  visibility: auto
+
+# F7 (KMS-Plus): 사용자가 "지금 너가 참고하는 지식이 몇 개야?", "내 워크스
+# 페이스에 뭐 있어?", "활성 스킬 무엇?" 처럼 *시스템 자체의 자료 보유 현황*
+# 을 자기 소개적으로 물을 때 매칭. side_effect_level=read_only 이므로 가드
+# 우회 즉시 실행. 기존 kms_inventory_query 는 status 분포·용량·7일 변동
+# 위주이고, ask_my_data_inventory 는 카테고리 별 갯수 한 번에 묶어 답.
+triggers:
+  - intent: ask_my_data_inventory
+
+trigger_type: intent
+
+slots: []
+
+initial_state: respond
+states:
+  - id: respond
+    tool: kms_meta.get_my_inventory
+    tool_args:
+      tenant_id: $tenant_id
+      personal_tenant_id: $personal_tenant_id
+    on_exit:
+      llm_respond:
+        template: kms_meta_query_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

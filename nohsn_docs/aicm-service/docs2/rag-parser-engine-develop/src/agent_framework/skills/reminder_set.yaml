@@ -1,0 +1,101 @@
+skill:
+  id: reminder_set
+  version: "2.0"
+  domain: personal
+  description: "알림(리마인더) 설정 — 단발 (특정 시각) 또는 주기 (매일/매주/N일마다)"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: set_reminder
+  - intent: medication_tracker
+
+trigger_examples:
+  - "내일 오후 3시에 알람 해줘"
+  - "매일 오전 8시에 혈압약 복용 알람 등록해줘"
+  - "매일 저녁 9시 약 알람"
+  - "매주 월요일 9시 운동 알림"
+  - "격일로 영양제 알람 만들어줘"
+  - "5월 4일 오후 4시에 알람 줘"
+
+role:
+  persona: "알람·리마인더 도우미. 시각·주기·내용 받고 등록."
+  tone: "친절한 존댓말. 핵심만 간결히."
+  knowledge_scope:
+    - 알람
+    - 리마인더
+    - 복용
+    - 약속
+  safety_constraints:
+    - 의학적 조언/처방 X.
+    - 시각·주기 모호하면 추측 없이 사용자에게 되묻는다.
+
+slots:
+  - name: reminder_text
+    type: text
+    required: true
+    description: "알람 내용 (예: 혈압약 / 영양제 / 운동 / 회의)"
+  - name: time
+    type: text
+    description: "복용/알람 시각 HH:MM (24시간제)"
+  - name: recurrence_kind
+    type: enum
+    values: [single, daily, weekly, every_n_days]
+    description: "주기 — single (단발) | daily | weekly | every_n_days"
+  - name: remind_at
+    type: datetime
+    description: "단발 (recurrence_kind=single) 일 때 ISO datetime"
+  - name: weekday
+    type: text
+    description: "weekly 일 때 요일 (mon/tue/.../sun)"
+  - name: every_n
+    type: number
+    description: "every_n_days 일 때 N (예: 2 → 격일)"
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    transitions:
+      - when: has_intent(set_reminder) or has_intent(medication_tracker)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    on_enter:
+      llm_respond:
+        template: reminder_set_greet_on_enter.md
+    llm_slot_fill: [reminder_text, time, recurrence_kind, remind_at, weekday, every_n]
+    transitions:
+      # 주기 (daily/weekly/every_n_days) — time 만 있으면 충분
+      - when: slots_filled(reminder_text, recurrence_kind, time)
+        to: register
+      # 단발 (single) — remind_at ISO datetime 필요
+      - when: slots_filled(reminder_text, remind_at)
+        to: register
+      - llm_fallback: true
+
+  - id: register
+    tool: reminder.schedule
+    tool_args:
+      title: $reminder_text
+      template: $reminder_text
+      tenant_id: $personal_tenant_id
+      phone: $phone
+      channel: in_app
+      recurrence_kind: $recurrence_kind
+      time: $time
+      weekday: $weekday
+      every_n: $every_n
+      at: $remind_at
+    on_exit:
+      llm_respond:
+        template: reminder_set_save_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

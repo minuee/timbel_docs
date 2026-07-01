@@ -1,0 +1,14 @@
+# 회사 영역 — 기업 컨텍스트 (KPI / 부서 / 정책 등).
+# 현재는 미구현 — frontend 가 upcoming 표시.
+id: company
+label: 회사
+icon: building
+status: upcoming
+sort_order: 70
+
+# 노출 그룹 — 회사 영역은 직장에 소속된 사용자만.
+available_for_groups: [company]
+
+upcoming_message: 회사 영역은 차기 릴리스에서 지원할 예정입니다.
+
+chat_intents: []

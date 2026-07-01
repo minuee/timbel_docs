@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System dependencies (LibreOffice for HWP/DOCX conversion)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential wget curl \
+    fontconfig fonts-nanum fonts-noto-cjk \
+    default-jre libreoffice-core libreoffice-writer libreoffice-common \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e ".[dev]" 2>/dev/null || pip install --no-cache-dir .
+
+# Embedding model (BGE-M3) — CUDA mode for GPU embedding (RTX 5090 sm_120 = cu128 필요)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu128 \
+    && pip install --no-cache-dir "transformers>=4.44.0,<5.0.0" sentence-transformers FlagEmbedding
+
+# Source code
+COPY src/ src/
+
+EXPOSE 9100
+
+CMD ["python", "-m", "src.pipeline.workers.main"]

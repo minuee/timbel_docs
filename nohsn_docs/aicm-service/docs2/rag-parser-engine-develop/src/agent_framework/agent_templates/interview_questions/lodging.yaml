@@ -1,0 +1,39 @@
+category: lodging
+label: "숙박"
+description: "호텔·모텔·펜션·풀빌라 SOP 인터뷰."
+
+questions:
+  - id: ld_property_type
+    label: "숙박 시설 유형은요?"
+    type: multiple_choice
+    options: ["호텔", "모텔", "펜션·풀빌라", "게스트하우스", "리조트", "기타"]
+    required: true
+    section: 페르소나
+
+  - id: ld_room_count_types
+    label: "객실 수 / 객실 종류 / 인원 구성?"
+    type: textarea
+    example: "총 30실 / 스탠다드 트윈 / 디럭스 더블 / 스위트 / 4인 가족실"
+    required: true
+    section: 응대 시나리오
+
+  - id: ld_checkin_checkout_policy
+    label: "체크인·체크아웃 시간 + 얼리/레이트 정책."
+    type: textarea
+    example: "체크인 15시 / 체크아웃 11시 / 얼리 13시 30분부터 (객실 상황) / 레이트 +1만원"
+    required: true
+    section: 응대 시나리오
+
+  - id: ld_cancellation_policy
+    label: "취소·환불 단계별 정책 (성수기 / 비수기)."
+    type: textarea
+    example: "7일 전 100% / 3일 전 50% / 1일 전 환불 불가 / 성수기 별도"
+    required: true
+    section: 응대 시나리오
+
+  - id: ld_amenities
+    label: "주요 부대시설 (조식 / 수영장 / 사우나 / 주차)."
+    type: textarea
+    example: "조식 7-10시 1.8만원 / 야외 수영장 6-22시 / 무료 주차 50대"
+    required: true
+    section: 응대 시나리오

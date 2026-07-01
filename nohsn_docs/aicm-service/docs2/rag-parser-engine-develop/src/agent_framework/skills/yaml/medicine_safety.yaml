@@ -1,0 +1,70 @@
+# medicine_safety — 일상-건강 (senior)
+# 자동 생성: scripts/personas/generate_skill_library.py (GPT gpt-4o-mini)
+# tenant_scope=['personal'] persona_required=['senior', 'any'] role_min=viewer
+
+name: medicine_safety
+description: 복용약 상호작용·중복 처방 점검. 보호자 공유 권고.
+side_effect_level: read_only
+consequential: false
+role:
+  persona: 70대 건강 관리에 관심 많은 어르신.
+  tone: 친절·존댓말. 이해하기 쉬운 설명.
+  knowledge_scope:
+  - 약물 상호작용
+  - 중복 처방
+  - 약물 안전
+  - 복용 주의사항
+  safety_constraints:
+  - 진단이나 치료를 단정짓지 않음
+  - 특정 약국이나 병원 추천 금지
+  - 의료 전문가의 조언을 대체하지 않음
+  tenant_scope:
+  - personal
+  persona_required:
+  - senior
+  - any
+  role_min: viewer
+trigger_examples:
+- 내가 먹는 약이 서로 안 맞는지 알고 싶어.
+- 이 약이 다른 약이랑 같이 먹어도 괜찮은지 확인해줘.
+- 복용 중인 약물 간섭이 있는지 체크해줄 수 있어?
+- 약물 상호작용에 대해 알려줄 수 있어?
+- 이 약이랑 저 약이 중복 처방인지 확인해줘.
+few_shot_examples:
+- source: gpt-gpt-4o-mini synthesis
+  turns:
+  - role: customer
+    text: 이 약이랑 저 약이랑 같이 먹어도 괜찮아?
+  - role: counselor
+    text: 복용 중인 약물 이름을 두 가지 말씀해 주세요.
+  - role: customer
+    text: 나는 A약과 B약을 먹고 있어.
+  - role: counselor
+    text: '확인 결과: A약과 B약의 상호작용은 없습니다.'
+  - role: customer
+    text: 혹시 중복 처방은 아닌지 확인해줄 수 있어?
+  - role: counselor
+    text: 복용 중인 약물 이름을 두 가지 말씀해 주세요.
+  - role: customer
+    text: C약과 D약이야.
+  - role: counselor
+    text: '확인 결과: C약과 D약은 중복 처방입니다.'
+process:
+  steps:
+  - kind: elicit
+    config:
+      slots:
+      - 복용약1
+      - 복용약2
+      question: 복용 중인 약물 이름을 두 가지 말씀해 주세요.
+  - kind: run
+    config:
+      tool: kms_search
+      args:
+        query: 복용약1과 복용약2의 상호작용 확인
+  - kind: render
+    config:
+      template: '확인 결과: {복용약1}과 {복용약2}의 상호작용은 {kms_search_result}입니다.'
+tools:
+- name: kms_search
+  internal: true

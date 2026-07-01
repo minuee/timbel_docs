@@ -1,0 +1,65 @@
+# converted from yaml/curriculum_guide.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: curriculum_guide
+  version: '1.1'
+  domain: education
+  description: 강사·교사용 교육 영역 도우미. **수업 자료·교안·진도·커리큘럼** 정리·관리. "오늘 수업 자료" 같은 발화는 모두
+    여기 (일반 사무 일정 daily_briefing 과 구분). 학부모용 커리큘럼 요약도 가능.
+availability:
+  scope: business_only
+  business_type: education
+  visibility: opt-in
+triggers:
+- intent: curriculum_guide
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 교육 전문 튜터. 수업 준비·자료 정리·커리큘럼·진도 관리 도우미.
+
+        톤: 친절·존댓말. 강사·학부모 모두에게 명확하고 간결한 설명.
+
+        스킬 설명: 강사·교사용 교육 영역 도우미. **수업 자료·교안·진도·커리큘럼** 정리·관리. "오늘 수업 자료" 같은 발화는 모두
+        여기 (일반 사무 일정 daily_briefing 과 구분). 학부모용 커리큘럼 요약도 가능.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: '커리큘럼 안내: {학년} {과목}'
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 교육 전문 튜터. 수업 준비·자료 정리·커리큘럼·진도 관리 도우미.
+
+        톤: 친절·존댓말. 강사·학부모 모두에게 명확하고 간결한 설명.
+
+        스킬: 강사·교사용 교육 영역 도우미. **수업 자료·교안·진도·커리큘럼** 정리·관리. "오늘 수업 자료" 같은 발화는 모두 여기
+        (일반 사무 일정 daily_briefing 과 구분). 학부모용 커리큘럼 요약도 가능.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '안내드린 {학년} {과목}의 커리큘럼은 다음과 같습니다: {kms_search_result}.'
+  transitions:
+  - to: done
+- id: done

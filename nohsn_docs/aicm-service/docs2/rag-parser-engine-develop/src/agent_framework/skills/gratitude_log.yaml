@@ -1,0 +1,47 @@
+skill:
+  id: gratitude_log
+  version: "1.1"
+  domain: personal
+  description: "오늘의 감사 일기 기록"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: log_gratitude
+
+slots:
+  - name: gratitude_text
+    type: text
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: gratitude_log_greet_on_enter.md
+    transitions:
+      - when: has_intent(log_gratitude)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [gratitude_text]
+    transitions:
+      - when: slot_filled(gratitude_text)
+        to: save
+      - llm_fallback: true
+
+  - id: save
+    on_exit:
+      llm_respond:
+        template: gratitude_log_save_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

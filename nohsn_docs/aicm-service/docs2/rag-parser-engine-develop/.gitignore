@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 가상환경
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+.env.local
+.env.production
+.env.prod
+*.pem
+*.key
+
+# Build / dist
+build/
+dist/
+*.whl
+*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 로그
+*.log
+logs/
+
+# Frontend
+node_modules/
+.next/
+
+# OS
+Thumbs.db
+
+# 결과 / 캐시
+hf_cache/
+data/
+uploads/
+*.bak

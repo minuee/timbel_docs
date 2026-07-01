@@ -1,0 +1,45 @@
+skill:
+  id: inventory_count
+  version: "1.1"
+  domain: retail
+  description: "매장 재고 수량 조회"
+
+availability:
+  scope: business_only
+  business_type: retail
+  visibility: opt-in
+
+triggers:
+  - intent: check_inventory
+
+slots:
+  - name: product_name
+    type: text
+    required: true
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: inventory_count_greet_on_enter.md
+    transitions:
+      - when: has_intent(check_inventory)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [product_name]
+    transitions:
+      - when: slot_filled(product_name)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: inventory_count_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

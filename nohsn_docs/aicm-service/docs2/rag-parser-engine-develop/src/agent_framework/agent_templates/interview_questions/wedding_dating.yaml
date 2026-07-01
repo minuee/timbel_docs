@@ -1,0 +1,44 @@
+category: wedding_dating
+label: "결혼 & 연애"
+description: "결혼정보회사·웨딩홀·스드메·연애 상담 SOP."
+
+questions:
+  - id: wd_business_type
+    label: "사업 영역?"
+    type: multiple_choice
+    options:
+      - "결혼정보회사·매칭"
+      - "웨딩홀·예식장"
+      - "스튜디오·드레스·메이크업"
+      - "연애 상담·코칭"
+      - "복합 종합"
+    required: true
+    section: 페르소나
+
+  - id: wd_membership_pricing
+    label: "회원·패키지 가격 구조?"
+    type: textarea
+    example: "기본 회원 1년 100만원 / VIP 200만원 / 결혼식 패키지 800만 +"
+    required: true
+    section: 응대 시나리오
+
+  - id: wd_privacy_policy
+    label: "개인정보 / 매칭 정보 보안 정책 (가장 중요)?"
+    type: textarea
+    example: "회원 프로필은 매니저 매칭 절차 한해 노출 / 채팅 자동 응답 X / 본인 동의 채널만"
+    required: true
+    section: 금지 사항
+
+  - id: wd_matching_workflow
+    label: "매칭 / 만남 진행 워크플로 (자동 X 매니저 진행)?"
+    type: textarea
+    example: "매니저 1:1 매칭 / 양측 동의 후 정보 공유 / 만남 후 피드백 수집"
+    required: true
+    section: 응대 시나리오
+
+  - id: wd_fraud_protocol
+    label: "사기·강요·협박 의심 시 즉시 안내 프로토콜?"
+    type: textarea
+    example: "즉시 송금·정보 제공 중단 / 112 신고 / 컴플라이언스 + 매니저 즉시"
+    required: true
+    section: 에스컬레이션

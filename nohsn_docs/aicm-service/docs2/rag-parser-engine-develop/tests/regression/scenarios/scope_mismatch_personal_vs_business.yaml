@@ -1,0 +1,19 @@
+name: scope mismatch — personal context, business-only skill
+references:
+  - memory: project_session_resume_20260425_v5.md (scope 100%)
+  - memory: feedback_validation_must_include_multiturn_patterns.md (scope 회귀)
+notes: |
+  personal 컨텍스트에서 business 전용 스킬 (예: 회사 결재) 을 요청하면
+  자동으로 business 컨텍스트로 라우팅하거나, 적절히 안내해야 한다.
+  이전 사례: scope mismatch 시 LLM 이 personal 데이터로 회사 결재를
+  시도해 cross-tenant leak 이 발생할 위험.
+chat:
+  - tenant: personal
+    account: demo-admin
+    user: 회사 출장비 결재 올려줘
+    expect:
+      # 두 패턴 모두 허용:
+      #   1) 자동 라우팅 — 본문이 business / 회사 / 결재 단어 포함 + 스킬 동작
+      #   2) graceful 안내 — "개인 영역에서는" / "회사 영역" 안내문
+      assistant_body_pattern: "(회사|결재|업무|영역|business)"
+      assistant_body_nonempty: true

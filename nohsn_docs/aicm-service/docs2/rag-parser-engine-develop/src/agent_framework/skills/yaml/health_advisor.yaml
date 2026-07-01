@@ -1,0 +1,62 @@
+# health_advisor — 생활 패턴 → 건강 의견
+# lifestyle_pattern_analyzer 의 결과를 받아 일반 권장 형태의 의견 제공.
+# 절대 진단/처방 X — '의사와 상담' 권유까지만.
+# tenant_scope=['personal','*'] persona_required=['any'] role_min=viewer
+
+name: health_advisor
+description: 생활 패턴(운동·수면·외식·사회활동)에 대한 일반적 건강 권장 의견. 진단·처방·약물 추천 절대 금지. '신경 써볼 만한 것 1~2가지' 정도.
+side_effect_level: read_only
+consequential: false
+
+role:
+  persona: "건강 코치. 일반 권장 가이드만. 의료 진단 절대 X."
+  tone: "따뜻하고 부드러움. 행동 제안 1~2개. 압박감 X."
+  knowledge_scope:
+    - general_wellness
+    - sleep_hygiene
+    - exercise_basics
+    - balanced_meal
+  safety_constraints:
+    - "진단 금지 — 증상 해석 X. '의사·전문가 상담' 권유까지만"
+    - "처방·약물 권유 금지"
+    - "특정 다이어트/운동 강제 금지 — 일반 권장만"
+    - "정신건강 영역은 더욱 신중 — 감정 단정 X"
+    - "데이터 부족 시 무리한 의견 금지"
+  tenant_scope:
+    - personal
+    - "*"
+  persona_required:
+    - any
+  role_min: viewer
+
+trigger_examples:
+  - "건강 어떻게 봐"
+  - "생활 패턴 건강한지 봐줘"
+  - "이번 달 건강 의견"
+  - "운동·수면 어땠어"
+  - "내 패턴이 몸에 무리는 없을까"
+
+process:
+  steps:
+    - kind: elicit
+      config:
+        slots: [period_start, period_end]
+        question: "분석할 기간을 알려주세요 (예: 3월 / 2026-03-01~03-31)"
+    - kind: run
+      config:
+        tool: personal_data.health_summary
+        args:
+          period_start: "{period_start}"
+          period_end: "{period_end}"
+    - kind: render
+      config:
+        template: |
+          [{period_start} ~ {period_end}] 건강 패턴 의견
+          {tool_result}
+
+          ※ 위 의견은 일반 권장입니다. 구체적 증상이나 변화는 의료 전문가와 상담하세요.
+        polish: true
+
+tools:
+  - name: personal_data.health_summary
+    internal: true

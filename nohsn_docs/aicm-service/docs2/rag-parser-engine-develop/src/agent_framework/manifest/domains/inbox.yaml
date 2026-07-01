@@ -1,0 +1,48 @@
+# 받은 편지함 — 메일 미러링 워커가 적재한 메시지 묶음.
+id: inbox
+label: 받은 편지함
+icon: mail
+status: active
+sort_order: 10
+
+# 노출 그룹 — accounts.preferences.user_groups 와 교집합 매칭.
+# 메일은 개인/회사/사업/1인사업자 모두 사용.
+available_for_groups: [personal, company, business, sole_proprietor]
+
+list_endpoint: /api/v1/inbox
+summary_endpoint: /api/v1/inbox/summary
+detail_endpoint: /api/v1/inbox/{id}
+
+list_columns:
+  - {key: received_at, label: 수신일시, format: datetime}
+  - {key: from_name, label: 보낸 사람, format: text}
+  - {key: subject, label: 제목, format: text}
+  - {key: category, label: 분류, format: badge}
+  - {key: read, label: 읽음, format: badge}
+
+summary_widgets:
+  - type: stat
+    label: 미읽음
+    key: unread_count
+    format: number
+  - type: stat
+    label: 오늘 수신
+    key: today_count
+    format: number
+  - type: chart
+    label: 분류 분포
+    key: by_category
+    kind: pie
+
+quick_actions:
+  - id: mark_all_read
+    label: 모두 읽음 처리
+    method: POST
+    endpoint: /api/v1/inbox/mark-all-read
+
+chat_intents:
+  - inbox_summary
+  - inbox_search
+  - inbound_response
+
+card_renderer: InboxSummaryCard

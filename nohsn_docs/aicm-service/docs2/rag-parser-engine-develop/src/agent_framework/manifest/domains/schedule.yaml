@@ -1,0 +1,57 @@
+# 일정 — 개인 일정 / 회의 / 약속.
+id: schedule
+label: 일정
+icon: calendar
+status: active
+sort_order: 20
+
+# 노출 그룹 — 일정은 개인/회사/사업/1인사업자 모두 활용.
+available_for_groups: [personal, company, business, sole_proprietor]
+
+list_endpoint: /api/v1/schedule
+summary_endpoint: /api/v1/schedule/summary
+detail_endpoint: /api/v1/schedule/{id}
+
+list_columns:
+  - {key: start_at, label: 시작, format: datetime}
+  - {key: end_at, label: 종료, format: datetime}
+  - {key: title, label: 제목, format: text}
+  - {key: location, label: 장소, format: text}
+  - {key: attendees, label: 참석자, format: text}
+
+summary_widgets:
+  - type: stat
+    label: 오늘 일정 수
+    key: today_count
+    format: number
+  - type: stat
+    label: 이번주 일정 수
+    key: week_count
+    format: number
+  - type: list
+    label: 다음 일정
+    key: upcoming
+
+quick_actions:
+  - id: add_schedule
+    label: 일정 추가
+    method: POST
+    endpoint: /api/v1/schedule
+    form_schema:
+      type: object
+      required: [title, start_at]
+      properties:
+        title: {type: string, title: 제목}
+        start_at: {type: string, title: 시작, format: date-time}
+        end_at: {type: string, title: 종료, format: date-time}
+        location: {type: string, title: 장소}
+        notes: {type: string, title: 메모}
+
+chat_intents:
+  - schedule_personal
+  - schedule_analyzer
+  - appointment_scheduling
+  - reminder_set
+  - time_blocker
+
+card_renderer: ScheduleSummaryCard

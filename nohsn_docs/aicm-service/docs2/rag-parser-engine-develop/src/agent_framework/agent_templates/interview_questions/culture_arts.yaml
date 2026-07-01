@@ -1,0 +1,39 @@
+category: culture_arts
+label: "문화 & 예술"
+description: "갤러리·공연장·미술관·문화 행사 SOP."
+
+questions:
+  - id: ca_venue_type
+    label: "운영 시설 유형은요?"
+    type: multiple_choice
+    options: ["갤러리·미술관", "공연장·극장", "문화센터·복합 공간", "전시 기획사", "기타"]
+    required: true
+    section: 페르소나
+
+  - id: ca_event_schedule
+    label: "전시 / 공연 회차·일정 운영 방식?"
+    type: textarea
+    example: "월간 신규 전시 / 공연 1일 2회 (14시·19시) / 화-일 운영, 월 휴관"
+    required: true
+    section: 응대 시나리오
+
+  - id: ca_ticket_policy
+    label: "티켓 가격 / 예매 / 환불 정책?"
+    type: textarea
+    example: "성인 1.5만원 / 학생 1만원 / 단체 20인 30% 할인 / 공연 1일 전 환불 불가"
+    required: true
+    section: 응대 시나리오
+
+  - id: ca_guidelines
+    label: "관람·공연 매너 / 사진·영상 정책."
+    type: textarea
+    example: "전시 사진 가능 (플래시 X) / 공연 중 촬영 금지 / 음식 반입 X"
+    required: true
+    section: 금지 사항
+
+  - id: ca_docent_program
+    label: "도슨트 / 가이드 투어 운영?"
+    type: textarea
+    example: "주말 14시 무료 도슨트 / 단체 사전 예약 / 외국어 (영·일) 가능"
+    required: false
+    section: 응대 시나리오

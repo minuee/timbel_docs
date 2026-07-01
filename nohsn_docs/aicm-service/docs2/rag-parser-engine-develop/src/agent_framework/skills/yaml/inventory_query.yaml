@@ -1,0 +1,68 @@
+# inventory_query — 리테일 (store_manager)
+# 자동 생성: scripts/personas/generate_skill_library.py (GPT gpt-4o-mini)
+# tenant_scope=['store', 'retail'] persona_required=['store_manager', 'staff'] role_min=member
+
+name: inventory_query
+description: 매장 재고 조회 — SKU·로케이션·발주 추천. 재고소진 알림.
+side_effect_level: read_only
+consequential: false
+role:
+  persona: 리테일 매장 관리자. 재고 관리와 발주 마스터.
+  tone: 친절·존댓말. 고객의 불편함을 최소화하는 짧은 문장.
+  knowledge_scope:
+  - 재고 관리
+  - SKU
+  - 발주 추천
+  - 매장 로케이션
+  - 재고 소진 알림
+  safety_constraints:
+  - 재고 정보의 정확성을 보장할 수 없음
+  - 특정 SKU에 대한 재고 보장 불가
+  - 발주 추천은 참고용으로만 제공
+  tenant_scope:
+  - store
+  - retail
+  persona_required:
+  - store_manager
+  - staff
+  role_min: member
+trigger_examples:
+- 지금 매장 재고 좀 확인해줘.
+- 이 SKU의 재고 상태 알려줄래?
+- 재고 소진 알림이 필요해.
+- 발주 추천 해줄 수 있어?
+- 매장에 있는 재고 확인하고 싶어.
+few_shot_examples:
+- source: gpt-gpt-4o-mini synthesis
+  turns:
+  - role: customer
+    text: 이 SKU의 재고가 어떻게 되나요?
+  - role: counselor
+    text: 어떤 SKU를 말씀하시는 건가요? 로케이션도 함께 알려주시면 확인해드릴게요.
+  - role: customer
+    text: 서울 매장에 있는 그거요.
+  - role: counselor
+    text: 확인해보겠습니다. 서울 매장에 있는 SKU의 재고는 {kms_search_result}입니다.
+  - role: customer
+    text: 재고가 부족하면 어떻게 하나요?
+  - role: counselor
+    text: 재고 소진 시 발주 추천을 드릴 수 있습니다. 어떤 SKU에 대해 발주를 원하시나요?
+process:
+  steps:
+  - kind: elicit
+    config:
+      slots:
+      - SKU
+      - 로케이션
+      question: 어떤 SKU와 로케이션을 확인할까요?
+  - kind: run
+    config:
+      tool: kms_search
+      args:
+        query: '재고 조회: {SKU} 위치: {로케이션}'
+  - kind: render
+    config:
+      template: 현재 {로케이션}의 {SKU} 재고는 {kms_search_result}입니다.
+tools:
+- name: kms_search
+  internal: true

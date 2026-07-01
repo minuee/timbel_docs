@@ -1,0 +1,127 @@
+skill:
+  id: stock_watch_personal
+  version: "0.1"
+  domain: personal
+  description: "관심·보유 종목 등록·조회·삭제 + 주기 모니터링 설정"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: add_stock_watch
+  - intent: list_stock_watch
+  - intent: delete_stock_watch
+  - intent: monitor_stock
+
+role:
+  persona: "주식 포트폴리오 관리 도우미."
+  tone: "간결한 존댓말. 추측·추천 금지."
+  knowledge_scope:
+    - 종목 등록
+    - 보유 수량
+    - 평단가
+    - 손익
+    - 모니터링 주기
+
+trigger_examples:
+  - "삼성전자 만원에 10주 샀어 등록해줘"
+  - "내 보유 종목 보여줘"
+  - "주식 종목 목록"
+  - "카카오 등록해줘 30분마다 모니터링해줘"
+  - "삼성전자 watch 삭제"
+  # D71 — 거래 의향 (매수/매도) 변형. 실주문 미지원이라 *관심 등록* 으로 대체.
+  - "카카오 20만원치 매수해줘"
+  - "삼성전자 사자"
+  - "엔비디아 50만원 담아"
+  - "테슬라 들어가자"
+  - "NVDA 한 주 사자"
+  - "카카오 절반 팔자"
+
+# 다중 인스턴스 + 한국어 수사 정규화는 slot_filler 가 자동 처리.
+slots:
+  - name: symbol
+    type: text
+  - name: qty
+    type: number
+  - name: avg_cost
+    type: number
+  - name: alert_high
+    type: number
+  - name: alert_low
+    type: number
+  - name: monitor_interval_min
+    type: number
+  - name: note
+    type: text
+  - name: id
+    type: text
+
+initial_state: greet
+states:
+  - id: greet
+    transitions:
+      - when: has_intent(add_stock_watch) or has_intent(monitor_stock)
+        to: collect_add
+      - when: has_intent(list_stock_watch)
+        to: do_list
+      - when: has_intent(delete_stock_watch)
+        to: collect_del
+      - llm_fallback: true
+
+  - id: collect_add
+    llm_slot_fill: [symbol, qty, avg_cost, alert_high, alert_low, monitor_interval_min, note]
+    transitions:
+      - when: slot_filled(symbol)
+        to: do_add
+      - llm_fallback: true
+
+  - id: do_add
+    tool: stock.add_watch
+    tool_args:
+      symbol: $symbol
+      qty: $qty
+      avg_cost: $avg_cost
+      alert_high: $alert_high
+      alert_low: $alert_low
+      monitor_interval_min: $monitor_interval_min
+      note: $note
+      tenant_id: $personal_tenant_id
+      phone: $phone
+    on_exit:
+      llm_respond:
+        template: stock_watch_added.md
+    transitions:
+      - to: done
+
+  - id: do_list
+    tool: stock.list_watch
+    tool_args:
+      tenant_id: $personal_tenant_id
+      phone: $phone
+    on_exit:
+      llm_respond:
+        template: stock_watch_list.md
+    transitions:
+      - to: done
+
+  - id: collect_del
+    llm_slot_fill: [id, symbol]
+    transitions:
+      - when: slot_filled(id) or slot_filled(symbol)
+        to: do_del
+      - llm_fallback: true
+
+  - id: do_del
+    tool: stock.delete_watch
+    tool_args:
+      id: $id
+      tenant_id: $personal_tenant_id
+      phone: $phone
+    on_exit:
+      llm_respond:
+        template: stock_watch_deleted.md
+    transitions:
+      - to: done
+
+  - id: done

@@ -1,0 +1,39 @@
+category: it_electronics
+label: "IT & 전자제품"
+description: "컴퓨터·휴대폰·전자제품 매장 / 수리 센터 SOP."
+
+questions:
+  - id: ie_business_type
+    label: "주력 사업?"
+    type: multiple_choice
+    options: ["판매 전문", "수리·AS 전문", "판매 + 수리", "도매·B2B", "기타"]
+    required: true
+    section: 페르소나
+
+  - id: ie_brand_lineup
+    label: "취급 브랜드 / 카테고리?"
+    type: textarea
+    example: "삼성·LG 정식 대리점 / 애플 공식 / PC 조립 / 휴대폰 액세서리"
+    required: true
+    section: 페르소나
+
+  - id: ie_repair_diagnosis
+    label: "수리 진단 정책 — 무상 / 비용 안내?"
+    type: textarea
+    example: "진단 무료 / 부품 비용 + 공임 / 보증 기간 무상 AS"
+    required: true
+    section: 응대 시나리오
+
+  - id: ie_data_recovery
+    label: "데이터 복구 정책 (보장 X 명시)?"
+    type: textarea
+    example: "데이터 보장 X / 사전 백업 권장 / 복구 시도 후 결과별 비용"
+    required: true
+    section: 금지 사항
+
+  - id: ie_security_protocol
+    label: "보안 사고 (해킹·피싱·계정 탈취) 안내 프로토콜?"
+    type: textarea
+    example: "즉시 비밀번호 변경 / 112 + 118 (KISA) 신고 / 매니저 보안 담당 연결"
+    required: true
+    section: 에스컬레이션

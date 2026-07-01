@@ -1,0 +1,51 @@
+skill:
+  id: card_lost_report
+  version: "1.1"
+  domain: finance
+  description: "카드 분실 신고 접수 (카드 끝 4자리 + 본인확인)"
+
+availability:
+  scope: business_only
+  business_type: finance
+  visibility: opt-in
+
+triggers:
+  - intent: report_card_lost
+
+slots:
+  - name: card_last4
+    type: text
+    required: true
+  - name: holder_name
+    type: text
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: card_lost_report_greet_on_enter.md
+    transitions:
+      - when: has_intent(report_card_lost)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [card_last4, holder_name]
+    transitions:
+      - when: slot_filled(card_last4)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: card_lost_report_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

@@ -1,0 +1,15 @@
+# 주식 / 자산 자문 — 가격 / 분석 / 조언.
+# 현재는 미구현 — 후속 릴리스 (E 코스).
+id: stock_advisor
+label: 주식 자문
+icon: trending-up
+status: upcoming
+sort_order: 80
+
+# 노출 그룹 — 개인 자산 자문 (개인/1인사업자).
+available_for_groups: [personal, sole_proprietor]
+
+upcoming_message: 주식 가격·분석·자문 기능은 차기 릴리스에서 지원할 예정입니다.
+
+chat_intents:
+  - stock_advisor

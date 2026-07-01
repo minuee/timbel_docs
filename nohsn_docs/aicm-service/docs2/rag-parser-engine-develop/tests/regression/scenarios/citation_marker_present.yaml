@@ -1,0 +1,57 @@
+name: citation [N] markers in grounded answer
+references:
+  - spec: docs/superpowers/specs/2026-04-28-frontend-v3-ux-overhaul-design.md §10
+  - plan: docs/superpowers/plans/2026-04-28-frontend-v3-ux-overhaul.md PR P0.3
+chat:
+  # 정상 — LLM 이 [1] 마커를 올바르게 박음. citations_finalized.referenced=true.
+  - tenant: personal
+    account: demo-admin
+    user: 우리 회사 휴가 정책 알려줘
+    expect:
+      grounding_used: true
+      citations_count: ">=1"
+      citations_have_number: true
+      assistant_body_pattern: "\\[1\\]"
+      citations_finalized_first_referenced: true
+
+  # P3-3 (codex P0.3 hardening) — 풀-와이드 브래킷 변형. Frontend P8 책임 정규화.
+  # backend 는 ASCII [1] 만 올바른 마커로 인식. ［１］ 만 박힌 본문은
+  # citations_finalized.referenced=false (frontend 가 normalize 후 다시 판단).
+  - tenant: personal
+    account: demo-admin
+    user: 휴가 일수 며칠인가요
+    note: "LLM 이 일부러 [１] 풀-와이드를 쓰면 backend 는 referenced=false 로 표시. P8 frontend 가 정규화 후 매칭."
+    expect:
+      grounding_used: true
+      citations_count: ">=1"
+      citations_have_number: true
+      assistant_body_pattern_fullwidth: "［１］"
+      citations_finalized_first_referenced: false
+
+  # P3-3 — LLM 이 마커 누락. citations_finalized 에서 모든 referenced=false +
+  # orphan 0. 안내는 정상이지만 citation 클릭 가능 표식이 비활성.
+  - tenant: personal
+    account: demo-admin
+    user: 휴가 신청 절차 알려줘
+    note: "LLM 이 마커를 빼먹은 시나리오 — referenced=false, orphan 0."
+    expect:
+      grounding_used: true
+      citations_count: ">=1"
+      citations_have_number: true
+      assistant_body_pattern_no_marker: true
+      citations_finalized_all_unreferenced: true
+      citations_finalized_orphans: 0
+
+  # P3-3 — LLM 이 잘못된 번호 [9] 사용. orphans=[9], referenced=false 전부.
+  # backend WARNING 로그로 운영 가시성.
+  - tenant: personal
+    account: demo-admin
+    user: 휴가 사용 후 잔여일은
+    note: "LLM 이 존재하지 않는 [9] 번호를 쓴 시나리오 — orphan 검출."
+    expect:
+      grounding_used: true
+      citations_count: ">=1"
+      citations_have_number: true
+      assistant_body_pattern_orphan: "\\[9\\]"
+      citations_finalized_orphans_contains: 9
+      citations_finalized_first_referenced: false

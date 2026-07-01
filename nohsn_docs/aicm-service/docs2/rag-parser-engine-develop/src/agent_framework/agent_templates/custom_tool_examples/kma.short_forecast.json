@@ -1,0 +1,91 @@
+{
+  "id": "kma.short_forecast",
+  "name": "kma.short_forecast",
+  "display_name": "기상청 단기예보",
+  "description": "기상청 단기예보 API (VilageFcstInfoService_2.0) 를 사용하여 격자(nx/ny) 기반 3일 날씨 예보를 조회합니다. 공공데이터포털에서 서비스 신청 후 API 키 발급 필요. JSON 응답 반환.",
+  "category": "정보/검색",
+  "vendor": "기상청",
+  "vendor_url": "https://www.data.go.kr/data/15084084/openapi.do",
+  "endpoint_url": "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst",
+  "method": "GET",
+  "auth_headers": {},
+  "input_schema": {
+    "type": "object",
+    "required": ["serviceKey", "base_date", "base_time", "nx", "ny"],
+    "properties": {
+      "serviceKey": {
+        "type": "string",
+        "description": "공공데이터포털 인증키 (URL-encoded 원문 키)"
+      },
+      "numOfRows": {
+        "type": "integer",
+        "default": 100,
+        "description": "한 페이지 결과 수 (기본 10, 최대 1000)"
+      },
+      "pageNo": {
+        "type": "integer",
+        "default": 1,
+        "description": "페이지 번호"
+      },
+      "dataType": {
+        "type": "string",
+        "default": "JSON",
+        "enum": ["JSON", "XML"],
+        "description": "응답 데이터 형식"
+      },
+      "base_date": {
+        "type": "string",
+        "description": "발표 일자 (YYYYMMDD, 예: 20260506)"
+      },
+      "base_time": {
+        "type": "string",
+        "description": "발표 시각 (HHMM, 예: 0500 — 매일 0200/0500/0800/1100/1400/1700/2000/2300 발표)",
+        "enum": ["0200", "0500", "0800", "1100", "1400", "1700", "2000", "2300"]
+      },
+      "nx": {
+        "type": "integer",
+        "description": "예보지점 X 좌표 (기상청 격자 좌표, 서울 중구 ≈ 60)"
+      },
+      "ny": {
+        "type": "integer",
+        "description": "예보지점 Y 좌표 (기상청 격자 좌표, 서울 중구 ≈ 127)"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "기상청 응답 JSON ({\"response\": {\"header\": {...}, \"body\": {\"items\": [{\"category\": \"TMP\", \"fcstValue\": \"...\"}]}}})"
+  },
+  "risk_metadata": {
+    "side_effect": "read",
+    "scope": "any",
+    "requires_sender_tier": "member",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound_query",
+    "signature_method": "static_secret_token",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": false,
+    "ip_allowlist_supported": false,
+    "notes": "공공데이터포털 인증키는 URL 쿼리 파라미터로 전송됨 — HTTP 평문 endpoint 라 로그/프록시에 노출됨. HTTPS endpoint (apis.data.go.kr) 사용 권장. 인증키 자체는 트래픽 한도용이라 노출 영향 적으나 도용 시 본인 한도 소진."
+  },
+  "operational_notes": {
+    "rate_limit": "활용신청 시 부여된 일일 한도 (개발: 10,000건/일, 운영 신청 시 증액 가능)",
+    "retry_semantics": "응답이 XML 에러일 수 있음 — JSON 파싱 전 응답 헤더 Content-Type 확인",
+    "response_sla_sec": null,
+    "cost_label": "free",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://www.data.go.kr 로그인 → '기상청_단기예보' 검색",
+    "2. '기상청_단기예보 ((구)_동네예보) 조회서비스' → '활용신청' 클릭",
+    "3. 신청 승인 후 마이페이지 → 인증키 발급 → '일반 인증키(UTF-8)' 복사",
+    "4. input_schema 의 serviceKey 에 발급받은 키 입력",
+    "5. 격자 좌표(nx/ny) 확인: 기상청 제공 엑셀 파일 또는 https://www.kma.go.kr/kma/biz/forecast03.jsp 참고",
+    "6. 서울시청 기준: nx=60, ny=127 / 부산시청: nx=98, ny=76 / 제주시청: nx=53, ny=38",
+    "7. 보안: serviceKey 는 트래픽 한도 제한용이지만 노출 시 본인 한도 소진 가능 — config_encrypted 저장 권장. HTTPS endpoint (https://apis.data.go.kr/...) 로 변경하여 평문 노출 방지."
+  ]
+}

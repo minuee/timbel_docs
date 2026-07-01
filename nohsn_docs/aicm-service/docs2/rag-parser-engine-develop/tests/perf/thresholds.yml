@@ -1,0 +1,27 @@
+# Regression thresholds for compare_reports.py.
+# Magic numbers 금지 — 모든 임계값을 여기 둔다.
+
+# 회귀 임계값 — 변경된 측정치 / baseline 측정치 비율.
+# 1.20 = 20% 증가 시 경고.
+regression:
+  search_p50_ratio: 1.20
+  search_p95_ratio: 1.20
+  search_p99_ratio: 1.30
+  rag_first_token_ratio: 1.25
+  rag_full_response_ratio: 1.25
+  ingest_total_time_ratio: 1.30
+
+# 절대 SLO (참고용 — 실패 게이트가 아닌 표 표시용).
+slo_ms:
+  search_p95: 300
+  rag_first_token_p95: 1500
+  rag_full_response_p95: 8000
+
+# 통계 신뢰도 — 최소 측정 횟수
+minimum_samples: 5
+
+# warning vs failure 분리.
+fail_on:
+  - regression
+warn_on:
+  - slo_breach

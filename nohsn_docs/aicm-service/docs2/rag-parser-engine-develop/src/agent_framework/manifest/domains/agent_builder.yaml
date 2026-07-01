@@ -1,0 +1,56 @@
+# 에이전트 빌더 — 외부 에이전트 / API key 관리.
+id: agent_builder
+label: 에이전트
+icon: bot
+status: active
+sort_order: 60
+
+# 노출 그룹 — 에이전트 관리는 admin (시스템 운영자) 영역.
+available_for_groups: [admin]
+
+list_endpoint: /api/v1/agents
+summary_endpoint: /api/v1/agents/summary
+detail_endpoint: /api/v1/agents/{id}
+
+list_columns:
+  - {key: created_at, label: 등록일, format: datetime}
+  - {key: name, label: 이름, format: text}
+  - {key: scope, label: 범위, format: badge}
+  - {key: status, label: 상태, format: badge}
+  - {key: last_used_at, label: 마지막 호출, format: datetime}
+
+summary_widgets:
+  - type: stat
+    label: 활성 에이전트
+    key: active_count
+    format: number
+  - type: stat
+    label: 오늘 호출 수
+    key: today_calls
+    format: number
+  - type: chart
+    label: 호출량 추이
+    key: by_day
+    kind: line
+
+quick_actions:
+  - id: create_agent
+    label: 에이전트 생성
+    method: POST
+    endpoint: /api/v1/agents
+    form_schema:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, title: 이름}
+        description: {type: string, title: 설명}
+        scope:
+          type: string
+          title: 범위
+          enum: [tenant, account]
+
+chat_intents:
+  - agent_create
+  - agent_list
+
+card_renderer: AgentBuilderCard

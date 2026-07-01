@@ -1,0 +1,71 @@
+# converted from yaml/defect_report.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: defect_report
+  version: '1.1'
+  domain: manufacturing
+  description: 불량 보고 — Lot·발견시점·증상·1차 격리 조치. 4M 분류.
+availability:
+  scope: business_only
+  business_type: manufacturing
+  visibility: opt-in
+triggers:
+- intent: defect_report
+trigger_type: intent
+slots:
+- name: lot
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+- name: symptom
+  type: text
+  required: true
+- name: slot_4
+  type: text
+  required: true
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 제조업체 3년차 오퍼레이터. 불량품 관리 전문가.
+
+        톤: 친절·존댓말. 간결하고 명확한 설명.
+
+        스킬 설명: 불량 보고 — Lot·발견시점·증상·1차 격리 조치. 4M 분류.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - lot
+  - slot_2
+  - symptom
+  - slot_4
+  transitions:
+  - when: slot_filled(lot) and slot_filled(slot_2) and slot_filled(symptom) and slot_filled(slot_4)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: '불량품 보고: {Lot}, 발견시점: {발견시점}, 증상: {증상}, 격리조치: {1차 격리 조치}'
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 제조업체 3년차 오퍼레이터. 불량품 관리 전문가.
+
+        톤: 친절·존댓말. 간결하고 명확한 설명.
+
+        스킬: 불량 보고 — Lot·발견시점·증상·1차 격리 조치. 4M 분류.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '불량품 보고가 완료되었습니다. Lot: {Lot}, 발견시점: {발견시점}, 증상: {증상},
+        1차 격리 조치: {1차 격리 조치}. 확인해 주세요.'
+  transitions:
+  - to: done
+- id: done

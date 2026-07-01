@@ -1,0 +1,90 @@
+{
+  "id": "coolsms.sms_send",
+  "name": "coolsms.sms_send",
+  "display_name": "CoolSMS 문자 발송 (SMS/LMS/MMS)",
+  "description": "CoolSMS (현 Solapi 자회사) Messages v4 API 로 SMS/LMS/MMS 를 발송합니다. Solapi 와 동일 게이트웨이지만 dev-friendly 하게 분리된 endpoint. 알리고 대비 개발자 도구 (SDK / 콘솔 로그 / webhook delivery report) 가 풍부.",
+  "category": "SMS/메일",
+  "vendor": "CoolSMS (NHN Cloud)",
+  "vendor_url": "https://developers.coolsms.co.kr/references/messages-v4/sendSimpleMessages",
+  "endpoint_url": "https://api.coolsms.co.kr/messages/v4/send",
+  "method": "POST",
+  "auth_headers": {
+    "Authorization": "HMAC-SHA256 apiKey=<YOUR_API_KEY>, date=<ISO8601_DATE>, salt=<RANDOM_SALT>, signature=<HMAC_HEX>",
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["message"],
+    "properties": {
+      "message": {
+        "type": "object",
+        "required": ["to", "from", "text"],
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "수신번호 (예: 01012345678)"
+          },
+          "from": {
+            "type": "string",
+            "description": "발신번호 (CoolSMS 콘솔 사전 등록)"
+          },
+          "text": {
+            "type": "string",
+            "description": "본문 (90바이트 이내 SMS, 초과 시 자동 LMS/MMS)",
+            "maxLength": 2000
+          },
+          "subject": {
+            "type": "string",
+            "description": "제목 (LMS/MMS 만)",
+            "maxLength": 40
+          },
+          "imageId": {
+            "type": "string",
+            "description": "MMS 이미지 ID (사전 업로드 후 발급)"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["SMS", "LMS", "MMS"],
+            "description": "명시 시 강제 타입 — 미명시 시 본문 길이 기반 자동 판정"
+          }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "CoolSMS 응답 ({\"groupId\": \"G4V20...\", \"messageId\": \"M4V20...\", \"to\": \"...\", \"from\": \"...\", \"type\": \"SMS\", \"statusCode\": \"2000\", \"statusMessage\": \"정상 접수\"})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": true,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "HMAC-SHA256",
+    "verify_header": "Authorization",
+    "replay_protection": "timestamp+salt",
+    "tls_required": true,
+    "ip_allowlist_supported": true,
+    "notes": "Solapi 와 동일 인증 — HMAC-SHA256(apiSecret, date + salt) → hex. 매 요청 신규 salt. 발신번호 사전등록 + 본인인증 의무."
+  },
+  "operational_notes": {
+    "rate_limit": "계정당 30 req/sec — 대량 발송은 sendMany 별도 API 사용",
+    "retry_semantics": "5xx 지수 백오프, 4xx 영구 실패, 발송 결과는 webhook (delivery report) 로 별도 수신",
+    "response_sla_sec": null,
+    "cost_label": "paid (SMS ~9원, LMS ~26원, MMS ~99원, 부가세 별도)",
+    "biz_account_required": true
+  },
+  "setup_instructions": [
+    "1. https://coolsms.co.kr 회원가입 → 콘솔 → API Key 발급 (apiKey + apiSecret)",
+    "2. 발신번호 등록: 콘솔 → 발신번호 → 통신서비스 가입증명원 업로드 + 본인인증",
+    "3. (선택) 발송 결과 webhook 등록: 콘솔 → Group 설정 → webhook URL — delivery report 자동 수신",
+    "4. 인증: 매 요청마다 동적 HMAC 서명 — 공식 SDK 권장. Python: pip install coolsms-python-sdk",
+    "5. 본문 길이별 자동 분기: 90바이트 이하 SMS, 90바이트~2000자 LMS, 이미지 첨부 시 MMS",
+    "6. 보안: apiSecret 은 KMS / config_encrypted. 발신번호 도용 방지 — 콘솔에서 IP allowlist 설정 권장.",
+    "7. 인바운드 (사용자 답장): CoolSMS 자체는 outbound only. 인바운드는 통신사 비즈메시지 직접 계약 영역 — 양방향이 필요하면 카카오톡 채널 / 네이버 톡톡 사용."
+  ]
+}

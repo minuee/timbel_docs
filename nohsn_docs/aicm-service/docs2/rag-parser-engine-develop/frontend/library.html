@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Locus-KMS — 라이브러리</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 1100px; margin: 30px auto; padding: 0 20px; }
+    h1 { font-size: 24px; }
+    a.back { color: #4a90e2; text-decoration: none; font-size: 13px; }
+    .toolbar { margin: 16px 0; }
+    select, button, input { padding: 6px 10px; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; }
+    th { background: #f5f5f5; font-weight: 600; }
+    tr:hover { background: #f9f9f9; }
+    .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+    .status-active { background: #d1f4d6; color: #1f7a3a; }
+    .status-pending_review { background: #fff3cd; color: #856404; }
+    .status-processing { background: #cce5ff; color: #0a4a8a; }
+    .status-failed { background: #f8d7da; color: #842029; }
+    .status-uploaded { background: #e0e0e0; color: #555; }
+    .empty { padding: 30px; text-align: center; color: #777; }
+    a.edit { color: #4a90e2; text-decoration: none; }
+    a.edit:hover { text-decoration: underline; }
+  </style>
+  <script src="config.js"></script>
+  <script src="nav.js"></script>
+</head>
+<body>
+  <a href="index.html" class="back">← 메인</a>
+  <h1>라이브러리</h1>
+
+  <div class="toolbar">
+    저장소: <select id="repo-select"></select>
+    <button onclick="loadDocs()">불러오기</button>
+    <button onclick="window.location='upload.html'">+ 업로드</button>
+    상태 필터: <select id="status-filter">
+      <option value="">전체</option>
+      <option value="active">active</option>
+      <option value="pending_review">pending_review</option>
+      <option value="processing">processing</option>
+      <option value="failed">failed</option>
+    </select>
+  </div>
+  <div style="font-size:11px;color:#888;margin-bottom:8px;">
+    Tenant: <code id="tenant-display"></code>
+    <button onclick="changeTenant()" style="font-size:11px;padding:2px 6px;margin-left:4px;">변경</button>
+  </div>
+
+  <table id="doc-table" style="display:none">
+    <thead><tr>
+      <th>제목</th><th>상태</th><th>크기</th><th>blocks</th><th>chunks</th><th>업로드 시각</th><th>액션</th>
+    </tr></thead>
+    <tbody id="doc-body"></tbody>
+  </table>
+  <div id="empty" class="empty">저장소를 선택하고 "불러오기" 클릭</div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    async function api(path) {
+      const r = await fetch(window.LUCAS_API_BASE + path, {
+        headers: { 'X-Tenant-Id': window.LUCAS_TENANT_ID },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${JSON.stringify(d)}`);
+      return d;
+    }
+    async function loadRepos() {
+      try {
+        const r = await api(`/api/v1/tenants/${window.LUCAS_TENANT_ID}/repositories?limit=100`);
+        const items = r.data?.items || r.data || [];
+        $('repo-select').innerHTML = items.map(it =>
+          `<option value="${it.id}">${it.name} (${it.document_count || 0} docs)</option>`
+        ).join('');
+      } catch (e) {
+        $('empty').textContent = 'repo 조회 실패: ' + e.message;
+      }
+    }
+    async function loadDocs() {
+      const repoId = $('repo-select').value;
+      const statusFilter = $('status-filter').value;
+      if (!repoId) return;
+      try {
+        const r = await api(`/api/v1/repositories/${repoId}/documents?limit=200`);
+        let items = r.data?.items || r.data || [];
+        if (statusFilter) items = items.filter(d => d.status === statusFilter);
+        const tbody = $('doc-body');
+        tbody.innerHTML = items.map(d => `
+          <tr>
+            <td>${escapeHtml(d.title || d.source_file || d.id.slice(0,8))}</td>
+            <td><span class="status status-${d.status || 'uploaded'}">${d.status || 'uploaded'}</span></td>
+            <td>${d.file_size_bytes ? (d.file_size_bytes/1024).toFixed(0) + 'KB' : '-'}</td>
+            <td>${d.block_count || '-'}</td>
+            <td>${d.chunk_count || '-'}</td>
+            <td>${(d.created_at || '').slice(0, 19).replace('T', ' ')}</td>
+            <td>
+              <a class="edit" href="doc-detail-mvp.html?doc_id=${d.id}">편집</a>
+              · <a class="edit" href="${window.LUCAS_API_BASE}/api/v1/documents/${d.id}" target="_blank">JSON</a>
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="7" class="empty">문서 없음</td></tr>';
+        $('doc-table').style.display = '';
+        $('empty').style.display = 'none';
+      } catch (e) {
+        $('empty').style.display = '';
+        $('empty').textContent = '문서 조회 실패: ' + e.message;
+      }
+    }
+    function escapeHtml(s) { return String(s||'').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":"&#39;"}[c])); }
+    function changeTenant() {
+      const t = prompt('Tenant ID:', window.LUCAS_TENANT_ID);
+      if (t && t.trim()) {
+        localStorage.setItem('LUCAS_TENANT_ID', t.trim());
+        window.LUCAS_TENANT_ID = t.trim();
+        $('tenant-display').textContent = window.LUCAS_TENANT_ID;
+        $('repo-select').innerHTML = '';
+        loadRepos();
+      }
+    }
+    $('tenant-display').textContent = window.LUCAS_TENANT_ID;
+    loadRepos();
+  </script>
+</body>
+</html>

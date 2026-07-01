@@ -1,0 +1,138 @@
+{
+  "total": 30,
+  "by_branch_count": {
+    "kms": 10,
+    "agent": 8,
+    "shared": 12,
+    "unknown": 0
+  },
+  "by_branch": {
+    "kms": [
+      {
+        "table": "blocks",
+        "file": "src/core/models/block.py"
+      },
+      {
+        "table": "categories",
+        "file": "src/core/models/category.py"
+      },
+      {
+        "table": "documents",
+        "file": "src/core/models/document.py"
+      },
+      {
+        "table": "sections",
+        "file": "src/core/models/document.py"
+      },
+      {
+        "table": "chunks",
+        "file": "src/core/models/document.py"
+      },
+      {
+        "table": "document_types",
+        "file": "src/core/models/document_type.py"
+      },
+      {
+        "table": "intent_logs",
+        "file": "src/core/models/intent_log.py"
+      },
+      {
+        "table": "library_folders",
+        "file": "src/core/models/library_folder.py"
+      },
+      {
+        "table": "repositories",
+        "file": "src/core/models/repository.py"
+      },
+      {
+        "table": "search_logs",
+        "file": "src/core/models/search_log.py"
+      }
+    ],
+    "agent": [
+      {
+        "table": "agents",
+        "file": "src/core/models/agent.py"
+      },
+      {
+        "table": "agent_channels",
+        "file": "src/core/models/agent.py"
+      },
+      {
+        "table": "channel_inbound_dedup",
+        "file": "src/core/models/agent.py"
+      },
+      {
+        "table": "channel_user_mappings",
+        "file": "src/core/models/agent.py"
+      },
+      {
+        "table": "agent_documents",
+        "file": "src/core/models/agent_document.py"
+      },
+      {
+        "table": "custom_tools",
+        "file": "src/core/models/custom_tool.py"
+      },
+      {
+        "table": "lifecycle_feedback",
+        "file": "src/core/models/lifecycle_feedback.py"
+      },
+      {
+        "table": "scheduled_actions",
+        "file": "src/core/models/scheduled_action.py"
+      }
+    ],
+    "shared": [
+      {
+        "table": "anonymization_logs",
+        "file": "src/core/models/anonymization_log.py"
+      },
+      {
+        "table": "api_keys",
+        "file": "src/core/models/api_key.py"
+      },
+      {
+        "table": "audit_logs",
+        "file": "src/core/models/audit_log.py"
+      },
+      {
+        "table": "dlq_messages",
+        "file": "src/core/models/dlq_message.py"
+      },
+      {
+        "table": "integrations",
+        "file": "src/core/models/integration.py"
+      },
+      {
+        "table": "llm_usage",
+        "file": "src/core/models/llm_usage.py"
+      },
+      {
+        "table": "tenants",
+        "file": "src/core/models/tenant.py"
+      },
+      {
+        "table": "tenant_links",
+        "file": "src/core/models/tenant_link.py"
+      },
+      {
+        "table": "transition_events",
+        "file": "src/core/models/transition.py"
+      },
+      {
+        "table": "lifecycle_policies",
+        "file": "src/core/models/transition.py"
+      },
+      {
+        "table": "users",
+        "file": "src/core/models/user.py"
+      },
+      {
+        "table": "user_repository_access",
+        "file": "src/core/models/user.py"
+      }
+    ],
+    "unknown": []
+  }
+}

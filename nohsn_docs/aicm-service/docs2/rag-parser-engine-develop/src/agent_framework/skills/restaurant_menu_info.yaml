@@ -1,0 +1,78 @@
+skill:
+  id: restaurant_menu_info
+  version: "1.1"
+  domain: retail
+  description: "식당 메뉴·영업시간·예약 문의 응답"
+
+# v1 seed 한계 메모:
+# - 이 skill 은 business_only + retail 이므로 식당 tenant 에만 tenant_skills 로 enable 된다.
+# - active tenant switching (이사장이 식당 tenant 로 "들어옴") 은 계정 유형 확장
+#   (docs/superpowers/specs/2026-04-24-account-types-brainstorm.md) 이후 기능.
+# - v1 에서는 tool_args.tenant_id: $personal_tenant_id 가 engine._resolve_args 에서
+#   account.personal_tenant_id 로 치환되어 식당 RAG 과 불일치할 수 있음 — demo 용도.
+
+availability:
+  scope: business_only
+  business_type: retail
+  visibility: opt-in
+
+triggers:
+  - intent: ask_menu
+  - intent: ask_hours
+  - intent: ask_reservation
+
+slots:
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: rag_answer_derm.md
+    transitions:
+      - when: has_intent(ask_menu)
+        to: answer_menu
+      - when: has_intent(ask_hours)
+        to: answer_hours
+      - when: has_intent(ask_reservation)
+        to: answer_reservation
+      - llm_fallback: true
+
+  - id: answer_menu
+    tool: kms_rag.search
+    tool_args:
+      query: $user_last_message
+      top_k: 3
+      tenant_id: $personal_tenant_id
+    on_exit:
+      llm_respond:
+        template: rag_answer_derm.md
+    transitions:
+      - to: greet
+
+  - id: answer_hours
+    tool: kms_rag.search
+    tool_args:
+      query: "영업시간 운영시간 휴무"
+      top_k: 2
+      tenant_id: $personal_tenant_id
+    on_exit:
+      llm_respond:
+        template: rag_answer_derm.md
+    transitions:
+      - to: greet
+
+  - id: answer_reservation
+    tool: kms_rag.search
+    tool_args:
+      query: "예약 정책"
+      top_k: 2
+      tenant_id: $personal_tenant_id
+    on_exit:
+      llm_respond:
+        template: rag_answer_derm.md
+    transitions:
+      - to: greet

@@ -1,0 +1,39 @@
+category: other
+label: "기타 (직접 작성)"
+description: "위 18 카테고리에 해당하지 않는 업종 — 직접 작성형 인터뷰."
+
+questions:
+  - id: ot_business_description
+    label: "사업장의 업종·서비스를 한 문장으로 설명해 주세요."
+    type: textarea
+    example: "부동산 컨설팅·매매 중개 / 유튜브 콘텐츠 제작 에이전시 / 친환경 자전거 대여"
+    required: true
+    section: 페르소나
+
+  - id: ot_unique_value
+    label: "사업장의 고유 가치 / 차별점은요?"
+    type: textarea
+    example: "현장 즉시 견적 / 365일 24시간 / 친환경·로컬 / AI 기반 매칭"
+    required: true
+    section: 페르소나
+
+  - id: ot_main_workflow
+    label: "고객 응대 핵심 워크플로 (가장 자주 발생하는 흐름)."
+    type: textarea
+    example: "문의 → 견적 → 방문/계약 → 진행 → AS"
+    required: true
+    section: 응대 시나리오
+
+  - id: ot_compliance_constraints
+    label: "법적·규제 제약 (자격증·면허·심의 등)?"
+    type: textarea
+    example: "공인중개사 자격 / 식품위생법 / 광고심의 적용"
+    required: false
+    section: 금지 사항
+
+  - id: ot_specific_jargon
+    label: "고객·업계 특화 용어 / 어휘 (응답 톤에 반영)."
+    type: textarea
+    example: "고객을 회원·동지·파트너 등으로 부름 / 업계 약어 사용"
+    required: false
+    section: 응답 톤

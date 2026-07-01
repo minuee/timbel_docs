@@ -1,0 +1,66 @@
+# =============================================================================
+# Lucas-KMS — Standalone API/Worker 이미지 (공공 SaaS 배포용)
+# =============================================================================
+# Base: docker/Dockerfile.api 와 동일한 시스템/Python 의존성 구성을 유지하되,
+#       FastAPI factory 를 main_kms:create_kms_app 으로 고정하고
+#       LUCAS_PRODUCT=kms 를 빌트인 env 로 주입.
+#
+# 빌드:
+#   docker build -t lucas-kms:latest -f docker/Dockerfile.lucas-kms .
+#
+# 본 이미지는 KMS-only 227 routes (intent/skill/agent_framework 라우터는
+# create_kms_app 빌드 단계에서 자동 제외). 워커 동시 사용 시
+# `LUCAS_PRODUCT=kms python3 -m src.pipeline.workers.main` 으로 entrypoint
+# 오버라이드 (compose 에서 처리).
+#
+# 메모:
+#   - Phase 3 packaging 라운드에서 agent_framework 디렉토리 자체 제외 + multi-stage
+#     슬림화 예정. 현 단계는 *기능 격리* (LUCAS_PRODUCT=kms 가 dynamic 차단) 우선.
+#   - 기존 Dockerfile.api 와 빌드 컨텍스트/.dockerignore 공유 — 별도 dockerignore X.
+# =============================================================================
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System dependencies (Java for konlpy/Okt 한국어 형태소 분석)
+# LibreOffice(headless): docx/xlsx/pptx → PDF 변환(soffice). 미설치 시 ConvertingParser 가
+#   soffice_not_found 로 native 파싱 폴백 → PDF 프리뷰/레이아웃(bbox) 추출 불가.
+#   -writer/-calc/-impress 로 office 포맷 변환 필터만(GUI 제외). CJK PDF 는 위 nanum/noto 폰트로 렌더.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential wget curl \
+    fontconfig fonts-nanum fonts-noto-cjk \
+    default-jre-headless \
+    libreoffice-writer libreoffice-calc libreoffice-impress \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e ".[dev]" 2>/dev/null || pip install --no-cache-dir .
+
+# =====================================================================
+# BGE-M3 GPU 임베딩 — RTX 5090 (sm_120) 호환을 위해 cu128 필수
+# 절대 cpu 인덱스로 되돌리지 말 것 — 동시 검색 부하에서 CPU 큐잉으로 11s+ 발생.
+# GPU device reservation 은 docker-compose.lucas-kms.yml 의 lucas-kms-api
+# 서비스 deploy.resources 에서 수행.
+# =====================================================================
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu128 \
+    && pip install --no-cache-dir "transformers>=4.44.0,<5.0.0" sentence-transformers FlagEmbedding
+
+# Source code
+COPY src/ src/
+COPY alembic/ alembic/
+COPY alembic.ini .
+
+# =====================================================================
+# Lucas-KMS 식별 — worker registry 가 본 env 를 보고 agent_framework workers 차단,
+# main_kms factory 도 본 env 를 default 활성 모드로 채택. 운영자가 override 가능.
+# =====================================================================
+ENV LUCAS_PRODUCT=kms
+
+EXPOSE 8000
+
+# main_kms:create_kms_app factory → KMS-only 227 routes
+# workers 갯수는 compose 에서 override 가능 (default 4).
+CMD ["uvicorn", "src.api.main_kms:create_kms_app", "--factory", \
+     "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

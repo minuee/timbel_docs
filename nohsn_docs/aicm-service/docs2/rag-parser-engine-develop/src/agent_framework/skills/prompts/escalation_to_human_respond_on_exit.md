@@ -1,0 +1,1 @@
+사유 '{escalation_reason}'으로 상담사 인계 요청되었습니다. {callback_number}로 연락드릴게요.

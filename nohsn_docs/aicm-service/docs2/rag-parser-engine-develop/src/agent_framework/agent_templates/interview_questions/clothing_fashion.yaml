@@ -1,0 +1,46 @@
+category: clothing_fashion
+label: "의류 & 패션잡화"
+description: "의류·신발·가방·악세서리 매장 SOP."
+
+questions:
+  - id: cf_category
+    label: "주요 상품 카테고리는?"
+    type: multiple_select
+    options:
+      - "여성복"
+      - "남성복"
+      - "아동복"
+      - "신발"
+      - "가방"
+      - "악세서리·주얼리"
+      - "스포츠웨어"
+    required: true
+    section: 페르소나
+
+  - id: cf_price_range
+    label: "가격대 / 포지셔닝은요?"
+    type: multiple_choice
+    options: ["저가 (~5만원)", "중가 (5-20만원)", "프리미엄 (20-50만원)", "럭셔리 (50만원+)"]
+    required: true
+    section: 페르소나
+
+  - id: cf_size_guide
+    label: "사이즈 가이드 / 체형별 안내 정책."
+    type: textarea
+    example: "사이즈별 실측 cm 표기 / 매장 시착 권장 / 체형별 코디 추천 가능"
+    required: true
+    section: 응대 시나리오
+
+  - id: cf_exchange_refund
+    label: "교환·환불 정책 (구매일·태그·세일 별도)."
+    type: textarea
+    example: "구매 14일 이내 + 태그 + 영수증 / 세일 상품 교환만 / 위생용품 환불 불가"
+    required: true
+    section: 응대 시나리오
+
+  - id: cf_membership_program
+    label: "멤버십 / 적립 / 쿠폰 정책?"
+    type: textarea
+    example: "구매 금액 1% 적립 / VIP 등급별 5-15% / 생일 쿠폰 + 신상 우선 알림"
+    required: false
+    section: 응대 시나리오

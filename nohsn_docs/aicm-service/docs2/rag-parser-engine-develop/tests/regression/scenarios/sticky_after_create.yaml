@@ -1,0 +1,24 @@
+name: sticky skill must release after unrelated turn
+references:
+  - memory: project_real_usage_bugs_20260424.md (slot-fill / sticky 잔존)
+  - feedback: feedback_validation_must_include_multiturn_patterns.md
+  - spec: docs/superpowers/specs/2026-04-28-frontend-v3-ux-overhaul-design.md §11
+notes: |
+  schedule.create 활성 후 다음 turn 에 무관한 발화가 오면 sticky skill 이
+  release 되어야 한다. 이전 사례: 같은 schedule skill 이 sticky 하게 남아
+  사용자의 일상 대화에도 일정 등록을 시도.
+chat:
+  - tenant: personal
+    account: demo-admin
+    user: 내일 오후 3시에 치과 예약 등록해줘
+    expect:
+      tools_any_of: ["schedule.create"]
+      assistant_body_nonempty: true
+
+  # 무관한 발화 — schedule 스킬이 sticky 하면 안 됨.
+  - tenant: personal
+    account: demo-admin
+    user: 점심 뭐 먹을까
+    expect:
+      tools_none_of: ["schedule.create", "schedule.update"]
+      assistant_body_nonempty: true

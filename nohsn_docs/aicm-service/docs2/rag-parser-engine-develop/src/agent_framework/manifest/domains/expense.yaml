@@ -1,0 +1,70 @@
+# 가계부 — 개인/가구 단위 지출 기록 + 카테고리 집계.
+id: expense
+label: 가계부
+icon: wallet
+status: active
+sort_order: 30
+
+# 노출 그룹 — 가계부는 개인 + 1인사업자 (업무 매출은 별도 도메인 예정).
+available_for_groups: [personal, sole_proprietor]
+
+list_endpoint: /api/v1/expense
+summary_endpoint: /api/v1/expense/summary
+detail_endpoint: /api/v1/expense/{id}
+
+list_columns:
+  - {key: spent_at, label: 일자, format: date}
+  - {key: amount, label: 금액, format: currency}
+  - {key: category, label: 카테고리, format: badge}
+  - {key: description, label: 내용, format: text}
+
+summary_widgets:
+  - type: stat
+    label: 이번달 합계
+    key: total
+    format: currency
+  - type: stat
+    label: 일평균
+    key: daily_avg
+    format: currency
+  - type: chart
+    label: 카테고리별
+    key: by_category
+    kind: pie
+  - type: chart
+    label: 일자별 추이
+    key: by_day
+    kind: line
+
+quick_actions:
+  - id: log_expense
+    label: 지출 기록
+    method: POST
+    endpoint: /api/v1/expense
+    form_schema:
+      type: object
+      required: [amount, category]
+      properties:
+        amount:
+          type: integer
+          title: 금액
+          minimum: 0
+        category:
+          type: string
+          title: 카테고리
+          enum: [식비, 교통, 쇼핑, 주거, 의료, 여가, 교육, 기타]
+        description:
+          type: string
+          title: 내용
+        spent_at:
+          type: string
+          title: 일자
+          format: date
+
+chat_intents:
+  - log_expense
+  - expense_analyzer
+  - expense_log_personal
+  - personal_finance
+
+card_renderer: ExpenseSummaryCard

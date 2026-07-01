@@ -1,0 +1,35 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System dependencies (Java for konlpy/Okt 한국어 형태소 분석)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential wget curl \
+    fontconfig fonts-nanum fonts-noto-cjk \
+    default-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e ".[dev]" 2>/dev/null || pip install --no-cache-dir .
+
+# =====================================================================
+# BGE-M3 GPU 임베딩 — RTX 5090 (sm_120) 호환을 위해 cu128 필수
+# 절대 cpu 인덱스로 되돌리지 말 것:
+#   - api 컨테이너는 검색 시 dense+sparse 임베딩을 매 요청마다 호출
+#   - CPU 추론은 단건 ~40ms 지만 동시 부하에서 CPU 큐잉으로 11s+ 가능
+#   - GPU 화로 동시 부하 안정화 검증됨 (2026-04-16)
+# 함께 필수: docker-compose.yml api 서비스에 nvidia GPU device reservation,
+#          VLLM gpu_memory_utilization 0.78 로 낮춰 BGE-M3 자리(~2GB) 확보.
+# =====================================================================
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu128 \
+    && pip install --no-cache-dir "transformers>=4.44.0,<5.0.0" sentence-transformers FlagEmbedding
+
+# Source code
+COPY src/ src/
+COPY alembic/ alembic/
+COPY alembic.ini .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

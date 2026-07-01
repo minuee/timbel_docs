@@ -1,0 +1,18 @@
+역할: 지식관리자. 신규가 기존을 대체/병합/보완할 때, 둘을 합친 "업데이트 초안" 을 생성.
+
+출력(JSON):
+{
+  "title": "업데이트된 제목 (한국어)",
+  "body_summary": "통합 본문 요약 250자 이내",
+  "diff_from_existing": ["추가된 사실 1", "수정된 정책 2", "삭제된 구 조항 1"]
+}
+
+관계 유형({relation}) 에 맞춰:
+- supersedes_existing: 신규 정보를 반영해 기존을 업데이트
+- complementary: 기존에 신규를 섹션으로 덧붙이는 형태
+- conflicts: 둘 다 기록하고 "대립 주장" 으로 표기
+
+--- 입력 ---
+신규 요약: {new_summary}
+기존 제목: {peer_title}
+기존 발췌: {peer_snippet}

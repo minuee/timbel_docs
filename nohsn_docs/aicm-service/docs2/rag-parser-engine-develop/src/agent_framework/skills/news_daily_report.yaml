@@ -1,0 +1,73 @@
+skill:
+  id: news_daily_report
+  version: "0.1"
+  domain: personal
+  description: "매일 아침 뉴스 브리핑 Push + 구독 관리"
+
+availability:
+  scope: personal
+  visibility: auto
+
+# intent trigger (사용자 주도) + scheduled (시스템 주도) 둘 다 지원.
+# 현재 engine 은 trigger_type 하나만 읽으므로 여기선 intent 로 선언하고
+# Task 19 에서 scheduled 모드 분기를 engine 에 추가 후 별도 scheduled 호출.
+triggers:
+  - intent: configure_news
+
+trigger_type: intent
+# scheduled cron 은 Task 19 에서 별도 CronRunner 가 직접 읽어서 scheduled 진입점 호출
+schedule: "0 8 * * *"   # 참고용 (매일 오전 8시). Task 19 에서 활용.
+
+slots:
+  - name: topic
+    type: text
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: news_greet.md
+    transitions:
+      - when: has_intent(configure_news)
+        to: collect_topic
+      - llm_fallback: true
+
+  - id: collect_topic
+    llm_slot_fill: [topic]
+    transitions:
+      - when: slot_filled(topic)
+        to: add_sub
+      - llm_fallback: true
+
+  - id: add_sub
+    tool: news.add_subscription
+    tool_args:
+      phone: $phone
+      tenant_id: $personal_tenant_id
+      topic: $topic
+    on_exit:
+      llm_respond:
+        template: news_brief.md
+    transitions:
+      - to: done
+
+  - id: done
+
+  # Task 19 엔진 scheduled 분기에서 사용할 진입점 (현재 intent trigger 가 진입 안 함)
+  - id: scheduled_init
+    tool: news.fetch_and_summarize
+    tool_args:
+      phone: $phone
+      tenant_id: $personal_tenant_id
+      today: $today
+    on_exit:
+      llm_respond:
+        template: news_brief.md
+    transitions:
+      - to: scheduled_done
+
+  - id: scheduled_done

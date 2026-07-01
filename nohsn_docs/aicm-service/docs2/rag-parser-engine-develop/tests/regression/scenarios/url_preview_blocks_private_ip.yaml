@@ -1,0 +1,54 @@
+name: url_preview SSRF guard rejects private IPs and metadata host
+references:
+  - spec: docs/superpowers/specs/2026-04-28-frontend-v3-ux-overhaul-design.md §8
+  - plan: docs/superpowers/plans/2026-04-28-frontend-v3-ux-overhaul.md PR P6
+  - hardening: docs/superpowers/specs/2026-04-28-frontend-v3-codex-review-log.md P2-5
+notes: |
+  /api/v1/chat/url_preview 는 P0.2 stub 에서 P6 본 구현으로 승격. 라우터는 항상
+  200 응답 + body.status 로 결과 분기 — 거부 시 status="rejected" + reason.
+  본 시나리오는 SSRF 차단 5종 (loopback / 사설 / link-local / metadata / raw IP)
+  모두 응답 status 가 "rejected" 임을 검증.
+http:
+  - request:
+      method: POST
+      path: /api/v1/chat/url_preview
+      auth_account: demo-admin
+      json: { url: "http://127.0.0.1/secret" }
+    expect: { status: 200, body_contains: "rejected" }
+  - request:
+      method: POST
+      path: /api/v1/chat/url_preview
+      auth_account: demo-admin
+      json: { url: "http://192.168.1.1/admin" }
+    expect: { status: 200, body_contains: "rejected" }
+  - request:
+      method: POST
+      path: /api/v1/chat/url_preview
+      auth_account: demo-admin
+      json: { url: "http://10.0.0.1/" }
+    expect: { status: 200, body_contains: "rejected" }
+  - request:
+      method: POST
+      path: /api/v1/chat/url_preview
+      auth_account: demo-admin
+      json: { url: "http://169.254.169.254/latest/meta-data/" }
+    expect: { status: 200, body_contains: "rejected" }
+  - request:
+      method: POST
+      path: /api/v1/chat/url_preview
+      auth_account: demo-admin
+      json: { url: "http://1.2.3.4/" }
+    expect: { status: 200, body_contains: "rejected" }
+  - request:
+      method: POST
+      path: /api/v1/chat/url_preview
+      auth_account: demo-admin
+      json: { url: "ftp://example.com/file" }
+    expect: { status: 200, body_contains: "rejected" }
+  # 인증 없으면 401.
+  - request:
+      method: POST
+      path: /api/v1/chat/url_preview
+      headers: {}
+      json: { url: "https://example.com/" }
+    expect: { status: 401 }

@@ -1,0 +1,65 @@
+# converted from yaml/appointment_reminder.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: appointment_reminder
+  version: '1.1'
+  domain: medical
+  description: 병원 예약 리마인드 + 준비물 안내 (공복·약 중단·검사복 등).
+availability:
+  scope: personal
+  visibility: auto
+triggers:
+- intent: appointment_reminder
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 일상 건강 관리에 관심이 많은 환자.
+
+        톤: 친절하고 따뜻한 존댓말로, 환자의 불안을 덜어주는 짧은 문장.
+
+        스킬 설명: 병원 예약 리마인드 + 준비물 안내 (공복·약 중단·검사복 등).'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: 예약일과 검사 종류에 따른 준비물 안내
+    phone: $phone
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 일상 건강 관리에 관심이 많은 환자.
+
+        톤: 친절하고 따뜻한 존댓말로, 환자의 불안을 덜어주는 짧은 문장.
+
+        스킬: 병원 예약 리마인드 + 준비물 안내 (공복·약 중단·검사복 등).'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '예약일: {예약일}에 대한 준비물은 {kms_search_result}입니다.'
+  transitions:
+  - to: done
+- id: done

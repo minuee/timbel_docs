@@ -1,0 +1,153 @@
+skill:
+  id: appointment_derm
+  version: "1.1"
+  domain: dermatology
+  description: "피부과 예약 + 의사·시술 안내"
+
+availability:
+  scope: business_only
+  business_type: medical
+  visibility: opt-in
+
+triggers:
+  - intent: book_appointment
+  - intent: ask_treatment
+  - intent: ask_hours
+  - intent: ask_doctors
+
+slots:
+  - name: preferred_datetime
+    type: datetime
+    required: true
+    must_be_specific: true
+    validators:
+      - time_of_day_required
+      - future_only
+  - name: preferred_doctor_id
+    type: enum
+    values: [dr_kim, dr_park, dr_lee, dr_choi]
+    required: true
+  - name: preferred_service
+    type: enum
+    values: [laser, filler, botox, peeling, consult]
+  - name: contact_phone
+    type: phone
+    source: identity
+  - name: contact_name
+    type: text
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: greet_derm.md
+    transitions:
+      - when: has_intent(book_appointment)
+        to: collect_datetime
+      - when: has_intent(ask_doctors)
+        to: list_doctors_state
+      - when: has_intent(ask_treatment)
+        to: rag_consult
+      - llm_fallback: true
+
+  - id: list_doctors_state
+    tool: calendar.list_doctors
+    tool_args: {}
+    on_exit:
+      llm_respond:
+        template: select_doctor.md
+    transitions:
+      - when: has_intent(book_appointment)
+        to: collect_datetime
+      - when: has_intent(ask_treatment)
+        to: rag_consult
+      - llm_fallback: true
+      - to: greet   # 최종 fallback — 아무 intent 없고 llm_fallback 도 못잡으면 greet 복귀
+
+  - id: collect_datetime
+    llm_slot_fill: [preferred_datetime]
+    transitions:
+      - when: slot_filled(preferred_datetime)
+        to: collect_doctor
+      - llm_fallback: true
+
+  - id: collect_doctor
+    llm_slot_fill: [preferred_doctor_id]
+    transitions:
+      - when: slot_filled(preferred_doctor_id)
+        to: collect_service
+      - llm_fallback: true
+
+  - id: collect_service
+    llm_slot_fill: [preferred_service]
+    transitions:
+      - when: slot_filled(preferred_service)
+        to: check_slot
+      - llm_fallback: true
+
+  - id: check_slot
+    tool: calendar.check_availability
+    tool_args:
+      datetime: $preferred_datetime
+      doctor_id: $preferred_doctor_id
+    transitions:
+      - when: tool_result.available
+        to: confirm
+      - when: not tool_result.available
+        to: propose_alternatives
+
+  - id: confirm
+    on_enter:
+      llm_respond:
+        template: confirm_derm.md
+    transitions:
+      - when: user_intent(yes)
+        to: book
+      - when: user_intent(no)
+        to: greet
+      - llm_fallback: true
+
+  - id: book
+    tool: calendar.book
+    tool_args:
+      datetime: $preferred_datetime
+      doctor_id: $preferred_doctor_id
+      service: $preferred_service
+      phone: $contact_phone
+      name: $contact_name
+    transitions:
+      - when: tool_result.success
+        to: done
+      - to: error
+
+  - id: propose_alternatives
+    tool: calendar.list_available_slots
+    tool_args: {}
+    on_exit:
+      llm_respond:
+        template: greet_derm.md
+    transitions:
+      - to: greet
+
+  - id: rag_consult
+    tool: kms_rag.search
+    tool_args:
+      query: $user_last_message
+      top_k: 3
+      tenant_id: $tenant_id
+    on_exit:
+      llm_respond:
+        template: rag_answer_derm.md
+    transitions:
+      - to: greet
+
+  - id: done
+
+  - id: error
+    on_enter:
+      llm_respond:
+        template: greet_derm.md
+    transitions:
+      - to: greet

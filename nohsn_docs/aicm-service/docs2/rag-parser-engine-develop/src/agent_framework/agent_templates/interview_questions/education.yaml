@@ -1,0 +1,45 @@
+category: education
+label: "교육 & 학습"
+description: "학원·과외·온라인 교육·평생교육원 SOP."
+
+questions:
+  - id: ed_subject_area
+    label: "교육 분야 / 과목은 무엇인가요?"
+    type: text
+    example: "초중고 영어·수학 / 토익·토플 / 코딩 / 미술 / 평생교육"
+    required: true
+    section: 페르소나
+
+  - id: ed_target_age
+    label: "타겟 연령대 / 학년."
+    type: multiple_select
+    options:
+      - "유아 (5-7세)"
+      - "초등"
+      - "중등"
+      - "고등"
+      - "대학생·성인"
+      - "시니어"
+    required: true
+    section: 페르소나
+
+  - id: ed_class_format
+    label: "수업 형태 — 1:1 / 그룹 / 온라인 / 혼합?"
+    type: multiple_choice
+    options: ["1:1 개인 과외", "소그룹 (2-5명)", "정원반 (6명 이상)", "온라인 라이브", "녹화 강의", "혼합형"]
+    required: true
+    section: 응대 시나리오
+
+  - id: ed_refund_policy
+    label: "수강료 환불 정책 (학원법 준수 — 진도율별)."
+    type: textarea
+    example: "수강 개시 전 100% / 1/3 진도 전 2/3 환불 / 1/2 이상 환불 불가"
+    required: true
+    section: 응대 시나리오
+
+  - id: ed_safety_protocol
+    label: "학생 안전 / 정신건강 위험 신호 (자해·따돌림 등) 대응 프로토콜."
+    type: textarea
+    example: "1393 자살예방상담 즉시 안내 / 학부모 + 원장 즉시 연락 / 담임 강사 면담 우선"
+    required: true
+    section: 에스컬레이션

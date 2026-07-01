@@ -1,0 +1,54 @@
+skill:
+  id: patient_intake
+  version: "1.1"
+  domain: medical
+  description: "환자 접수 (성함·생년월일·주증상)"
+
+availability:
+  scope: business_only
+  business_type: medical
+  visibility: opt-in
+
+triggers:
+  - intent: patient_intake
+
+slots:
+  - name: patient_name
+    type: text
+    required: true
+  - name: birth_date
+    type: date
+    required: true
+  - name: chief_complaint
+    type: text
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: patient_intake_greet_on_enter.md
+    transitions:
+      - when: has_intent(patient_intake)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [patient_name, birth_date, chief_complaint]
+    transitions:
+      - when: slot_filled(chief_complaint)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: patient_intake_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

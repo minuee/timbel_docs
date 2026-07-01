@@ -1,0 +1,94 @@
+{
+  "id": "slack.chat_postmessage",
+  "name": "slack.chat_postmessage",
+  "display_name": "Slack chat.postMessage (Bot Token)",
+  "description": "Slack Web API chat.postMessage 로 채널/DM/스레드에 풍부한 Block Kit UI 메시지를 발송합니다. Incoming Webhook (slack.webhook_send) 과 달리 Bot Token 사용 — 다중 채널/DM/스레드/메시지 수정·삭제가 가능하고, Events API + 인터랙티브 컴포넌트 (버튼/모달) 양방향 봇 구현의 송신 측 기본 toolset.",
+  "category": "알림",
+  "vendor": "Slack",
+  "vendor_url": "https://docs.slack.dev/reference/methods/chat.postMessage",
+  "endpoint_url": "https://slack.com/api/chat.postMessage",
+  "method": "POST",
+  "auth_headers": {
+    "Authorization": "Bearer <YOUR_BOT_USER_OAUTH_TOKEN — xoxb-...>",
+    "Content-Type": "application/json; charset=utf-8"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["channel"],
+    "properties": {
+      "channel": {
+        "type": "string",
+        "description": "채널 ID (C0123456) / 그룹 DM (G...) / 사용자 DM (U... 또는 @username)"
+      },
+      "text": {
+        "type": "string",
+        "description": "fallback 텍스트 (notification 표시 + screen reader). blocks 사용 시도 권장."
+      },
+      "blocks": {
+        "type": "array",
+        "description": "Block Kit 컴포넌트 배열 — section / divider / actions / image / context 등",
+        "items": {"type": "object"}
+      },
+      "thread_ts": {
+        "type": "string",
+        "description": "스레드 답글 시 원본 메시지 ts (예: '1715000000.000100')"
+      },
+      "reply_broadcast": {
+        "type": "boolean",
+        "default": false,
+        "description": "스레드 답글을 채널 전체에 broadcast 할지 여부"
+      },
+      "unfurl_links": {
+        "type": "boolean",
+        "default": true,
+        "description": "URL 자동 미리보기 — 노이즈 줄이려면 false"
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Events API 로 다시 받을 사용자 정의 metadata",
+        "properties": {
+          "event_type": {"type": "string"},
+          "event_payload": {"type": "object"}
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Slack 응답 ({\"ok\": true, \"channel\": \"C0123456\", \"ts\": \"1715000000.000100\", \"message\": {...}}) — ok=false 시 'error' 필드 (channel_not_found / not_in_channel / invalid_blocks 등)"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "Bearer",
+    "verify_header": "Authorization",
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "Bot Token (xoxb-) 은 워크스페이스 단위 + scope 기반 권한 (chat:write, chat:write.public 등). 노출 시 즉시 https://api.slack.com/apps → OAuth & Permissions → 'Revoke Token'. Events API / Interactive Components 인바운드는 별도 Signing Secret + X-Slack-Signature (HMAC-SHA256) + X-Slack-Request-Timestamp 5분 이내 검증 필수 — base string: v0:{timestamp}:{raw_body}, prefix v0=. raw body 로 검증해야 함 (JSON 파싱 후 검증 X)."
+  },
+  "operational_notes": {
+    "rate_limit": "Tier 별 차등 — chat.postMessage 는 Tier 1 (~1 msg/sec/channel). 동일 채널 burst 시 429 + Retry-After.",
+    "retry_semantics": "ok=false + retryable error (ratelimited / service_unavailable) 만 재시도. invalid_auth / channel_not_found 등은 영구 실패.",
+    "response_sla_sec": null,
+    "cost_label": "free (Slack Free/Pro 워크스페이스 모두 사용 가능)",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://api.slack.com/apps → Create New App → From scratch — 앱 이름(예: Locus) + 워크스페이스 선택",
+    "2. OAuth & Permissions → Bot Token Scopes 추가: chat:write (필수), chat:write.public (모든 공개 채널), im:write (DM), users:read (사용자 정보), channels:read.",
+    "3. Install to Workspace → 동의 → Bot User OAuth Token (xoxb-...) 발급 — 복사",
+    "4. auth_headers 의 Authorization 'Bearer xoxb-...' 로 교체",
+    "5. 채널에 봇 초대: Slack 채널에서 /invite @<bot-name> — 초대 안 하면 not_in_channel 에러 (chat:write.public 시 공개 채널은 자동 가능).",
+    "6. Block Kit 빌더 활용: https://app.slack.com/block-kit-builder — markdown → blocks 변환은 별도 헬퍼 작성.",
+    "7. 인바운드 (양방향 봇): Events API 활성화 → Request URL 등록 → app_mention / message.im 구독. Signing Secret 으로 X-Slack-Signature HMAC-SHA256 + timestamp 5분 이내 검증.",
+    "8. 보안: xoxb 토큰은 KMS / config_encrypted. 노출 시 즉시 revoke + 새 token 발급. Slash command / Interactive 응답은 즉시 200 (3초 SLA) — 그 이상 작업은 response_url (30분, 5회) 에 비동기 push.",
+    "9. 다중 워크스페이스 배포: OAuth flow + per-workspace 토큰 저장 (agent_channels.config_encrypted) + Slack Marketplace 등록 (검수 ~수주)."
+  ]
+}

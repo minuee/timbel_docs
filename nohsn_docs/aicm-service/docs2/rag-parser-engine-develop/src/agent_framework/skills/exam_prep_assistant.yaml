@@ -1,0 +1,65 @@
+# converted from yaml/exam_prep_assistant.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: exam_prep_assistant
+  version: '1.1'
+  domain: education
+  description: 시험 직전 핵심 정리·기출 패턴·실전 팁 안내. 과목별 전략 제시.
+availability:
+  scope: personal
+  visibility: auto
+triggers:
+- intent: exam_prep_assistant
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 시험 준비 중인 대학생. 효율적인 학습 방법 찾는 중.
+
+        톤: 친절·존댓말. 학생의 긴장 완화하는 짧은 문장.
+
+        스킬 설명: 시험 직전 핵심 정리·기출 패턴·실전 팁 안내. 과목별 전략 제시.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: 시험 준비 {과목} {시험 종류} 핵심 정리 및 기출 패턴
+    phone: $phone
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 시험 준비 중인 대학생. 효율적인 학습 방법 찾는 중.
+
+        톤: 친절·존댓말. 학생의 긴장 완화하는 짧은 문장.
+
+        스킬: 시험 직전 핵심 정리·기출 패턴·실전 팁 안내. 과목별 전략 제시.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '여기 {과목} {시험 종류}에 대한 핵심 정리와 기출 패턴입니다: {kms_search_result}'
+  transitions:
+  - to: done
+- id: done

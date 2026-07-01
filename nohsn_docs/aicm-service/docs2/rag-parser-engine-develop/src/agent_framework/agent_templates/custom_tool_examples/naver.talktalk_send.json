@@ -1,0 +1,110 @@
+{
+  "id": "naver.talktalk_send",
+  "name": "naver.talktalk_send",
+  "display_name": "네이버 톡톡 메시지 발송",
+  "description": "네이버 톡톡 (Naver TalkTalk) Chatbot API 로 사용자에게 메시지를 push 발송합니다. 네이버 쇼핑·예약·소상공인 1:1 문의 채널 — 카카오톡 다음으로 한국 점유율 2위. 인바운드 (사용자 메시지 수신) 도 같은 webhook 으로 양방향 가능.",
+  "category": "알림",
+  "vendor": "Naver",
+  "vendor_url": "https://github.com/navertalk/chatbot-api",
+  "endpoint_url": "https://gw.talk.naver.com/chatbot/v1/event",
+  "method": "POST",
+  "auth_headers": {
+    "Authorization": "Bearer <YOUR_TALKTALK_AUTHORIZATION_KEY>",
+    "Content-Type": "application/json;charset=UTF-8"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["event", "user"],
+    "properties": {
+      "event": {
+        "type": "string",
+        "enum": ["send", "typing", "action"],
+        "description": "send: 메시지 발송 / typing: 작성중 표시 / action: 빠른 응답 버튼"
+      },
+      "user": {
+        "type": "string",
+        "description": "수신자 톡톡 사용자 ID (인바운드 webhook 의 user 필드를 그대로 사용)"
+      },
+      "textContent": {
+        "type": "object",
+        "description": "event=send 시 메시지 본문",
+        "properties": {
+          "text": {"type": "string", "maxLength": 1000},
+          "code": {"type": "string", "description": "버튼 클릭 시 식별 코드 (옵션)"},
+          "inputType": {"type": "string", "enum": ["typing", "button"]}
+        }
+      },
+      "imageContent": {
+        "type": "object",
+        "description": "event=send 시 이미지 (text 와 양자택일 또는 함께)",
+        "properties": {
+          "imageUrl": {"type": "string"}
+        }
+      },
+      "compositeContent": {
+        "type": "object",
+        "description": "버튼/캐러셀 카드 — 톡톡 composite 영역",
+        "properties": {
+          "compositeList": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "image": {"type": "object"},
+                "elementList": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {"type": "string", "enum": ["TEXT", "LINK", "OPTION"]},
+                      "data": {"type": "object"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "톡톡 Gateway 응답 ({\"success\": true, \"resultCode\": \"00\", \"resultMessage\": \"성공\"})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "Bearer",
+    "verify_header": "Authorization",
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "Authorization 키 1개로 push 가능 — 노출 시 톡톡 파트너센터에서 즉시 재발급. 인바운드 webhook 은 시그니처 미지원 — webhook URL 자체를 비공개로 유지하고 페이로드의 partnerId 를 화이트리스트로 검증해야 함. echo 이벤트 (자기 발송 메시지 메아리) 는 무시 처리 필수 (loop 방지)."
+  },
+  "operational_notes": {
+    "rate_limit": "파트너 등급별 차등 — 일반 등급 50 req/sec",
+    "retry_semantics": "5xx 지수 백오프, resultCode 'IM-002' 등 user not found 는 재시도 금지",
+    "response_sla_sec": null,
+    "cost_label": "free (톡톡 자체는 무료, 1:1 발송 무제한)",
+    "biz_account_required": true
+  },
+  "setup_instructions": [
+    "1. 네이버 톡톡 파트너센터 (https://partner.talk.naver.com) 회원가입 → 서비스 계정 신청",
+    "2. 사업자 유형 선택: 국내사업자 / 해외사업자 / 기관·단체 — 사업자등록증 업로드 + 검수 통과 (~1주)",
+    "3. 검수 완료 SMS 통보 후 파트너센터 → API 설정 → Authorization Key 발급 + webhook URL 등록 (인바운드용)",
+    "4. auth_headers 의 Authorization 'Bearer <key>' 로 교체",
+    "5. user 값은 인바운드 webhook 의 user 필드를 그대로 사용 (예: 'al-2eGuGr5WQOnco1_V-FQ')",
+    "6. 인바운드 이벤트 5종: open / send / leave / friend / echo — echo 는 자기 발송 메시지 루프이므로 즉시 무시",
+    "7. 보안: Authorization Key 는 KMS / config_encrypted 저장. webhook URL 비공개 유지. 페이로드 partnerId 가 우리 등록 partnerId 와 일치하는지 화이트리스트 검증.",
+    "8. 응답 SLA: 톡톡은 명시적 SLA 없음 — 5초 이내 권장 (사용자 UX). 더 긴 답변은 'typing' 이벤트로 작성중 표시 후 'send' 발송."
+  ]
+}

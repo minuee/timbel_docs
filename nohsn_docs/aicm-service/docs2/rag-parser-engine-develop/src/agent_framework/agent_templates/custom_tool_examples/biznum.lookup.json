@@ -1,0 +1,69 @@
+{
+  "id": "biznum.lookup",
+  "name": "biznum.lookup",
+  "display_name": "사업자등록 진위 확인",
+  "description": "국세청 사업자등록 상태 조회 API (공공데이터포털) 로 사업자등록번호의 유효성 및 상태(계속사업자/폐업 등)를 확인합니다. B2B 거래 전 거래처 사업자 진위 확인에 활용합니다.",
+  "category": "결제/사업",
+  "vendor": "국세청 (공공데이터포털)",
+  "vendor_url": "https://www.data.go.kr/data/15081808/openapi.do",
+  "endpoint_url": "https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=<YOUR_SERVICE_KEY>",
+  "method": "POST",
+  "auth_headers": {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["b_no"],
+    "properties": {
+      "b_no": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[0-9]{10}$",
+          "description": "사업자등록번호 10자리 (하이픈 없이, 예: 1234567890)"
+        },
+        "description": "조회할 사업자등록번호 목록 (1회 최대 100건)",
+        "maxItems": 100,
+        "minItems": 1,
+        "example": ["1234567890", "9876543210"]
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "국세청 응답 ({\"status_code\": \"OK\", \"data\": [{\"b_no\": \"...\", \"b_stt\": \"계속사업자\", \"b_stt_cd\": \"01\", \"tax_type\": \"부가가치세 일반과세자\"}]})"
+  },
+  "risk_metadata": {
+    "side_effect": "read",
+    "scope": "any",
+    "requires_sender_tier": "member",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound_query",
+    "signature_method": "secret_in_url",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "serviceKey 가 URL 쿼리에 있어 reverse-proxy 로그/CDN 캐시에 노출됨. 노출 시 공공데이터포털에서 즉시 재발급."
+  },
+  "operational_notes": {
+    "rate_limit": "활용신청 시 부여된 일일 한도 (개발: 1,000건/일, 운영 신청 시 증액)",
+    "retry_semantics": "5xx 지수 백오프, status_code 'NOT_FOUND' 등은 즉시 처리",
+    "response_sla_sec": null,
+    "cost_label": "free",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://www.data.go.kr 로그인 → '국세청_사업자등록정보 진위확인' 검색",
+    "2. '국세청_사업자등록정보 진위확인 및 상태조회 서비스' → '활용신청'",
+    "3. 신청 후 마이페이지 → 인증키 발급 → '일반 인증키(UTF-8)' 복사",
+    "4. endpoint_url 의 <YOUR_SERVICE_KEY> 를 발급받은 키로 교체 (URL-encoding 된 키 사용)",
+    "5. b_stt_cd 코드: '01'=계속사업자, '02'=휴업자, '03'=폐업자",
+    "6. 무료 API, 별도 요금 없음 — 단 일일 트래픽 초과 시 제한될 수 있음",
+    "7. 보안: serviceKey 노출 시 한도 도용. config_encrypted 저장 + reverse-proxy 로그에서 query 파라미터 마스킹 권장."
+  ]
+}

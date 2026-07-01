@@ -1,0 +1,596 @@
+# ==============================================================================
+# Lucas-KMS — Standalone Docker Compose (공공 SaaS 배포용)
+# ==============================================================================
+# 목적: KMS-only 서비스만 기동. agent_framework / chat UI / skill / SOP 워커는
+#       의도적으로 제외. vLLM 은 외부 endpoint (env VLLM_URL) 로 호출 — 현 운영
+#       환경의 gemma-4 터미널링 그대로 활용.
+#
+# Port Map (default — env 로 override 가능):
+#   ${LUCAS_KMS_API_PORT:-5101}  — Lucas-KMS API (main_kms factory)
+#   ${LUCAS_KMS_PG_PORT:-5110}   — PostgreSQL
+#   ${LUCAS_KMS_QDRANT_REST_PORT:-5111} — Qdrant REST
+#   ${LUCAS_KMS_QDRANT_GRPC_PORT:-5112} — Qdrant gRPC
+#   ${LUCAS_KMS_ES_PORT:-5113}   — Elasticsearch
+#   ${LUCAS_KMS_KAFKA_PORT:-5114} — Kafka (external listener)
+#   ${LUCAS_KMS_REDIS_PORT:-5115} — Redis
+#   ${LUCAS_KMS_MINIO_API_PORT:-5116} — MinIO API
+#   ${LUCAS_KMS_MINIO_CONSOLE_PORT:-5117} — MinIO Console
+#
+# 사용:
+#   cp .env.lucas-kms.example .env
+#   docker compose -f docker-compose.lucas-kms.yml up -d
+#
+# 본 stack 은 다음 서비스를 *의도적으로 제외*:
+#   - agent_framework workers / chat-orchestrator
+#   - skill-loader / SOP runner
+#   - frontend-v2 / frontend-v3 (KMS 단독 배포는 SDK/API 우선 — V1 frontend MVP 는 Phase 4)
+#   - cloudflared (모바일 데모 전용)
+#   - prometheus / grafana (옵션 — 운영자 별도 구성)
+#
+# vLLM / Reranker 2 모드:
+#   [기본] 외부 endpoint (SSH tunnel host.docker.internal:7120) — vllm/reranker
+#          컨테이너 stack 에 *미포함*. 통합 솔루션 운영 환경과 동일.
+#   [local-llm profile] 자체 GPU 보유 시 — `docker compose --profile local-llm up`
+#          → vllm + reranker 컨테이너 추가 기동. customer site 등 SSH tunnel 불가
+#            환경에서 활용. 자세한 설정은 .env.lucas-kms.example 참조.
+# ==============================================================================
+
+services:
+
+  # ============================================================
+  # Infrastructure
+  # ============================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: lucas-kms-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kms_pipeline}
+      POSTGRES_USER: ${POSTGRES_USER:-kms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kms_dev_password}
+    ports:
+      - "${LUCAS_KMS_PG_PORT:-5110}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kms}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.1
+    container_name: lucas-kms-qdrant
+    ports:
+      - "${LUCAS_KMS_QDRANT_REST_PORT:-5111}:6333"
+      - "${LUCAS_KMS_QDRANT_GRPC_PORT:-5112}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  elasticsearch:
+    image: elasticsearch:8.15.0
+    container_name: lucas-kms-elasticsearch
+    command: >
+      bash -c '
+        if [ ! -d /usr/share/elasticsearch/plugins/analysis-nori ]; then
+          bin/elasticsearch-plugin install analysis-nori --batch;
+        fi;
+        /usr/local/bin/docker-entrypoint.sh elasticsearch
+      '
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms1g -Xmx1g}
+    ports:
+      - "${LUCAS_KMS_ES_PORT:-5113}:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  zookeeper:
+    # Kafka KRaft 모드를 사용하면 zookeeper 가 필요 없으나, 일부 SaaS 환경에서
+    # legacy bitnami/kafka 이미지로 전환 시 호환을 위해 정의는 유지하고 profile
+    # 격리. 기본 stack 에서는 비활성 (Kafka 가 KRaft 단독으로 동작).
+    image: bitnami/zookeeper:3.9
+    container_name: lucas-kms-zookeeper
+    profiles: ["legacy-kafka"]
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    volumes:
+      - zookeeperdata:/bitnami/zookeeper
+    restart: unless-stopped
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: lucas-kms-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:${LUCAS_KMS_KAFKA_PORT:-5114}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      CLUSTER_ID: lucas-kms-kafka-cluster-001
+    ports:
+      - "${LUCAS_KMS_KAFKA_PORT:-5114}:9094"
+    volumes:
+      - kafkadata:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: lucas-kms-redis
+    ports:
+      - "${LUCAS_KMS_REDIS_PORT:-5115}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: lucas-kms-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${LUCAS_KMS_MINIO_API_PORT:-5116}:9000"
+      - "${LUCAS_KMS_MINIO_CONSOLE_PORT:-5117}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: lucas-kms-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
+        mc mb --ignore-existing local/${MINIO_DOCUMENT_BUCKET:-kms-documents} &&
+        mc mb --ignore-existing local/${MINIO_INTERMEDIATE_BUCKET:-kms-intermediate} &&
+        mc mb --ignore-existing local/${MINIO_IMAGE_BUCKET:-kms-images} &&
+        echo 'Buckets created.'
+      "
+    restart: "no"
+
+  # ============================================================
+  # Lucas-KMS API (main_kms:create_kms_app factory)
+  # ============================================================
+  # KMS-only 227 routes. agent_framework / chat / skill / SOP 라우터는
+  # create_kms_app 단계에서 제외 — 본 컨테이너는 LUCAS_PRODUCT=kms 로 고정.
+  # ============================================================
+
+  lucas-kms-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.lucas-kms
+    image: lucas-kms:latest
+    container_name: lucas-kms-api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${LUCAS_KMS_API_PORT:-5101}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LUCAS_PRODUCT: kms
+      # ============ DB roles (KMS 분리 RLS) ============
+      KMS_DB_ROLE: ${KMS_DB_ROLE_API:-app}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_APP: postgresql+asyncpg://kms_app:${KMS_APP_PASSWORD:-kms_app_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_MIGRATION: postgresql+asyncpg://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_SUPER: postgresql+asyncpg://kms_superadmin:${KMS_SUPERADMIN_PASSWORD:-kms_superadmin_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      RLS_ENFORCE: ${RLS_ENFORCE:-true}
+      # ============ Infrastructure endpoints ============
+      QDRANT_URL: http://qdrant:6333
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # ============ 외부 vLLM endpoint (현 터미널링 유지) ============
+      # 사용자 명시: 현 운영 gemma-4 endpoint 그대로 — 본 컨테이너 내부에 vllm
+      # 띄우지 않음. .env 의 VLLM_URL 가 source of truth. default 는 host.docker.internal 7120.
+      VLLM_URL: ${VLLM_URL:-http://host.docker.internal:7120/v1}
+      SLLM_GEMMA_URL: ${SLLM_GEMMA_URL:-${VLLM_URL:-http://host.docker.internal:7120/v1}}
+      VLLM_MODEL: ${VLLM_MODEL:-gemma-4-31b}
+      SLLM_GEMMA_MODEL: ${SLLM_GEMMA_MODEL:-gemma-4-31b}
+      KMS_ACK_MODEL_URL: ${KMS_ACK_MODEL_URL:-${VLLM_URL:-http://host.docker.internal:7120/v1}}
+      KMS_ACK_MODEL: ${KMS_ACK_MODEL:-gemma-4-31b}
+      # ============ Reranker (외부 endpoint — B200 :7125) ============
+      RERANKER_URL: ${RERANKER_URL:-http://host.docker.internal:7125/rerank}
+      EMBEDDING_PROXY_URL: ${EMBEDDING_PROXY_URL:-http://host.docker.internal:7130}
+      # ============ Assist-stream timeouts ============
+      ASSIST_MAX_ANSWER_TOKENS: ${ASSIST_MAX_ANSWER_TOKENS:-320}
+      ASSIST_INTENT_TIMEOUT_MS: ${ASSIST_INTENT_TIMEOUT_MS:-2000}
+      ASSIST_SEARCH_TIMEOUT_MS: ${ASSIST_SEARCH_TIMEOUT_MS:-8000}
+      ASSIST_DISTILL_TIMEOUT_MS: ${ASSIST_DISTILL_TIMEOUT_MS:-5000}
+      ASSIST_GEN_FIRST_TOKEN_TIMEOUT_MS: ${ASSIST_GEN_FIRST_TOKEN_TIMEOUT_MS:-10000}
+      ASSIST_GEN_TOTAL_TIMEOUT_MS: ${ASSIST_GEN_TOTAL_TIMEOUT_MS:-30000}
+      ASSIST_TOTAL_TIMEOUT_MS: ${ASSIST_TOTAL_TIMEOUT_MS:-40000}
+      ASSIST_MAX_CONCURRENT_PER_TENANT: ${ASSIST_MAX_CONCURRENT_PER_TENANT:-8}
+      # ============ KMS 운영 보안 ============
+      # Swagger 는 운영 환경에서 jwt 필수 — 외부 공공 SaaS 노출 방지.
+      ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
+      SWAGGER_AUTH_MODE: ${SWAGGER_AUTH_MODE:-jwt}
+      # agent_framework 미포함 — intent classification 비활성 (KMS 단독 모드).
+      ENABLE_INTENT_CLASSIFICATION: ${ENABLE_INTENT_CLASSIFICATION:-false}
+      # KMS 분리 절칙 — 루카스 cross-brand post-filter 비활성 (KMS retrieval 결과 보존).
+      KMS_CROSS_BRAND_FILTER_ENABLED: ${KMS_CROSS_BRAND_FILTER_ENABLED:-false}
+      KMS_POST_GEN_FILTER_ENABLED: ${KMS_POST_GEN_FILTER_ENABLED:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - uploads:/data/uploads
+      # HuggingFace 모델 캐시 — BGE-M3 다운로드 한 번만.
+      - ${HF_CACHE_DIR:-./hf_cache}:/root/.cache/huggingface
+    # GPU 호스트 없음 (EC2 c5a.8xlarge) — 외부 B200 tunnel (7120/7125/7130) 위임
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    mem_limit: ${LUCAS_KMS_API_MEM:-3g}
+    cpus: ${LUCAS_KMS_API_CPUS:-2.0}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --max-time 5 http://localhost:8000/health/ready || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # ============================================================
+  # Lucas-KMS Frontend (V1 MVP) — nginx static + API same-origin 프록시
+  # ============================================================
+  # frontend/ 정적 파일을 nginx 로 서빙하고 /api · /health · /docs 를
+  # lucas-kms-api:8000 으로 리버스 프록시 → CORS 불필요, 포트 하드코딩 제거.
+  # build context 는 ./frontend (root .dockerignore 가 frontend/ 차단 → 우회).
+  # ============================================================
+  lucas-kms-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: lucas-kms-frontend:latest
+    container_name: lucas-kms-frontend
+    ports:
+      - "${LUCAS_KMS_FRONTEND_PORT:-5102}:80"
+    depends_on:
+      lucas-kms-api:
+        condition: service_healthy
+    mem_limit: ${LUCAS_KMS_FRONTEND_MEM:-256m}
+    restart: unless-stopped
+
+  # ============================================================
+  # Lucas-KMS Pipeline Worker (Large) — 대형 문서 전용
+  # ============================================================
+  # LUCAS_PRODUCT=kms → agent_framework workers 차단 (src/pipeline/workers/main.py 1620 line).
+  # consumer group: aicm-pipeline-large (env override 가능).
+  # ============================================================
+
+  lucas-kms-worker-large:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.lucas-kms
+    image: lucas-kms:latest
+    container_name: lucas-kms-worker-large
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python3", "-m", "src.pipeline.workers.main"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LUCAS_PRODUCT: kms
+      PIPELINE_WORKER_PROFILE: large
+      PIPELINE_PARALLEL_WORKERS_LARGE: ${PIPELINE_PARALLEL_WORKERS_LARGE:-1}
+      PIPELINE_EARLY_DIVERT_ENABLED: "false"
+      PIPELINE_LARGE_TOPIC_ENABLED: ${PIPELINE_LARGE_TOPIC_ENABLED:-true}
+      PIPELINE_SMALL_SIZE_MB_THRESHOLD: ${PIPELINE_SMALL_SIZE_MB_THRESHOLD:-2}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP_LARGE:-aicm-pipeline-large}
+      KMS_DB_ROLE: ${KMS_DB_ROLE_WORKER:-app}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_APP: postgresql+asyncpg://kms_app:${KMS_APP_PASSWORD:-kms_app_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_MIGRATION: postgresql+asyncpg://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_SUPER: postgresql+asyncpg://kms_superadmin:${KMS_SUPERADMIN_PASSWORD:-kms_superadmin_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      RLS_ENFORCE: ${RLS_ENFORCE:-true}
+      QDRANT_URL: http://qdrant:6333
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      VLLM_URL: ${VLLM_URL:-http://host.docker.internal:7120/v1}
+      SLLM_GEMMA_URL: ${SLLM_GEMMA_URL:-${VLLM_URL:-http://host.docker.internal:7120/v1}}
+      VLLM_MODEL: ${VLLM_MODEL:-gemma-4-31b}
+      SLLM_GEMMA_MODEL: ${SLLM_GEMMA_MODEL:-gemma-4-31b}
+      KMS_ACK_MODEL_URL: ${KMS_ACK_MODEL_URL:-${VLLM_URL:-http://host.docker.internal:7120/v1}}
+      KMS_ACK_MODEL: ${KMS_ACK_MODEL:-gemma-4-31b}
+      # GPU 호스트 없음 — embedding 은 외부 EMBEDDING_PROXY_URL (B200 :7130) 위임. 기본 cpu 로 fallback.
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cpu}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - uploads:/data/uploads
+      - ${HF_CACHE_DIR:-./hf_cache}:/root/.cache/huggingface
+    # GPU 호스트 없음 (EC2 c5a.8xlarge) — 외부 B200 tunnel (7120/7125/7130) 위임
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    mem_limit: ${LUCAS_KMS_WORKER_LARGE_MEM:-6g}
+    cpus: ${LUCAS_KMS_WORKER_LARGE_CPUS:-4.0}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --max-time 5 http://localhost:8001/health/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # ============================================================
+  # Lucas-KMS Pipeline Worker (Small) — small + legacy topic 흡수
+  # ============================================================
+  # consumer group: aicm-pipeline (기본 유지 — offset 손실 방지).
+  # ============================================================
+
+  lucas-kms-worker-small:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.lucas-kms
+    image: lucas-kms:latest
+    container_name: lucas-kms-worker-small
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python3", "-m", "src.pipeline.workers.main"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LUCAS_PRODUCT: kms
+      PIPELINE_WORKER_PROFILE: small
+      PIPELINE_PARALLEL_WORKERS_SMALL: ${PIPELINE_PARALLEL_WORKERS_SMALL:-4}
+      PIPELINE_EARLY_DIVERT_ENABLED: ${PIPELINE_EARLY_DIVERT_ENABLED:-true}
+      PIPELINE_LARGE_TOPIC_ENABLED: ${PIPELINE_LARGE_TOPIC_ENABLED:-true}
+      PIPELINE_SMALL_SIZE_MB_THRESHOLD: ${PIPELINE_SMALL_SIZE_MB_THRESHOLD:-2}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP_SMALL:-aicm-pipeline}
+      KMS_DB_ROLE: ${KMS_DB_ROLE_WORKER:-app}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_APP: postgresql+asyncpg://kms_app:${KMS_APP_PASSWORD:-kms_app_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_MIGRATION: postgresql+asyncpg://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_SUPER: postgresql+asyncpg://kms_superadmin:${KMS_SUPERADMIN_PASSWORD:-kms_superadmin_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      RLS_ENFORCE: ${RLS_ENFORCE:-true}
+      QDRANT_URL: http://qdrant:6333
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      VLLM_URL: ${VLLM_URL:-http://host.docker.internal:7120/v1}
+      SLLM_GEMMA_URL: ${SLLM_GEMMA_URL:-${VLLM_URL:-http://host.docker.internal:7120/v1}}
+      VLLM_MODEL: ${VLLM_MODEL:-gemma-4-31b}
+      SLLM_GEMMA_MODEL: ${SLLM_GEMMA_MODEL:-gemma-4-31b}
+      KMS_ACK_MODEL_URL: ${KMS_ACK_MODEL_URL:-${VLLM_URL:-http://host.docker.internal:7120/v1}}
+      KMS_ACK_MODEL: ${KMS_ACK_MODEL:-gemma-4-31b}
+      # GPU 호스트 없음 — embedding 은 외부 EMBEDDING_PROXY_URL (B200 :7130) 위임. 기본 cpu 로 fallback.
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cpu}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - uploads:/data/uploads
+      - ${HF_CACHE_DIR:-./hf_cache}:/root/.cache/huggingface
+    # GPU 호스트 없음 (EC2 c5a.8xlarge) — 외부 B200 tunnel (7120/7125/7130) 위임
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    mem_limit: ${LUCAS_KMS_WORKER_SMALL_MEM:-2g}
+    cpus: ${LUCAS_KMS_WORKER_SMALL_CPUS:-2.0}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --max-time 5 http://localhost:8001/health/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # ============================================================
+  # DB Migration (one-shot)
+  # ============================================================
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.lucas-kms
+    image: lucas-kms:latest
+    container_name: lucas-kms-migrate
+    command: >
+      sh -c "
+        echo 'Initializing Lucas-KMS DB...' &&
+        sleep 3 &&
+        python scripts/init_db.py &&
+        echo 'Applying Alembic migrations...' &&
+        alembic upgrade heads &&
+        echo 'DB init done.'
+      "
+    volumes:
+      - ./scripts:/app/scripts
+    environment:
+      LUCAS_PRODUCT: kms
+      KMS_DB_ROLE: migration
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      DATABASE_URL_MIGRATION: postgresql+asyncpg://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_dev_password}@postgres:5432/${POSTGRES_DB:-kms_pipeline}
+      # init_db.py 의 kms_app / kms_superadmin role 생성·갱신용. api/worker 와 동일 값 (.env 우선).
+      KMS_APP_PASSWORD: ${KMS_APP_PASSWORD:-kms_app_dev_password}
+      KMS_SUPERADMIN_PASSWORD: ${KMS_SUPERADMIN_PASSWORD:-kms_superadmin_dev_password}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ==============================================================================
+  # vLLM (선택 — local-llm profile)
+  # ==============================================================================
+  # 기본 (no profile): 외부 SSH tunnel host.docker.internal:7120 사용
+  #   → docker compose -f docker-compose.lucas-kms.yml up -d
+  #
+  # 자체 GPU 보유 시 (공공 SaaS customer site 등 SSH tunnel 불가):
+  #   → docker compose -f docker-compose.lucas-kms.yml --profile local-llm up -d
+  #   → 컨테이너 내부에서 vllm + reranker 기동
+  #   → .env 의 VLLM_URL=http://vllm:8000/v1 / RERANKER_URL=http://reranker:8000/rerank 설정
+  #
+  # 기존 통합 솔루션 docker-compose.yml 의 local-llm profile 동등 패턴 (2026-04-29 사용자 명시).
+  vllm:
+    profiles:
+      - local-llm
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.vllm
+    image: aicm-apis-vllm
+    container_name: lucas-kms-vllm
+    ipc: host
+    ports:
+      - "5120:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    # gpu-memory-utilization 0.78 = 통합 솔루션 검증값 (BGE-M3 GPU 임베딩 자리 확보)
+    command: >
+      --model ${VLLM_MODEL_ID:-cyankiwi/gemma-4-31B-it-AWQ-4bit}
+      --max-model-len ${VLLM_MAX_MODEL_LEN:-16384}
+      --gpu-memory-utilization ${VLLM_GPU_MEM_UTIL:-0.78}
+      --max-num-seqs ${VLLM_MAX_NUM_SEQS:-4}
+      --kv-cache-dtype fp8
+      --trust-remote-code
+      --dtype float16
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
+    restart: unless-stopped
+
+  reranker:
+    profiles:
+      - local-llm
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    image: aicm-apis-pipeline-worker
+    container_name: lucas-kms-reranker
+    environment:
+      TZ: Asia/Seoul
+      RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
+      RERANKER_DEVICE: cuda
+      RERANKER_FP16: "1"
+    ports:
+      - "5125:8000"
+    volumes:
+      - ./src:/app/src
+      - hf_cache:/root/.cache/huggingface
+    command: >
+      uvicorn src.reranker_service.server:app
+      --host 0.0.0.0 --port 8000 --workers 1
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  qdrant_data:
+  esdata:
+  kafkadata:
+  zookeeperdata:
+  redisdata:
+  miniodata:
+  uploads:
+  hf_cache:

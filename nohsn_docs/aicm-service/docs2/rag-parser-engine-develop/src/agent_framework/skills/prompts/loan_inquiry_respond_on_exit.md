@@ -1,0 +1,1 @@
+{loan_purpose} 자금 {loan_amount}원 기준 가능 상품을 안내드립니다.

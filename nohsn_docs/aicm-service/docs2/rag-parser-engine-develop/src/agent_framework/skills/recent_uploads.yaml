@@ -1,0 +1,37 @@
+skill:
+  id: recent_uploads
+  version: "1.1"
+  domain: kms
+  description: "최근 업로드된 문서 N건 보기"
+
+availability:
+  scope: all
+  visibility: auto
+
+triggers:
+  - intent: list_recent_uploads
+
+slots:
+  - name: top_n
+    type: number
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: recent_uploads_greet_on_enter.md
+    transitions:
+      - when: has_intent(list_recent_uploads)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    llm_slot_fill: [top_n]
+    on_exit:
+      llm_respond:
+        template: recent_uploads_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

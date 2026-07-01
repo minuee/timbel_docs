@@ -1,0 +1,51 @@
+category: pet
+label: "반려동물"
+description: "반려동물 용품·미용·호텔·병원·훈련 SOP."
+
+questions:
+  - id: pt_service_type
+    label: "주요 서비스?"
+    type: multiple_select
+    options:
+      - "용품 판매"
+      - "미용·그루밍"
+      - "호텔·돌봄"
+      - "동물병원"
+      - "훈련·행동 교정"
+      - "분양·입양"
+    required: true
+    section: 페르소나
+
+  - id: pt_target_animals
+    label: "취급 반려동물 종류?"
+    type: multiple_select
+    options:
+      - "개"
+      - "고양이"
+      - "토끼·햄스터"
+      - "조류"
+      - "파충류·어류"
+      - "기타 특수 반려"
+    required: true
+    section: 페르소나
+
+  - id: pt_vaccination_policy
+    label: "접종 / 안전 정책 (호텔·미용 등 입소 조건)?"
+    type: textarea
+    example: "광견병·종합백신 필수 / 미접종 거절 / 접종 1주일 후 입소 가능"
+    required: true
+    section: 응대 시나리오
+
+  - id: pt_emergency_protocol
+    label: "동물 응급 / 사고 발생 시 안내?"
+    type: textarea
+    example: "24시간 응급 동물병원 안내 / 자체 매장 사고 시 119 + 매니저"
+    required: true
+    section: 에스컬레이션
+
+  - id: pt_ethics_policy
+    label: "분양·입양 / 동물 윤리 정책 (충동 분양 자제 등)?"
+    type: textarea
+    example: "충동 분양 자제 권유 / 동물보호법 준수 / 입양 전 자격 확인"
+    required: false
+    section: 금지 사항

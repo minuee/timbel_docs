@@ -1,0 +1,1 @@
+{student_name} 학생의 {weekday} 수업 시간표를 안내드립니다.

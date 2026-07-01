@@ -1,0 +1,48 @@
+skill:
+  id: account_inquiry
+  version: "1.1"
+  domain: finance
+  description: "계좌 조회 안내 (잔액·거래내역)"
+
+availability:
+  scope: business_only
+  business_type: finance
+  visibility: opt-in
+
+triggers:
+  - intent: inquire_account
+
+slots:
+  - name: account_no
+    type: text
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: account_inquiry_greet_on_enter.md
+    transitions:
+      - when: has_intent(inquire_account)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [account_no]
+    transitions:
+      - when: slot_filled(account_no)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: account_inquiry_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

@@ -1,0 +1,46 @@
+category: hair_nail
+label: "헤어 & 네일"
+description: "미용실·네일샵·왁싱·속눈썹 매장 SOP."
+
+questions:
+  - id: hn_service_menu
+    label: "취급 서비스 (시술) 종류?"
+    type: multiple_select
+    options:
+      - "헤어 커트·드라이"
+      - "헤어 컬러·염색"
+      - "헤어 펌"
+      - "네일·페디큐어"
+      - "왁싱"
+      - "속눈썹"
+      - "두피 케어"
+    required: true
+    section: 페르소나
+
+  - id: hn_designer_levels
+    label: "디자이너 등급별 가격 차이?"
+    type: textarea
+    example: "디자이너 / 실장 / 부원장 / 원장 — 등급별 +20-50% 차등"
+    required: true
+    section: 응대 시나리오
+
+  - id: hn_allergy_test
+    label: "염모제 / 시술 전 패치 테스트 정책?"
+    type: textarea
+    example: "초회 손님 패치 24시간 권장 / 임산부 사전 고지 필수"
+    required: true
+    section: 금지 사항
+
+  - id: hn_no_show_policy
+    label: "노쇼 / 예약 변경 정책?"
+    type: textarea
+    example: "노쇼 2회 시 다음 예약 시 예약금 / 24시간 전 취소 무료"
+    required: true
+    section: 응대 시나리오
+
+  - id: hn_clamim_protocol
+    label: "시술 결과 클레임 / 재시술 정책?"
+    type: textarea
+    example: "시술 후 7일 이내 + 사진 / 무료 재시술 가능 / 환불은 매니저 판단"
+    required: true
+    section: 에스컬레이션

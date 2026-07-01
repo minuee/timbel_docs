@@ -1,0 +1,156 @@
+{
+  "routers": {
+    "kms": [
+      "blocks",
+      "categories",
+      "chunks",
+      "document_types",
+      "documents",
+      "library_folders_v1",
+      "notes",
+      "playground",
+      "preview",
+      "rag",
+      "rag_assist",
+      "repositories",
+      "search"
+    ],
+    "agent": [
+      "activation",
+      "agent_documents_v1",
+      "agent_management",
+      "agents_v1",
+      "chat_v1",
+      "context_v1",
+      "custom_tools_v1",
+      "diary_v1",
+      "doc_draft_v1",
+      "expense_v1",
+      "external_agent_v1",
+      "feed_v1",
+      "manifest",
+      "memo_v1",
+      "schedule_v1",
+      "skills_catalog_v1",
+      "sop_samples_v1",
+      "stock_v1",
+      "tools_v1",
+      "verification_v1"
+    ],
+    "shared_or_unknown": [
+      "_tenant_scope",
+      "ab_tests",
+      "account_groups",
+      "account_settings",
+      "admin_global_view_v1",
+      "admin_reset",
+      "admin_settings_v1",
+      "admin_users",
+      "analytics",
+      "anonymization",
+      "audit",
+      "auth_v2",
+      "chat_sessions_v1",
+      "citations_v1",
+      "classification_quality",
+      "confidentiality",
+      "feedback_stats",
+      "health",
+      "inbox",
+      "knowledge_gap",
+      "knowledge_v1",
+      "llm_metrics",
+      "mail_accounts",
+      "pii",
+      "pipeline_admin",
+      "reprocess",
+      "search_proxy",
+      "stats",
+      "synonyms",
+      "tenants_v1",
+      "url_preview_v1",
+      "webhook_inbound",
+      "workers_admin"
+    ]
+  },
+  "workers": [
+    {
+      "name": "block_worker",
+      "path": "src/pipeline/workers/block_worker.py"
+    },
+    {
+      "name": "chunk_worker",
+      "path": "src/pipeline/workers/chunk_worker.py"
+    },
+    {
+      "name": "classify_worker",
+      "path": "src/pipeline/workers/classify_worker.py"
+    },
+    {
+      "name": "dlq",
+      "path": "src/pipeline/workers/dlq.py"
+    },
+    {
+      "name": "dlq_handler",
+      "path": "src/pipeline/workers/dlq_handler.py"
+    },
+    {
+      "name": "dlq_scheduler",
+      "path": "src/pipeline/workers/dlq_scheduler.py"
+    },
+    {
+      "name": "embed_worker",
+      "path": "src/pipeline/workers/embed_worker.py"
+    },
+    {
+      "name": "lifecycle_worker",
+      "path": "src/pipeline/workers/lifecycle_worker.py"
+    },
+    {
+      "name": "lint_worker",
+      "path": "src/pipeline/workers/lint_worker.py"
+    },
+    {
+      "name": "main",
+      "path": "src/pipeline/workers/main.py"
+    },
+    {
+      "name": "merge_worker",
+      "path": "src/pipeline/workers/merge_worker.py"
+    },
+    {
+      "name": "parse_worker",
+      "path": "src/pipeline/workers/parse_worker.py"
+    },
+    {
+      "name": "recovery",
+      "path": "src/pipeline/workers/recovery.py"
+    },
+    {
+      "name": "reminder_worker",
+      "path": "src/pipeline/workers/reminder_worker.py"
+    },
+    {
+      "name": "reprocess_worker",
+      "path": "src/pipeline/workers/reprocess_worker.py"
+    },
+    {
+      "name": "split_worker",
+      "path": "src/pipeline/workers/split_worker.py"
+    },
+    {
+      "name": "status_publisher",
+      "path": "src/pipeline/workers/status_publisher.py"
+    },
+    {
+      "name": "vision_gate",
+      "path": "src/pipeline/workers/vision_gate.py"
+    }
+  ],
+  "models": {
+    "kms": [],
+    "agent": [],
+    "shared": [],
+    "unknown": []
+  }
+}

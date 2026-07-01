@@ -1,0 +1,1 @@
+{medicine_name} — {dose_time}부터 {frequency} 복약 알림이 설정되었습니다.

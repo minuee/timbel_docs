@@ -1,0 +1,99 @@
+{
+  "id": "teams.adaptive_card_post",
+  "name": "teams.adaptive_card_post",
+  "display_name": "MS Teams Adaptive Card 발송 (Workflow)",
+  "description": "Microsoft Teams 채널에 Adaptive Card 형식의 풍부한 메시지를 발송합니다. 2025년 8월부로 기존 Office 365 Connectors 가 retired 되어 Power Automate 'Workflows' 로 마이그레이션됨 — Workflow 가 자동 생성한 webhook URL 로 POST. Bot Framework (양방향) 보다 훨씬 단순 — 단방향 알림용 1순위. 사업자/Azure AD 등록 불필요.",
+  "category": "알림",
+  "vendor": "Microsoft Teams",
+  "vendor_url": "https://learn.microsoft.com/en-us/power-automate/teams/teams-app-adaptive-cards",
+  "endpoint_url": "<YOUR_WORKFLOW_WEBHOOK_URL — https://prod-XX.<region>.logic.azure.com:443/workflows/.../triggers/manual/paths/invoke?api-version=2016-06-01&sp=...&sv=...&sig=...>",
+  "method": "POST",
+  "auth_headers": {
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["type", "attachments"],
+    "properties": {
+      "type": {
+        "type": "string",
+        "default": "message",
+        "description": "Workflow trigger 형식 — 'message' 고정"
+      },
+      "attachments": {
+        "type": "array",
+        "description": "Adaptive Card 첨부 (보통 1개)",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["contentType", "content"],
+          "properties": {
+            "contentType": {
+              "type": "string",
+              "default": "application/vnd.microsoft.card.adaptive",
+              "description": "Adaptive Card 고정"
+            },
+            "contentUrl": {"type": "string", "description": "외부 호스팅 카드 URL (옵션, content 와 양자택일)"},
+            "content": {
+              "type": "object",
+              "required": ["type", "$schema", "version", "body"],
+              "description": "Adaptive Card JSON",
+              "properties": {
+                "type": {"type": "string", "default": "AdaptiveCard"},
+                "$schema": {"type": "string", "default": "http://adaptivecards.io/schemas/adaptive-card.json"},
+                "version": {"type": "string", "default": "1.5", "description": "Teams 지원 버전 1.0~1.5"},
+                "body": {
+                  "type": "array",
+                  "description": "TextBlock / Image / FactSet / Container / ColumnSet / Input.* 등",
+                  "items": {"type": "object"}
+                },
+                "actions": {
+                  "type": "array",
+                  "description": "Action.OpenUrl / Action.Submit / Action.ShowCard 등",
+                  "items": {"type": "object"}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Power Automate Workflow 응답 (성공 시 HTTP 202 Accepted + 빈 body, 실패 시 4xx + JSON)"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "secret_in_url",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "Workflow URL 의 sig= 쿼리 파라미터가 사실상 비밀 — 노출 시 누구나 채널에 송출 가능. Workflow 를 비활성/재생성하면 즉시 무효화. 양방향 (Action.Submit 응답 / 사용자 메시지 수신) 은 별도 Bot Framework + Azure Bot Service 등록 필수 (JWT 검증, 다중 테넌트 OAuth)."
+  },
+  "operational_notes": {
+    "rate_limit": "Power Automate Free 티어: 6,000 actions/일, 분당 200. 한 채널 burst 시 throttle.",
+    "retry_semantics": "202 = queued (실제 전달 비동기). 5xx 지수 백오프, 4xx (carb invalid) 영구 실패.",
+    "response_sla_sec": null,
+    "cost_label": "free (Power Automate Free 티어 충분), Premium 라이센스 시 무제한",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. Teams 채널 우측 '...' → Workflows → 'Post to a channel when a webhook request is received' 템플릿 선택",
+    "2. Sign in (Microsoft 계정) → Workflow 이름 입력 → Team / Channel 선택 → 'Add workflow'",
+    "3. 생성 완료 화면에서 'Workflow URL' 복사 — endpoint_url 에 붙여넣기 (sig= 토큰 포함된 URL)",
+    "4. 페이로드는 type=message + attachments[0].content (Adaptive Card JSON) 형태 — Adaptive Card Designer (https://adaptivecards.io/designer/) 로 카드 작성",
+    "5. version=1.5 권장 (Teams 최신 지원). 1.6+ 는 일부 Teams 클라이언트 미지원.",
+    "6. 보안: Workflow URL 노출 시 채널에 spam 가능 — Git/로그/스크린샷에서 마스킹 (sig= 부분만이라도). 분기마다 Workflow 재생성으로 회전.",
+    "7. (구) Office 365 Connector 사용 중인 경우: 2025-08-15 이후 retired — Power Automate Workflow 로 마이그레이션 필수.",
+    "8. 양방향 봇 (Action.Submit 응답 / 사용자 발화 수신) 이 필요하면: Azure Subscription + Azure Bot resource + Microsoft App ID/Secret + manifest.json 등록 + Teams admin sideload — 별도 trail. botbuilder Python SDK 권장."
+  ]
+}

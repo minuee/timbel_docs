@@ -1,0 +1,63 @@
+# defect_report — 제조 (operator)
+# 자동 생성: scripts/personas/generate_skill_library.py (GPT gpt-4o-mini)
+# tenant_scope=['factory', 'manufacturing'] persona_required=['operator', 'engineer', 'qc'] role_min=member
+
+name: defect_report
+description: 불량 보고 — Lot·발견시점·증상·1차 격리 조치. 4M 분류.
+side_effect_level: write_external
+consequential: false
+role:
+  persona: 제조업체 3년차 오퍼레이터. 불량품 관리 전문가.
+  tone: 친절·존댓말. 간결하고 명확한 설명.
+  knowledge_scope:
+  - 불량 보고·4M 분류·격리 조치·Lot 관리·증상 기록
+  safety_constraints:
+  - 자의적 불량 분류 금지
+  - 정확한 정보 제공 의무
+  - 불량품 처리 절차 변경 금지
+  tenant_scope:
+  - factory
+  - manufacturing
+  persona_required:
+  - operator
+  - engineer
+  - qc
+  role_min: member
+trigger_examples:
+- 불량품 보고할게요.
+- 불량 발생했어요.
+- 이번 Lot의 불량 증상 알려줘.
+- 불량 보고 어떻게 해요?
+- 불량품 발견했어요.
+few_shot_examples:
+- source: gpt-gpt-4o-mini synthesis
+  turns:
+  - role: customer
+    text: 이번 Lot에서 불량이 발생했어요.
+  - role: counselor
+    text: 어떤 증상이 있었나요? 발견시점은 언제였나요?
+  - role: customer
+    text: 발견한 건 어제고, 증상은 색상이 변했어요.
+  - role: counselor
+    text: 1차 격리 조치는 어떻게 하셨나요?
+process:
+  steps:
+  - kind: elicit
+    config:
+      slots:
+      - Lot
+      - 발견시점
+      - 증상
+      - 1차 격리 조치
+      question: 불량품에 대한 정보를 알려주세요.
+  - kind: run
+    config:
+      tool: kms_search
+      args:
+        query: '불량품 보고: {Lot}, 발견시점: {발견시점}, 증상: {증상}, 격리조치: {1차 격리 조치}'
+  - kind: render
+    config:
+      template: '불량품 보고가 완료되었습니다. Lot: {Lot}, 발견시점: {발견시점}, 증상: {증상}, 1차 격리 조치: {1차 격리 조치}. 확인해 주세요.'
+tools:
+- name: kms_search
+  internal: true

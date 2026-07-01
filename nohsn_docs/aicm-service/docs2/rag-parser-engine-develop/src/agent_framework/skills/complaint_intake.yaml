@@ -1,0 +1,52 @@
+skill:
+  id: complaint_intake
+  version: "1.1"
+  domain: public
+  description: "고객 불만 접수 (내용·우선순위)"
+
+availability:
+  scope: business_only
+  business_type: public
+  visibility: opt-in
+
+triggers:
+  - intent: file_complaint
+
+slots:
+  - name: complaint_text
+    type: text
+    required: true
+  - name: priority
+    type: enum
+    values: [낮음, 보통, 높음, 긴급]
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: complaint_intake_greet_on_enter.md
+    transitions:
+      - when: has_intent(file_complaint)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [complaint_text, priority]
+    transitions:
+      - when: slot_filled(priority)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: complaint_intake_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

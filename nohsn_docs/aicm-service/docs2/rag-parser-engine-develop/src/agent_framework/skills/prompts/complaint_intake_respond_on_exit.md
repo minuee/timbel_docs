@@ -1,0 +1,1 @@
+[{priority}] 불만이 접수되었습니다: {complaint_text}

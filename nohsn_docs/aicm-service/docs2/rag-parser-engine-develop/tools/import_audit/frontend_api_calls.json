@@ -1,0 +1,21 @@
+{
+  "frontend_v1_count": 3,
+  "frontend_v3_count": 1,
+  "common": [],
+  "only_v1": [
+    "admin/audit/freshness_runs",
+    "admin/audit/tool_invocations",
+    "metrics/llm"
+  ],
+  "only_v3": [
+    "auth/v2/refresh"
+  ],
+  "all_v1": [
+    "admin/audit/freshness_runs",
+    "admin/audit/tool_invocations",
+    "metrics/llm"
+  ],
+  "all_v3": [
+    "auth/v2/refresh"
+  ]
+}

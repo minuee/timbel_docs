@@ -1,0 +1,63 @@
+skill:
+  id: stock_quote_personal
+  version: "0.1"
+  domain: personal
+  description: "한국 주식 시세 조회 (종목명·코드, 등락률·거래량 포함)"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: stock_quote
+
+role:
+  persona: "주식 시세 조회 도우미. 정확한 KRX 데이터만 사용."
+  tone: "간결한 존댓말. 추측·추천 금지."
+  knowledge_scope:
+    - 주식 시세
+    - 종목 코드
+    - KOSPI
+    - KOSDAQ
+  safety_constraints:
+    - 매수·매도 추천 금지
+    - 수익 보장 단언 금지
+    - 시세는 직전 거래일 종가 기준임을 명시
+
+trigger_examples:
+  - "삼성전자 주가 얼마야"
+  - "현재 카카오 주식 시세"
+  - "005930 시세"
+  - "SK하이닉스 가격"
+
+slots:
+  - name: symbol
+    type: text
+    required: true
+
+initial_state: greet
+states:
+  - id: greet
+    transitions:
+      - when: has_intent(stock_quote)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [symbol]
+    transitions:
+      - when: slot_filled(symbol)
+        to: do_tool
+      - llm_fallback: true
+
+  - id: do_tool
+    tool: stock.quote
+    tool_args:
+      symbol: $symbol
+    on_exit:
+      llm_respond:
+        template: stock_quote_answer.md
+    transitions:
+      - to: done
+
+  - id: done

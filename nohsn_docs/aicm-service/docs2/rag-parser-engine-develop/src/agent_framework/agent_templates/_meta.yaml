@@ -1,0 +1,80 @@
+# Agent 템플릿 카테고리 메타데이터.
+# super-admin 자산. tenant 관리자는 이걸 보고 *복제 후 customize*.
+
+categories:
+  - id: clothing_fashion
+    label: "의류 & 패션잡화"
+    icon: "shopping-bag"
+    description: "패션과 관련된 모든 것 — 의류, 신발, 악세서리 매장."
+  - id: beauty_skincare
+    label: "뷰티 & 스킨케어"
+    icon: "sparkles"
+    description: "화장품 매장, 스킨케어 클리닉, 스파."
+  - id: hair_nail
+    label: "헤어 & 네일"
+    icon: "scissors"
+    description: "미용실, 네일샵."
+  - id: home_interior
+    label: "가정용품 & 인테리어"
+    icon: "home"
+    description: "가전, 가구, 생활용품, 인테리어."
+  - id: restaurant_cafe
+    label: "식당 & 카페"
+    icon: "coffee"
+    description: "카페, 레스토랑, 패스트푸드, 테이크아웃."
+  - id: travel_agency
+    label: "여행사"
+    icon: "plane"
+    description: "여행 예약, 상품, 안내."
+  - id: lodging
+    label: "숙박"
+    icon: "bed"
+    description: "호텔, 모텔 — 객실 예약, 시설."
+  - id: leisure_sports
+    label: "레저 스포츠"
+    icon: "activity"
+    description: "활동 예약, 안전 안내, 장비 대여."
+  - id: health_medical
+    label: "건강 & 의료"
+    icon: "heart-pulse"
+    description: "병원, 약국."
+  - id: education
+    label: "교육 & 학습"
+    icon: "book-open"
+    description: "학원, 온라인 교육."
+  - id: it_electronics
+    label: "IT & 전자제품"
+    icon: "cpu"
+    description: "컴퓨터, 휴대폰, 전자제품."
+  - id: finance
+    label: "금융"
+    icon: "wallet"
+    description: "은행, 보험, 투자."
+  - id: wedding_dating
+    label: "결혼 & 연애"
+    icon: "heart"
+    description: "연애 상담, 결혼 정보, 웨딩."
+  - id: kids_baby
+    label: "유아 & 아동"
+    icon: "baby"
+    description: "아기/어린이용품, 육아, 임신."
+  - id: pet
+    label: "반려동물"
+    icon: "paw"
+    description: "반려동물 용품 / 서비스."
+  - id: retail
+    label: "쇼핑 & 소매"
+    icon: "store"
+    description: "온라인 쇼핑, 대형마트, 소매점."
+  - id: culture_arts
+    label: "문화 & 예술"
+    icon: "palette"
+    description: "미술, 디자인, 문화 행사, 공연."
+  - id: plants_flowers
+    label: "식물 & 꽃배달"
+    icon: "flower"
+    description: "식물 판매, 화원, 꽃배달."
+  - id: other
+    label: "기타 (직접 작성)"
+    icon: "edit"
+    description: "위에 없는 업종 — 사용자가 직접 작성."

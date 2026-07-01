@@ -1,0 +1,40 @@
+# Phase 0 T0.6 — import-linter contract.
+#
+# Phase 2 이후 packages/ 도입 완료 시 활성화. 그 전에는 root_packages 가
+# 존재하지 않아 lint-imports 실행 시 오류 — Phase 1 종료 후 활성화 권장.
+
+[importlinter]
+root_packages = [
+    "lucas_shared",
+    "lucas_kms",
+    "lucas_agent",
+]
+
+[[importlinter.contracts]]
+name = "lucas-kms-must-not-import-lucas-agent"
+type = "forbidden"
+source_modules = ["lucas_kms"]
+forbidden_modules = ["lucas_agent"]
+
+[[importlinter.contracts]]
+name = "lucas-agent-must-not-import-lucas-kms"
+type = "forbidden"
+source_modules = ["lucas_agent"]
+forbidden_modules = ["lucas_kms"]
+
+[[importlinter.contracts]]
+name = "lucas-shared-must-not-import-product-packages"
+type = "forbidden"
+source_modules = ["lucas_shared"]
+forbidden_modules = ["lucas_kms", "lucas_agent"]
+
+[[importlinter.contracts]]
+name = "lucas-kms-internal-layering"
+type = "layers"
+layers = [
+    "lucas_kms.api",
+    "lucas_kms.pipeline",
+    "lucas_kms.search",
+    "lucas_kms.models",
+]
+exhaustive = false

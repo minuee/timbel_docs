@@ -1,0 +1,207 @@
+examples:
+  # ─────────────────────────────────────────────
+  # 알림 (양방향/단방향 메시징)
+  # ─────────────────────────────────────────────
+  - id: slack.webhook_send
+    display_name: "Slack 채널 알림 (Incoming Webhook)"
+    category: "알림"
+    vendor: "Slack"
+    is_korean: false
+    direction: outbound
+    cost: free
+
+  - id: slack.chat_postmessage
+    display_name: "Slack chat.postMessage (Bot Token)"
+    category: "알림"
+    vendor: "Slack"
+    is_korean: false
+    direction: outbound
+    cost: free
+
+  - id: discord.webhook_send
+    display_name: "Discord 채널 알림"
+    category: "알림"
+    vendor: "Discord"
+    is_korean: false
+    direction: outbound
+    cost: free
+
+  - id: kakaowork.webhook_send
+    display_name: "KakaoWork 채널 알림"
+    category: "알림"
+    vendor: "Kakao"
+    is_korean: true
+    direction: outbound
+    cost: free
+
+  - id: telegram.bot_send
+    display_name: "Telegram Bot 메시지"
+    category: "알림"
+    vendor: "Telegram"
+    is_korean: false
+    direction: outbound
+    cost: free
+
+  - id: line.push_message
+    display_name: "LINE Messaging API push (Bot)"
+    category: "알림"
+    vendor: "LINE"
+    is_korean: false
+    direction: outbound
+    cost: freemium
+
+  - id: teams.adaptive_card_post
+    display_name: "MS Teams Adaptive Card (Workflow)"
+    category: "알림"
+    vendor: "Microsoft Teams"
+    is_korean: false
+    direction: outbound
+    cost: free
+
+  - id: kakao.iopen_skill_response
+    display_name: "카카오 i 오픈빌더 스킬 응답"
+    category: "알림"
+    vendor: "Kakao i Open Builder"
+    is_korean: true
+    direction: inbound_with_reply
+    cost: free
+
+  - id: naver.talktalk_send
+    display_name: "네이버 톡톡 메시지 발송"
+    category: "알림"
+    vendor: "Naver"
+    is_korean: true
+    direction: outbound
+    cost: free
+
+  - id: whatsapp.template_send
+    display_name: "WhatsApp Business 템플릿 발송"
+    category: "알림"
+    vendor: "Meta (WhatsApp)"
+    is_korean: false
+    direction: outbound
+    cost: paid
+
+  # ─────────────────────────────────────────────
+  # SMS / 메일
+  # ─────────────────────────────────────────────
+  - id: aligo.sms_send
+    display_name: "알리고 SMS 발송"
+    category: "SMS/메일"
+    vendor: "Aligo"
+    is_korean: true
+    direction: outbound
+    cost: paid
+
+  - id: coolsms.sms_send
+    display_name: "CoolSMS 문자 발송 (SMS/LMS/MMS)"
+    category: "SMS/메일"
+    vendor: "CoolSMS (NHN Cloud)"
+    is_korean: true
+    direction: outbound
+    cost: paid
+
+  - id: solapi.alimtalk_send
+    display_name: "Solapi 카카오 알림톡 발송"
+    category: "SMS/메일"
+    vendor: "Solapi (NHN Cloud)"
+    is_korean: true
+    direction: outbound
+    cost: paid
+
+  - id: ncp.sens_sms
+    display_name: "NCP SENS SMS 발송"
+    category: "SMS/메일"
+    vendor: "Naver Cloud"
+    is_korean: true
+    direction: outbound
+    cost: paid
+
+  - id: mailgun.send
+    display_name: "Mailgun 메일 발송"
+    category: "SMS/메일"
+    vendor: "Mailgun"
+    is_korean: false
+    direction: outbound
+    cost: freemium
+
+  # ─────────────────────────────────────────────
+  # 정보 / 검색
+  # ─────────────────────────────────────────────
+  - id: kma.short_forecast
+    display_name: "기상청 단기예보"
+    category: "정보/검색"
+    vendor: "기상청"
+    is_korean: true
+    direction: outbound_query
+    cost: free
+
+  - id: kakao.address_search
+    display_name: "Kakao 주소 검색"
+    category: "정보/검색"
+    vendor: "Kakao"
+    is_korean: true
+    direction: outbound_query
+    cost: free
+
+  - id: naver.papago_translate
+    display_name: "Papago 번역"
+    category: "정보/검색"
+    vendor: "Naver Cloud"
+    is_korean: true
+    direction: outbound_query
+    cost: freemium
+
+  - id: exchangerate.latest
+    display_name: "환율 조회 (ExchangeRate API)"
+    category: "정보/검색"
+    vendor: "ExchangeRate-API"
+    is_korean: false
+    direction: outbound_query
+    cost: freemium
+
+  # ─────────────────────────────────────────────
+  # 협업 / CRM / 자동화
+  # ─────────────────────────────────────────────
+  - id: notion.create_page
+    display_name: "Notion 페이지 생성"
+    category: "협업/CRM"
+    vendor: "Notion"
+    is_korean: false
+    direction: outbound
+    cost: free
+
+  - id: trello.create_card
+    display_name: "Trello 카드 생성"
+    category: "협업/CRM"
+    vendor: "Trello"
+    is_korean: false
+    direction: outbound
+    cost: free
+
+  - id: generic.webhook_trigger
+    display_name: "범용 Webhook 트리거 (Zapier/n8n/Make)"
+    category: "협업/CRM"
+    vendor: "Zapier / n8n / Make"
+    is_korean: false
+    direction: outbound
+    cost: freemium
+
+  # ─────────────────────────────────────────────
+  # 결제 / 사업
+  # ─────────────────────────────────────────────
+  - id: toss.payment_confirm
+    display_name: "토스 결제 승인"
+    category: "결제/사업"
+    vendor: "Toss Payments"
+    is_korean: true
+    direction: outbound
+    cost: paid
+
+  - id: biznum.lookup
+    display_name: "사업자등록 진위 확인"
+    category: "결제/사업"
+    vendor: "국세청 (공공데이터포털)"
+    is_korean: true
+    direction: outbound_query
+    cost: free

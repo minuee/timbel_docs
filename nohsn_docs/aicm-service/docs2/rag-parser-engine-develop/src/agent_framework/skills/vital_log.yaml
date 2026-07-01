@@ -1,0 +1,54 @@
+skill:
+  id: vital_log
+  version: "1.1"
+  domain: medical
+  description: "활력 징후 기록 (혈압·맥박·체온)"
+
+availability:
+  scope: business_only
+  business_type: medical
+  visibility: opt-in
+
+triggers:
+  - intent: log_vitals
+
+slots:
+  - name: blood_pressure
+    type: text
+    required: true
+  - name: pulse
+    type: number
+    required: true
+  - name: temperature
+    type: number
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: vital_log_greet_on_enter.md
+    transitions:
+      - when: has_intent(log_vitals)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [blood_pressure, pulse, temperature]
+    transitions:
+      - when: slot_filled(temperature)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: vital_log_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

@@ -1,0 +1,47 @@
+skill:
+  id: note_recall
+  version: "1.1"
+  domain: personal
+  description: "저장된 메모 검색"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: recall_note
+
+slots:
+  - name: query
+    type: text
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: note_recall_greet_on_enter.md
+    transitions:
+      - when: has_intent(recall_note)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [query]
+    transitions:
+      - when: slot_filled(query)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: note_recall_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

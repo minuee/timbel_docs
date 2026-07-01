@@ -1,0 +1,71 @@
+skill:
+  id: expense_log_personal
+  version: "1.2"
+  domain: personal
+  description: "개인 지출 기록 (금액·카테고리·메모·날짜)"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: log_expense
+
+# v1.2 (2026-04-28) — 패턴 정합성 정비:
+#   - spent_at slot 추가: 사용자 발화의 "어제/오늘/어제 점심" 등을 ISO date 로
+#     slot_filler 가 정규화 (slot_filler.py 의 date 정규화 룰).
+#   - greet 의 on_enter 제거 (silent dispatch). collect 의 on_enter 만 사용자
+#     안내 담당 — schedule_personal v0.3 패턴과 동일.
+#   - 다중 인스턴스 발화 (예: "어제 칼국수 만오천, 오늘 돼지국밥 만삼천") 는
+#     slot_filler 가 __items 배열로 돌려주고 engine 이 save state 를 fan-out.
+slots:
+  - name: amount
+    type: number
+    required: true
+  - name: category
+    type: enum
+    values: [식비, 교통, 쇼핑, 주거, 의료, 여가, 교육, 기타]
+    required: true
+  - name: memo
+    type: text
+  - name: spent_at
+    type: date
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    transitions:
+      - when: has_intent(log_expense)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    on_enter:
+      llm_respond:
+        template: expense_log_personal_collect_on_enter.md
+    llm_slot_fill: [amount, category, memo, spent_at]
+    transitions:
+      - when: slots_filled(amount, category)
+        to: save
+      - llm_fallback: true
+
+  - id: save
+    tool: expense.create
+    tool_args:
+      amount: $amount
+      category: $category
+      description: $memo
+      spent_at: $spent_at
+      tenant_id: $personal_tenant_id
+      phone: $phone
+      raw_utterance: $user_last_message
+    on_exit:
+      llm_respond:
+        template: expense_log_personal_save_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

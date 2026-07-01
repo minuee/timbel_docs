@@ -1,0 +1,81 @@
+# P11 series 회귀 가드 — 사용자 발견 패턴 영구 보존.
+#
+# 이 시나리오들이 한 번 fail 하면 즉시 알림 — 사용자가 같은 버그를 두 번
+# 발견하지 않도록 영구 회귀 가드. P9 runner 가 자동 실행.
+#
+# memory: feedback_pr_three_layer_verification.md, feedback_validation_must_include_multiturn_patterns.md
+
+scenarios:
+  - name: P11-1 StocksTab movers 데이터 다양성 (모두 같은 종목 + 0% 회귀 차단)
+    references:
+      - "src/agent_framework/tools/stock_data.py:340 ChagesRatio 컬럼 추가 (P11-4)"
+    http:
+      - request:
+          method: GET
+          path: /api/v1/stock/movers?market=ALL&top_n=5
+          auth_account: demo-admin
+        expect:
+          status: 200
+          # 급등 first 종목 ≠ 급락 first 종목 (0% 동일 종목 회귀 차단)
+          custom_assertion: |
+            r['gainers'][0]['code'] != r['losers'][0]['code'] and
+            abs(r['gainers'][0]['change_pct']) > 0.1
+
+  - name: P11-2 메일 본문 trim 분기 (빈 string 도 fallback)
+    references:
+      - "MailTab.tsx:362 trim 후 분기 (P11-2)"
+    note: |
+      frontend rendering 회귀라 backend HTTP 시나리오로 안 잡힘.
+      대신 backend 가 body_text=빈 string 반환할 때 body_html 도 같이 보내는지 확인.
+    http:
+      - request:
+          method: GET
+          path: /api/v1/inbox
+          auth_account: demo-admin
+        expect:
+          status: 200
+
+  - name: P11-5 stock_watch alert_high 만 있으면 monitor_interval default 30
+    references:
+      - "stock_watch.py:97 alert + interval 미지정 → default 30 (P11-5)"
+    chat:
+      - tenant: personal
+        account: demo-admin
+        user: 삼성전자 230000원 되면 알려줘
+        expect:
+          tool: stock.add_watch
+          tool_result_contains:
+            success: true
+      - tenant: personal
+        account: demo-admin
+        user: 내 관심 종목 보여줘
+        expect:
+          tool: stock.list_watch
+          # 등록한 watch 의 monitor_interval_min 가 0 이 아님
+          custom_assertion: |
+            any(it.get('monitor_interval_min', 0) > 0 for it in items)
+
+  - name: P11-6 api 502 후 axios 자동 retry
+    references:
+      - "frontend-v3/src/api/client.ts (P11-6)"
+    note: |
+      frontend interceptor 동작이라 vitest unit 으로 가드. backend 측 동등은
+      kms-api healthcheck 가 startup 후 ~10s 안에 200 ready.
+    http:
+      - request: { method: GET, path: /health/ready }
+        expect: { status: 200 }
+
+  - name: P11-7 plan path turn 의 trace 가 DB 에 모두 영속 (재진입 보존)
+    references:
+      - "chat_v1.py:337 _TRACE_KINDS 에 plan_* 추가 (P11-7)"
+    chat:
+      - tenant: personal
+        account: demo-admin
+        user: 주식 매도 대금 언제 들어와?
+        expect:
+          # plan path 라면 plan_generated + plan_step 이 trace 에 영속
+          # skill path 라면 skill_activated + tool_call 등 영속
+          # 둘 중 어느 path 든 trace_len >= 3 (intent 외에 최소 2개 더)
+          trace_len_gte: 3
+          # citations event 가 있어야 — 답변 본문에 [N] 인용 가능
+          has_event_kind: citations

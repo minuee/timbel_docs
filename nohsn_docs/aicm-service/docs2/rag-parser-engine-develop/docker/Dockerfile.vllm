@@ -1,0 +1,7 @@
+# Custom vLLM image for Gemma 4
+# - vLLM nightly required for Gemma 4 RoPE + MoE support
+# - transformers>=5.0.0 required for vision support
+FROM vllm/vllm-openai:latest
+
+RUN pip install --no-cache-dir -U "vllm>=0.9" --pre \
+    && pip install --no-cache-dir "transformers>=5.0.0" "accelerate>=1.0.0"

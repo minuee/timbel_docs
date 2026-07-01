@@ -1,0 +1,78 @@
+{
+  "id": "generic.webhook_trigger",
+  "name": "generic.webhook_trigger",
+  "display_name": "범용 Webhook 트리거 (Zapier/n8n/Make)",
+  "description": "Zapier 'Webhooks by Zapier' / n8n Webhook 노드 / Make.com (Integromat) Custom webhook 등 자동화 도구의 inbound trigger 로 페이로드를 push 합니다. 페이로드 스키마는 자유 — 받는 도구가 매핑. URL 자체에 비밀이 박혀 있어 외부 노출 시 즉시 회전 (Zapier: Zap turn off + 재발급, n8n: 노드 secret 변경, Make: scenario 재생성).",
+  "category": "협업/CRM",
+  "vendor": "Zapier / n8n / Make",
+  "vendor_url": "https://zapier.com/apps/webhook/help",
+  "endpoint_url": "<YOUR_AUTOMATION_WEBHOOK_URL — 예: https://hooks.zapier.com/hooks/catch/123456/abcde/ 또는 https://<n8n>.webhook/path 또는 https://hook.make.com/...>",
+  "method": "POST",
+  "auth_headers": {
+    "Content-Type": "application/json",
+    "X-Idempotency-Key": "<EVENT_UUID — 동일 이벤트 재발송 시 dedup>"
+  },
+  "input_schema": {
+    "type": "object",
+    "description": "페이로드는 자유 — 받는 자동화 도구의 매핑 정의에 맞게 구성",
+    "properties": {
+      "event_type": {
+        "type": "string",
+        "description": "이벤트 종류 (예: order.created, support.escalated)"
+      },
+      "event_id": {
+        "type": "string",
+        "description": "고유 이벤트 ID (dedup 용)"
+      },
+      "occurred_at": {
+        "type": "string",
+        "description": "ISO 8601 timestamp (예: 2026-05-07T12:34:56Z)"
+      },
+      "tenant_id": {
+        "type": "string",
+        "description": "테넌트 식별자"
+      },
+      "data": {
+        "type": "object",
+        "description": "이벤트 페이로드 본체 — 자유 형식"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "도구별 응답 — Zapier: {\"status\": \"success\", \"attempt\": \"...\", \"id\": \"...\", \"request_id\": \"...\"}, n8n: 200 OK + JSON 또는 binary, Make: 200 Accepted"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "secret_in_url",
+    "verify_header": null,
+    "replay_protection": "idempotency_key",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "URL path 자체가 비밀 — 노출 시 누구나 임의 페이로드 push 가능. Zapier 는 시그니처 미지원, n8n 은 'Header Auth' 노드로 토큰 추가 가능, Make 는 'API Key Auth' 모듈 사용. Idempotency-Key 헤더 또는 페이로드 event_id 로 receiver 측 dedup 권장 (n8n: Idempotent Webhook Retries 패턴)."
+  },
+  "operational_notes": {
+    "rate_limit": "Zapier Free: 100 tasks/월, Starter: 750/월, Professional: 2k+/월. n8n self-hosted: 무제한. Make Free: 1k operations/월.",
+    "retry_semantics": "Zapier 자체는 receiver retry 미지원 — 우리가 5xx 시 지수 백오프 (최대 3회). n8n 은 노드별 retry 옵션. Make 는 scenario error handler.",
+    "response_sla_sec": null,
+    "cost_label": "free → paid (도구별 상이 — Zapier $19.99/월~, Make 무료 1k ops/월, n8n 자체호스팅 무료)",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. Zapier 사용 시: https://zapier.com → Make a Zap → Trigger 'Webhooks by Zapier' → Catch Hook → 발급된 URL 복사",
+    "2. n8n 사용 시: workflow → Webhook 노드 추가 → HTTP Method=POST + Path 설정 → 'Production URL' 복사. 'Header Auth' 노드 추가하여 X-Locus-Token 헤더 검증 가능.",
+    "3. Make.com 사용 시: scenario → Add module → Webhooks → Custom webhook → 'Add' 로 hook 생성 → URL 복사. 'Data structure' 등록 시 페이로드 매핑 더 쉬움.",
+    "4. endpoint_url 에 발급된 URL 붙여넣기. auth_headers 의 X-Idempotency-Key 는 매 요청마다 unique UUID 생성 (uuid4) — 자동화 도구 receiver 측 dedup 용.",
+    "5. 페이로드 표준화: event_type / event_id / occurred_at / tenant_id / data 5필드 권장. 받는 도구의 매핑이 안정적.",
+    "6. 보안: URL 노출 = 임의 페이로드 push 가능. Git/로그/스크린샷 마스킹. 분기마다 webhook 재생성으로 회전.",
+    "7. 토큰 추가 (강화): URL path 외에 X-Locus-Token 헤더 + 자동화 도구 측에서 'if header != expected then halt' 분기 추가.",
+    "8. dedup: receiver 측에서 event_id 또는 X-Idempotency-Key 를 키로 최근 24h 발송 추적 → 중복은 무시. 우리 측 retry 시 동일 키로 재발송."
+  ]
+}

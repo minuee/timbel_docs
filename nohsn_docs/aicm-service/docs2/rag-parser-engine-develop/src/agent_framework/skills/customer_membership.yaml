@@ -1,0 +1,45 @@
+skill:
+  id: customer_membership
+  version: "1.1"
+  domain: retail
+  description: "회원 정보 조회 (전화번호 기반)"
+
+availability:
+  scope: business_only
+  business_type: retail
+  visibility: opt-in
+
+triggers:
+  - intent: lookup_membership
+
+slots:
+  - name: member_phone
+    type: phone
+    required: true
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: customer_membership_greet_on_enter.md
+    transitions:
+      - when: has_intent(lookup_membership)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [member_phone]
+    transitions:
+      - when: slot_filled(member_phone)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: customer_membership_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

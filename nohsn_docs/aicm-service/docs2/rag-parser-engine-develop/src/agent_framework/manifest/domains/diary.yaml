@@ -1,0 +1,57 @@
+# 일기 / 저널 — 개인 기록.
+id: diary
+label: 일기
+icon: book-open
+status: active
+sort_order: 40
+
+# 노출 그룹 — 일기는 개인 영역.
+available_for_groups: [personal]
+
+list_endpoint: /api/v1/diary
+summary_endpoint: /api/v1/diary/summary
+detail_endpoint: /api/v1/diary/{id}
+
+list_columns:
+  - {key: written_at, label: 일자, format: date}
+  - {key: title, label: 제목, format: text}
+  - {key: mood, label: 기분, format: badge}
+  - {key: word_count, label: 분량, format: number}
+
+summary_widgets:
+  - type: stat
+    label: 이번달 기록 수
+    key: month_count
+    format: number
+  - type: stat
+    label: 연속 작성일
+    key: streak_days
+    format: number
+  - type: chart
+    label: 기분 분포
+    key: by_mood
+    kind: pie
+
+quick_actions:
+  - id: write_diary
+    label: 오늘 일기 쓰기
+    method: POST
+    endpoint: /api/v1/diary
+    form_schema:
+      type: object
+      required: [content]
+      properties:
+        title: {type: string, title: 제목}
+        content: {type: string, title: 내용}
+        mood:
+          type: string
+          title: 기분
+          enum: [좋음, 보통, 우울, 들뜸, 차분, 피곤, 기타]
+
+chat_intents:
+  - daily_journal
+  - diary_personal
+  - mood_check
+  - gratitude_log
+
+card_renderer: DiarySummaryCard

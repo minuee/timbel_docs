@@ -1,0 +1,114 @@
+{
+  "id": "whatsapp.template_send",
+  "name": "whatsapp.template_send",
+  "display_name": "WhatsApp Business 템플릿 발송",
+  "description": "WhatsApp Cloud API 로 사전 승인된 템플릿 메시지를 발송합니다. 사용자가 먼저 메시지를 보낸 후 24시간 안에는 free-form 응답 가능 — 그 이후 발송하려면 반드시 사전 승인 템플릿. 글로벌 1위 메신저 — 한국 외 모든 시장 (동남아·중남미·인도·유럽) 진출에 필수. 한국 사용도는 낮음.",
+  "category": "알림",
+  "vendor": "Meta (WhatsApp)",
+  "vendor_url": "https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages",
+  "endpoint_url": "https://graph.facebook.com/v21.0/<YOUR_PHONE_NUMBER_ID>/messages",
+  "method": "POST",
+  "auth_headers": {
+    "Authorization": "Bearer <YOUR_PERMANENT_ACCESS_TOKEN>",
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["messaging_product", "to", "type", "template"],
+    "properties": {
+      "messaging_product": {
+        "type": "string",
+        "default": "whatsapp",
+        "description": "고정값 'whatsapp'"
+      },
+      "to": {
+        "type": "string",
+        "description": "수신자 번호 (E.164 국제 표준, 예: 821012345678 — 한국 010 → 8210)"
+      },
+      "type": {
+        "type": "string",
+        "default": "template",
+        "enum": ["template", "text", "image", "interactive"],
+        "description": "24h 윈도 밖에서는 'template' 만 허용"
+      },
+      "template": {
+        "type": "object",
+        "required": ["name", "language"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "사전 승인된 템플릿 이름 (예: order_confirm_v2)"
+          },
+          "language": {
+            "type": "object",
+            "required": ["code"],
+            "properties": {
+              "code": {"type": "string", "description": "언어 코드 (예: ko, en_US, ja)"}
+            }
+          },
+          "components": {
+            "type": "array",
+            "description": "템플릿 변수 치환 — header / body / button 컴포넌트별 parameters",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {"type": "string", "enum": ["header", "body", "button"]},
+                "sub_type": {"type": "string", "enum": ["url", "quick_reply"], "description": "type=button 시"},
+                "index": {"type": "string", "description": "type=button 시 0-based 인덱스"},
+                "parameters": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {"type": "string", "enum": ["text", "currency", "date_time", "image", "document", "video", "payload"]},
+                      "text": {"type": "string"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Meta Graph API 응답 ({\"messaging_product\": \"whatsapp\", \"contacts\": [{\"input\": \"821012345678\", \"wa_id\": \"...\"}], \"messages\": [{\"id\": \"wamid....\", \"message_status\": \"accepted\"}]})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": true,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "Bearer",
+    "verify_header": "Authorization",
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "Permanent Access Token 은 system user 발급 (만료 없음, 대신 노출 시 즉시 회전). 인바운드 webhook 은 X-Hub-Signature-256 (HMAC-SHA256, app secret) + raw body 검증 필수. 첫 webhook 등록 시 hub.mode=subscribe + hub.verify_token + hub.challenge GET → challenge echo. 사용자 PII (전화번호) 발송 정책 준수 — Meta Business Verification 통과한 사업자만 발송 가능."
+  },
+  "operational_notes": {
+    "rate_limit": "Tier 별 차등 — Tier 1: 1,000 unique customers/24h, Tier 4: 100k+. 1초당 발송은 동일 phone_number_id 당 ~80 msg.",
+    "retry_semantics": "5xx 지수 백오프, error code 131047 (24h 윈도 밖 + 비-템플릿) / 131026 (사용자 미존재) 영구 실패",
+    "response_sla_sec": null,
+    "cost_label": "paid (per-message billing 2025-07-01부터). Marketing $0.06-0.08 / Utility $0.014-0.020 / Authentication $0.012-0.020 / 한국 마켓 USD 기준",
+    "biz_account_required": true
+  },
+  "setup_instructions": [
+    "1. Meta Business Verification: https://business.facebook.com → 사업자등록증 + 도메인 인증 (1~3주)",
+    "2. WhatsApp Business Account (WABA) 생성 → Phone number 등록 (개인 WA 와 별개) + display name 승인",
+    "3. Meta App 생성 (WhatsApp 제품 추가) → System User → Permanent Access Token 발급",
+    "4. endpoint_url 의 <YOUR_PHONE_NUMBER_ID> 를 Cloud API 등록 번호 ID 로 교체",
+    "5. 템플릿 사전 승인: Meta Business Suite → WhatsApp Manager → Templates → 카테고리 (Marketing/Utility/Authentication) + 본문 + 변수 + 버튼 등록 → 심사 (24h ~ 3일)",
+    "6. 24h 윈도 패턴: 사용자가 먼저 발송 → 24h 동안 free-form 응답 무료. 24h 밖 = template only. 윈도 만료 추적 필수 (channel_user_mappings.reply_window_expires_at).",
+    "7. 인바운드 webhook 등록: Meta App → Webhooks → WhatsApp Business Account → Subscribe (messages, message_template_status_update). Verify token + X-Hub-Signature-256.",
+    "8. 보안: Access Token + App Secret 모두 KMS / config_encrypted. 노출 시 Meta App → System Users → 즉시 토큰 회전. Webhook 검증 실패 시 401 반환 (200 X — Meta 가 계속 retry 함).",
+    "9. 비용 추적: per-message billing — 발송 전 카테고리별 단가 표시 + 월 한도 alert. agent_channels.quota_used 컬럼 활용.",
+    "10. Click-to-WhatsApp 광고 유입 사용자 = 72시간 free 윈도 (모든 메시지). 일반 사용자보다 윈도 길어 utility 활용 가치 큼."
+  ]
+}

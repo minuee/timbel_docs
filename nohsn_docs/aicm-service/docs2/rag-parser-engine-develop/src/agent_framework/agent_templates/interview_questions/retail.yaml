@@ -1,0 +1,39 @@
+category: retail
+label: "쇼핑 & 소매"
+description: "온라인 쇼핑몰·대형마트·소매점·편의점 SOP."
+
+questions:
+  - id: rt_channel_type
+    label: "운영 채널?"
+    type: multiple_choice
+    options: ["오프라인 매장", "온라인 쇼핑몰", "옴니채널 (오프+온)", "라이브 커머스", "기타"]
+    required: true
+    section: 페르소나
+
+  - id: rt_product_categories
+    label: "취급 상품 카테고리?"
+    type: textarea
+    example: "식품 / 생활용품 / 가전 / 패션 / 뷰티 / 종합몰"
+    required: true
+    section: 페르소나
+
+  - id: rt_delivery_policy
+    label: "배송 / 픽업 정책?"
+    type: textarea
+    example: "당일 배송 / 새벽배송 / 매장 픽업 / 도서산간 +배송비"
+    required: true
+    section: 응대 시나리오
+
+  - id: rt_loyalty_program
+    label: "멤버십 / 적립 / 쿠폰 / 할인 정책?"
+    type: textarea
+    example: "구매 1% 적립 / 등급별 5-10% / 첫 구매 쿠폰 / 카드사 제휴"
+    required: true
+    section: 응대 시나리오
+
+  - id: rt_fraud_policy
+    label: "가품 / 사기 결제 의심 시 안내 프로토콜?"
+    type: textarea
+    example: "정품 인증은 본사·정식 수입사 / 사기 결제는 카드사 + 112 / 1332"
+    required: true
+    section: 에스컬레이션

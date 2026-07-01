@@ -1,0 +1,1 @@
+{caller_name}님, '{inquiry_type}' 문의로 접수해 드리겠습니다. 잠시만 기다려 주세요.

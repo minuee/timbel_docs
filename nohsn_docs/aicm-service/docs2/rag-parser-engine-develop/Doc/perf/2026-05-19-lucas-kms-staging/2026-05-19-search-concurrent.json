@@ -1,0 +1,52 @@
+{
+  "suite": "search_concurrent_burst",
+  "results": [
+    {
+      "label": "concurrent::1",
+      "count": 4,
+      "errors": 0,
+      "mean_ms": 3.23,
+      "p50_ms": 3.23,
+      "p95_ms": 3.79,
+      "p99_ms": 3.79,
+      "min_ms": 2.79,
+      "max_ms": 3.79,
+      "extra": {
+        "concurrency": 1
+      }
+    },
+    {
+      "label": "concurrent::4",
+      "count": 16,
+      "errors": 0,
+      "mean_ms": 21.56,
+      "p50_ms": 19.47,
+      "p95_ms": 36.22,
+      "p99_ms": 37.72,
+      "min_ms": 6.31,
+      "max_ms": 37.72,
+      "extra": {
+        "concurrency": 4
+      }
+    },
+    {
+      "label": "concurrent::8",
+      "count": 32,
+      "errors": 0,
+      "mean_ms": 52.47,
+      "p50_ms": 37.71,
+      "p95_ms": 110.02,
+      "p99_ms": 110.36,
+      "min_ms": 14.2,
+      "max_ms": 110.36,
+      "extra": {
+        "concurrency": 8
+      }
+    }
+  ],
+  "profile": "integrated",
+  "base_url": "http://localhost:5201",
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "generated_at_utc": "2026-05-19T08:41:51.944064+00:00",
+  "mock": false
+}

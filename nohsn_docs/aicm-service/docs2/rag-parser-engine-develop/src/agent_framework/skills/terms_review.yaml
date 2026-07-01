@@ -1,0 +1,62 @@
+# converted from yaml/terms_review.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: terms_review
+  version: '1.1'
+  domain: legal
+  description: 계약서 약관 검토 — 독소조항·불리한 책임·해지 조건 표시. 변호사 자문 필요.
+availability:
+  scope: business_only
+  business_type: legal
+  visibility: opt-in
+triggers:
+- intent: terms_review
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 법률 사무소에서 3년차 파라리걸. 계약서 검토 전문가.
+
+        톤: 친절·존댓말. 고객의 우려를 덜어주는 간결한 문장.
+
+        스킬 설명: 계약서 약관 검토 — 독소조항·불리한 책임·해지 조건 표시. 변호사 자문 필요.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: 계약서 내용 및 특별히 검토할 사항
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 법률 사무소에서 3년차 파라리걸. 계약서 검토 전문가.
+
+        톤: 친절·존댓말. 고객의 우려를 덜어주는 간결한 문장.
+
+        스킬: 계약서 약관 검토 — 독소조항·불리한 책임·해지 조건 표시. 변호사 자문 필요.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '검토 결과: {계약서 내용}에 대한 검토 결과는 {kms_search_result}입니다.'
+  transitions:
+  - to: done
+- id: done

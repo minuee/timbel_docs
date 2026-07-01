@@ -1,0 +1,114 @@
+{
+  "id": "solapi.alimtalk_send",
+  "name": "solapi.alimtalk_send",
+  "display_name": "Solapi 카카오 알림톡 발송",
+  "description": "Solapi (구 NHN Cloud Notification) 의 메시지 API 로 카카오 알림톡(정보성)을 발송합니다. 사전 승인된 템플릿 코드 + 변수 치환 방식. 수신자가 카카오톡 채널 친구가 아니어도 발송 가능 — 한국 기업 알림 사실상 표준. 수신자가 KakaoTalk 사용 불가 시 자동 SMS fallback 가능 (failback type 지정).",
+  "category": "SMS/메일",
+  "vendor": "Solapi (NHN Cloud)",
+  "vendor_url": "https://developers.solapi.com/references/messages-v4/sendSimpleMessages",
+  "endpoint_url": "https://api.solapi.com/messages/v4/send",
+  "method": "POST",
+  "auth_headers": {
+    "Authorization": "HMAC-SHA256 apiKey=<YOUR_API_KEY>, date=<ISO8601_DATE>, salt=<RANDOM_SALT>, signature=<HMAC_HEX>",
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["message"],
+    "properties": {
+      "message": {
+        "type": "object",
+        "required": ["to", "from", "type", "kakaoOptions"],
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "수신자 휴대폰 번호 (예: 01012345678, 하이픈 없이)"
+          },
+          "from": {
+            "type": "string",
+            "description": "발신번호 (Solapi 콘솔에 사전 등록된 번호)"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["ATA", "CTA", "CTI"],
+            "default": "ATA",
+            "description": "ATA: 알림톡(정보성) / CTA: 친구톡(광고) / CTI: 친구톡 이미지"
+          },
+          "text": {
+            "type": "string",
+            "description": "치환된 본문 (템플릿 변수 #{name} 모두 채운 최종 텍스트). 1000자 이내."
+          },
+          "kakaoOptions": {
+            "type": "object",
+            "required": ["pfId", "templateId"],
+            "properties": {
+              "pfId": {
+                "type": "string",
+                "description": "카카오 플랫폼 ID (Solapi 콘솔 → 카카오 → 채널 등록 후 발급)"
+              },
+              "templateId": {
+                "type": "string",
+                "description": "사전 승인된 알림톡 템플릿 ID (Kakao Biz 심사 통과 후 발급)"
+              },
+              "disableSms": {
+                "type": "boolean",
+                "default": false,
+                "description": "true: 알림톡 실패 시 SMS fallback 비활성. false: SMS 자동 대체 (별도 단가)."
+              },
+              "buttons": {
+                "type": "array",
+                "description": "템플릿에 정의된 버튼 (URL/전화/봇 이동 등) — 사전 승인된 버튼만 사용 가능",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "buttonName": {"type": "string"},
+                    "buttonType": {"type": "string", "enum": ["WL", "AL", "DS", "BK", "MD", "BC", "BT"]},
+                    "linkMo": {"type": "string"},
+                    "linkPc": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Solapi 응답 ({\"groupId\": \"G4V20...\", \"messageId\": \"M4V20...\", \"to\": \"...\", \"from\": \"...\", \"type\": \"ATA\", \"statusCode\": \"2000\", \"statusMessage\": \"정상 접수\"})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": true,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "HMAC-SHA256",
+    "verify_header": "Authorization",
+    "replay_protection": "timestamp+salt",
+    "tls_required": true,
+    "ip_allowlist_supported": true,
+    "notes": "서명 base string: date + salt → HMAC-SHA256(apiSecret) → hex. date 는 ISO 8601 (예: 2026-05-07T12:34:56Z), salt 는 12-64자 무작위 문자열. apiSecret 노출 시 Solapi 콘솔에서 즉시 재발급. 알림톡 템플릿은 카카오 비즈 심사 (영업일 2일) 통과 후에만 발송 가능 — 미승인 템플릿은 거부."
+  },
+  "operational_notes": {
+    "rate_limit": "계정당 기본 30 req/sec, 발송 ~1,000 건/sec (대량은 sendMany API)",
+    "retry_semantics": "statusCode 2000 = 접수 성공, 4000+ = 영구 실패 (재시도 X), 5000+ = 일시 실패 (재시도 OK)",
+    "response_sla_sec": null,
+    "cost_label": "paid (알림톡 ~7-9원/건, 친구톡 ~8-12원/건, SMS fallback ~10원/건)",
+    "biz_account_required": true
+  },
+  "setup_instructions": [
+    "1. https://solapi.com 회원가입 후 충전 (선불) → 콘솔 → API Key 발급 (apiKey + apiSecret 두 값)",
+    "2. 발신번호 등록: 콘솔 → 발신번호 관리 → 통신서비스 가입증명원 + 본인인증",
+    "3. 카카오 채널 등록: 콘솔 → 카카오 → 채널 추가 → 카카오 비즈니스 채널 ID 입력 → pfId 발급",
+    "4. 알림톡 템플릿 등록: 콘솔 → 알림톡 → 템플릿 등록 → 카카오 심사 신청 (영업일 2일~) → 승인 시 templateId 발급",
+    "5. 인증: HMAC-SHA256 서명 — 의사코드: signature = hmac_sha256(apiSecret, date + salt). 매 요청마다 새 salt 사용 (replay 방지).",
+    "6. auth_headers 의 Authorization 값은 매 요청마다 동적 생성 — Solapi 공식 SDK (Python/Node/PHP) 사용 권장.",
+    "7. 보안: apiSecret 은 KMS / config_encrypted 저장. 노출 시 콘솔에서 즉시 회전. 템플릿 변수 치환 시 사용자 입력 sanitize (스크립트 인젝션 방지).",
+    "8. 인바운드 (사용자 답장): 알림톡 답장은 카카오톡 채널의 1:1 채팅으로 들어감 — 별도 webhook 없음. 인바운드 양방향이 필요하면 카카오 i 오픈빌더 스킬 (kakao.iopen_skill_response 예시) 추가 구성 필요."
+  ]
+}

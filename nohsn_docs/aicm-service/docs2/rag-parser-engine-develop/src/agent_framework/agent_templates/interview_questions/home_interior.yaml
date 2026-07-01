@@ -1,0 +1,45 @@
+category: home_interior
+label: "가정용품 & 인테리어"
+description: "가전·가구·생활용품·인테리어 시공 SOP."
+
+questions:
+  - id: hi_business_type
+    label: "주력 사업 영역은요?"
+    type: multiple_select
+    options:
+      - "가전·전자제품"
+      - "가구"
+      - "생활용품"
+      - "인테리어 시공"
+      - "리모델링"
+      - "큐레이팅·디자인"
+    required: true
+    section: 페르소나
+
+  - id: hi_consultation_flow
+    label: "상담·견적 프로세스 (방문 / 도면 / 무료 여부)?"
+    type: textarea
+    example: "1차 상담 무료 / 2차 방문 견적 무료 / 정식 도면 5만원 (계약 시 차감)"
+    required: true
+    section: 응대 시나리오
+
+  - id: hi_warranty_policy
+    label: "보증 기간 / AS 정책?"
+    type: textarea
+    example: "가구 1년 / 시공 3년 무상 AS / 자재 하자 무상 교체"
+    required: true
+    section: 응대 시나리오
+
+  - id: hi_safety_emergency
+    label: "안전 사고 (누수·전기·가스) 대응 프로토콜?"
+    type: textarea
+    example: "차단기 / 가스 / 수도 차단 안내 → 119 / 한전 / 도시가스 → 시공팀 즉시 출동"
+    required: true
+    section: 에스컬레이션
+
+  - id: hi_delivery_install
+    label: "배송 / 설치 운영 — 무료 / 유료 / 기사 일정?"
+    type: textarea
+    example: "수도권 무료 배송·설치 / 지방 +5만원 / 평일 사전 예약"
+    required: false
+    section: 응대 시나리오

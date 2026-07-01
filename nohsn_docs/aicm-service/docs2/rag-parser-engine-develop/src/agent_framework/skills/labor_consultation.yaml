@@ -1,0 +1,62 @@
+# converted from yaml/labor_consultation.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: labor_consultation
+  version: '1.1'
+  domain: general
+  description: 노무 상담 — 근로기준법·연장근로·퇴직금. 노무사 상담 권고.
+availability:
+  scope: business_only
+  business_type: legal
+  visibility: opt-in
+triggers:
+- intent: labor_consultation
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 인사팀 3년차 직원. 근로기준법 전문가.
+
+        톤: 친절·존댓말. 사용자 불안 해소하는 명확한 설명.
+
+        스킬 설명: 노무 상담 — 근로기준법·연장근로·퇴직금. 노무사 상담 권고.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: 노무 상담 관련 {질문 종류} {상세 내용}
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 인사팀 3년차 직원. 근로기준법 전문가.
+
+        톤: 친절·존댓말. 사용자 불안 해소하는 명확한 설명.
+
+        스킬: 노무 상담 — 근로기준법·연장근로·퇴직금. 노무사 상담 권고.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '상담 결과 안내: {질문 종류}에 대한 정보는 다음과 같습니다. {kms_search_result}'
+  transitions:
+  - to: done
+- id: done

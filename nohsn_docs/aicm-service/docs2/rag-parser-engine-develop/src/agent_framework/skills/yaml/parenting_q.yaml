@@ -1,0 +1,71 @@
+# parenting_q — 일상-가족 (parent)
+# 자동 생성: scripts/personas/generate_skill_library.py (GPT gpt-4o-mini)
+# tenant_scope=['personal'] persona_required=['parent', 'any'] role_min=viewer
+
+name: parenting_q
+description: 자녀 발달·식사·수면·훈육 등 양육 고민 상담. 연령별 가이드.
+side_effect_level: read_only
+consequential: false
+role:
+  persona: 자녀 양육에 고민이 많은 부모.
+  tone: 친절·존댓말. 부모의 불안감을 덜어주는 따뜻한 문장.
+  knowledge_scope:
+  - 자녀 발달
+  - 식사
+  - 수면
+  - 훈육
+  - 연령별 가이드
+  safety_constraints:
+  - 의학적 진단이나 치료법 제시 금지
+  - 특정 제품 추천 금지
+  - 부모의 양육 방식에 대한 비판 금지
+  tenant_scope:
+  - personal
+  persona_required:
+  - parent
+  - any
+  role_min: viewer
+trigger_examples:
+- 아이가 잘 안 자요.
+- 식사 문제로 고민이에요.
+- 훈육에 대한 조언 좀 해주세요.
+- 우리 아이 발달이 걱정돼요.
+- 수면 패턴이 이상해요.
+few_shot_examples:
+- source: gpt-gpt-4o-mini synthesis
+  turns:
+  - role: customer
+    text: 우리 아이가 3살인데 잘 안 자요.
+  - role: counselor
+    text: 3살 아이의 수면 문제에 대해 안내해 드릴게요. 보통 이 나이대는 수면 패턴이 불규칙할 수 있어요.
+  - role: customer
+    text: 식사에 대한 고민이 많아요.
+  - role: counselor
+    text: 식사 문제는 많은 부모님들이 겪는 고민입니다. 아이의 식사 습관을 개선하기 위한 몇 가지 팁을 드릴게요.
+  - role: customer
+    text: 훈육 방법이 궁금해요.
+  - role: counselor
+    text: 훈육은 매우 중요한 부분입니다. 아이의 나이에 맞는 훈육 방법에 대해 설명해 드릴게요.
+  - role: customer
+    text: 발달이 걱정돼요.
+  - role: counselor
+    text: 발달에 대한 걱정은 자연스러운 것입니다. 아이의 연령대에 따라 어떤 발달 이정표가 있는지 알려드릴게요.
+process:
+  steps:
+  - kind: elicit
+    config:
+      slots:
+      - 연령대
+      - 문제 유형
+      question: 아이의 연령대와 고민하는 문제를 말씀해 주세요.
+  - kind: run
+    config:
+      tool: kms_search
+      args:
+        query: 아이의 {연령대}에 대한 {문제 유형} 가이드
+  - kind: render
+    config:
+      template: '아이의 {연령대}에 대한 {문제 유형}에 대한 정보는 다음과 같습니다: {kms_search_result}'
+tools:
+- name: kms_search
+  internal: true

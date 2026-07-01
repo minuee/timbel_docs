@@ -1,0 +1,96 @@
+{
+  "id": "line.push_message",
+  "name": "line.push_message",
+  "display_name": "LINE Messaging API push (Bot)",
+  "description": "LINE Messaging API push endpoint 으로 채널에 친구 추가한 사용자에게 메시지를 push 발송합니다. Reply Token (webhook 이벤트마다 1회·30초 유효) 기반 reply 와 달리, push 는 토큰 만료 후 또는 임의 시점에 발송 — 단 push API quota (월별 한도) 가 별도로 존재. 일본·대만·태국 진출 시 Slack/Telegram 동급 1순위 채널.",
+  "category": "알림",
+  "vendor": "LINE",
+  "vendor_url": "https://developers.line.biz/en/reference/messaging-api/#send-push-message",
+  "endpoint_url": "https://api.line.me/v2/bot/message/push",
+  "method": "POST",
+  "auth_headers": {
+    "Authorization": "Bearer <YOUR_CHANNEL_ACCESS_TOKEN>",
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["to", "messages"],
+    "properties": {
+      "to": {
+        "type": "string",
+        "description": "수신자 LINE userId (U... 형식, 32자) — 그룹/룸은 groupId/roomId 사용"
+      },
+      "messages": {
+        "type": "array",
+        "description": "메시지 배열 (최대 5개) — 한 번에 5종 합쳐서 발송",
+        "minItems": 1,
+        "maxItems": 5,
+        "items": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["text", "image", "video", "audio", "location", "sticker", "imagemap", "template", "flex"]
+            },
+            "text": {"type": "string", "description": "type=text 시 본문 (최대 5000자)", "maxLength": 5000},
+            "originalContentUrl": {"type": "string", "description": "type=image/video/audio 시 미디어 URL"},
+            "previewImageUrl": {"type": "string", "description": "image/video 미리보기"},
+            "altText": {"type": "string", "description": "template/flex 시 알림용 fallback (LINE 알림 영역에 표시)"},
+            "template": {"type": "object", "description": "type=template 시 buttons/confirm/carousel/image_carousel 객체"},
+            "contents": {"type": "object", "description": "type=flex 시 Flex Message JSON"}
+          }
+        }
+      },
+      "notificationDisabled": {
+        "type": "boolean",
+        "default": false,
+        "description": "true: 사용자에게 푸시 알림 표시 안 함 (메시지는 도착)"
+      },
+      "customAggregationUnits": {
+        "type": "array",
+        "description": "측정 단위 (LINE Insights 통계 분류 — 최대 1개, 30자 이내)",
+        "items": {"type": "string"}
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "LINE 응답 (성공 시 HTTP 200 + 빈 body, 실패 시 {\"message\": \"The user hasn't added the LINE Official Account as a friend.\", \"details\": [...]} 등)"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "Bearer",
+    "verify_header": "Authorization",
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "Channel Access Token: short-lived (30일, refresh 가능) 또는 long-lived (만료 없음, 콘솔에서만 회전). 인바운드 webhook 은 X-Line-Signature (HMAC-SHA256, channel secret) + raw body 로 검증 필수. push API 는 quota 소진 시 즉시 429 — reply token 으로 발송 가능한 경우 reply 우선 (quota 무료)."
+  },
+  "operational_notes": {
+    "rate_limit": "푸시 API: 100 req/sec. 대량은 multicast/broadcast 별도 endpoint 사용.",
+    "retry_semantics": "5xx 지수 백오프, 400 (사용자 친구 아님 / userId 잘못됨) 영구 실패",
+    "response_sla_sec": null,
+    "cost_label": "free (월 200건) → Light 5,000건 ($46/월) → Standard 30,000건 + 종량제 ~3엔/건 (Reply 는 quota 무관 무료)",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. LINE Business ID 생성 (https://account.line.biz) → LINE Developers Console → Provider 생성 → Messaging API Channel 생성",
+    "2. Channel Basic Settings → Channel secret 복사 (인바운드 검증용)",
+    "3. Messaging API → Channel access token (long-lived) 발급 — 콘솔에서 'Issue' 클릭",
+    "4. auth_headers 의 Authorization 'Bearer <CHANNEL_ACCESS_TOKEN>' 로 교체",
+    "5. userId 확보: 사용자가 채널 친구추가 후 webhook 의 events[].source.userId 캡처 → DB 저장",
+    "6. 인바운드 webhook 등록: Messaging API → Webhook URL → Use webhook ON. raw body + X-Line-Signature HMAC-SHA256 검증.",
+    "7. Reply 우선 push fallback 패턴: webhook 수신 시 reply_token 30초 유효 — 즉시 reply 시도, 만료/실패 시 push 로 fallback (quota 차감).",
+    "8. 보안: Channel secret + Channel access token 모두 KMS / config_encrypted. 노출 시 콘솔에서 즉시 'Revoke' + 신규 발급.",
+    "9. Flex Message: 풍부한 카드 UI — https://developers.line.biz/flex-simulator/ 빌더로 JSON 작성. 일본/대만/태국 사용자 UX 의 차별 포인트.",
+    "10. quota tracking: agent_channels.quota_used 컬럼에 월별 push 건수 누적. quota_reset_at 매월 1일 자정 (PST) 리셋 (LINE 정책)."
+  ]
+}

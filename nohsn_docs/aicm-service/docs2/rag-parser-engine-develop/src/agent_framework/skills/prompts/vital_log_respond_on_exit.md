@@ -1,0 +1,1 @@
+활력징후 기록 — 혈압 {blood_pressure}, 맥박 {pulse}bpm, 체온 {temperature}℃.

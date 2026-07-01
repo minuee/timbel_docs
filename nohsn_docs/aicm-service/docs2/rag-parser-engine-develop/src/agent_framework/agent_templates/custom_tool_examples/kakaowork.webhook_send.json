@@ -1,0 +1,58 @@
+{
+  "id": "kakaowork.webhook_send",
+  "name": "kakaowork.webhook_send",
+  "display_name": "KakaoWork 채널 알림",
+  "description": "KakaoWork Incoming Webhook 으로 팀 채널에 메시지를 발송합니다. 한국 기업용 협업 메신저 카카오워크에서 사용합니다.",
+  "category": "알림",
+  "vendor": "Kakao",
+  "vendor_url": "https://docs.kakaowork.com/docs/bots-incoming-webhooks",
+  "endpoint_url": "<YOUR_WEBHOOK_URL — https://hook.kakaowork.com/webhooks/...>",
+  "method": "POST",
+  "auth_headers": {},
+  "input_schema": {
+    "type": "object",
+    "required": ["text"],
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "채널에 표시될 메시지 본문"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "KakaoWork 응답 (성공 시 {\"success\": true})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "secret_in_url",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "Webhook URL 자체가 인증 키. 워크스페이스 관리자만 발급 가능."
+  },
+  "operational_notes": {
+    "rate_limit": "워크스페이스당 권장 1 msg/sec — 명확한 공식 한도 없으나 burst 시 throttle 가능",
+    "retry_semantics": "5xx 지수 백오프",
+    "response_sla_sec": null,
+    "cost_label": "free",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://www.kakaowork.com 에서 워크스페이스 관리자로 로그인",
+    "2. 앱 관리 → '봇/앱 추가' → 'Incoming Webhook' 유형 선택",
+    "3. 앱 이름(예: Locus), 설명 입력 후 저장",
+    "4. 연결할 채널 선택 후 Webhook URL 발급",
+    "5. 발급된 URL(https://hook.kakaowork.com/webhooks/...)을 endpoint_url 에 붙여넣기",
+    "6. auth_headers 는 비워두어도 됩니다 — URL 자체에 인증 정보 포함",
+    "7. 보안: URL 노출 = 채널 도용 가능. 외부 시스템 로그·코드에서 마스킹."
+  ]
+}

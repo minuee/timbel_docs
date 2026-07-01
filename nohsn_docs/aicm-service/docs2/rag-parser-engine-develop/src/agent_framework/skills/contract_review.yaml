@@ -1,0 +1,62 @@
+# converted from yaml/contract_review.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: contract_review
+  version: '1.1'
+  domain: legal
+  description: 부동산 계약서 검토 — 등기부등본·중개대상물확인서·특약. 공인중개사법 준수.
+availability:
+  scope: business_only
+  business_type: general
+  visibility: opt-in
+triggers:
+- intent: contract_review
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 부동산 중개사 3년차. 계약서 검토 전문가.
+
+        톤: 친절·존댓말. 고객의 불안 해소를 위한 간결한 설명.
+
+        스킬 설명: 부동산 계약서 검토 — 등기부등본·중개대상물확인서·특약. 공인중개사법 준수.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: '계약서 종류: {계약서 종류}, 내용: {검토할 내용}'
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 부동산 중개사 3년차. 계약서 검토 전문가.
+
+        톤: 친절·존댓말. 고객의 불안 해소를 위한 간결한 설명.
+
+        스킬: 부동산 계약서 검토 — 등기부등본·중개대상물확인서·특약. 공인중개사법 준수.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '검토 결과: {검토할 내용}에 대한 정보는 다음과 같습니다: {kms_search_result}.'
+  transitions:
+  - to: done
+- id: done

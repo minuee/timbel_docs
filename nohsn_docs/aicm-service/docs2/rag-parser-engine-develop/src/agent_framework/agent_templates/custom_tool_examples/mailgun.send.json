@@ -1,0 +1,79 @@
+{
+  "id": "mailgun.send",
+  "name": "mailgun.send",
+  "display_name": "Mailgun 메일 발송",
+  "description": "Mailgun REST API 로 이메일을 발송합니다. 글로벌 이메일 발송 서비스로 월 1,000건 무료 티어 제공. Basic Auth (api:YOUR_API_KEY) 방식 인증.",
+  "category": "SMS/메일",
+  "vendor": "Mailgun",
+  "vendor_url": "https://documentation.mailgun.com/docs/mailgun/api-reference/openapi-final/tag/Messages/",
+  "endpoint_url": "https://api.mailgun.net/v3/<YOUR_DOMAIN>/messages",
+  "method": "POST",
+  "auth_headers": {
+    "Authorization": "Basic <BASE64(api:<YOUR_MAILGUN_PRIVATE_API_KEY>)>",
+    "Content-Type": "application/x-www-form-urlencoded"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["from", "to", "subject", "text"],
+    "properties": {
+      "from": {
+        "type": "string",
+        "description": "발신자 (예: Locus <noreply@yourdomain.com>)"
+      },
+      "to": {
+        "type": "string",
+        "description": "수신자 이메일 주소 (복수 시 쉼표 구분)"
+      },
+      "subject": {
+        "type": "string",
+        "description": "메일 제목"
+      },
+      "text": {
+        "type": "string",
+        "description": "메일 본문 (plain text)"
+      },
+      "html": {
+        "type": "string",
+        "description": "HTML 메일 본문 (text 대신 또는 함께 사용 가능)"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Mailgun 응답 ({\"id\": \"<message_id>\", \"message\": \"Queued. Thank you.\"})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "Basic",
+    "verify_header": "Authorization",
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "인바운드 (Mailgun Routes) 는 별도 X-Mailgun-Signature-V2 (HMAC-SHA256, signing key) 검증 필요. SPF/DKIM/DMARC 미설정 시 도착률 저하."
+  },
+  "operational_notes": {
+    "rate_limit": "Free 티어: 5 messages/sec, 유료 플랜: 100 messages/sec+",
+    "retry_semantics": "5xx 지수 백오프, 4xx 는 재시도 금지 (도메인 미검증/스팸 점수 등)",
+    "response_sla_sec": null,
+    "cost_label": "free (월 1,000건) → 유료 ($35/월~)",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://signup.mailgun.com 에서 계정 생성 (무료 티어 월 1,000건)",
+    "2. Dashboard → Domains → 'Add New Domain' 또는 샌드박스 도메인 사용",
+    "3. 도메인 DNS 레코드(SPF/DKIM) 설정 후 검증 (샌드박스는 불필요)",
+    "4. API Keys → 'Private API Key' 복사",
+    "5. auth_headers 의 Authorization 값: 'Basic ' + base64('api:' + YOUR_PRIVATE_KEY)",
+    "   예: base64('api:key-xxxx') → Python: import base64; base64.b64encode(b'api:key-xxxx').decode()",
+    "6. endpoint_url 의 <YOUR_DOMAIN> 을 실제 도메인명으로 교체 (예: mg.yourcompany.com)",
+    "7. 보안: Private API Key 는 KMS / config_encrypted 저장. 노출 시 Mailgun Dashboard 에서 즉시 재생성 + 기존 키 무효화.",
+    "8. 인바운드 Routes 사용 시: webhook 수신 측은 X-Mailgun-Signature-V2 (HMAC-SHA256, signing key) + timestamp ±15분 검증 + token replay 방지 (token 5분 이내 dedup)."
+  ]
+}

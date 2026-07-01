@@ -1,0 +1,510 @@
+## Verdict: **GO_WITH_CHANGES**
+
+수정 방향은 맞습니다. 특히 `chunks`를 `DIRECT_TENANT_TABLES`에서 제거하고 `repositories`를 통한 JOIN RLS로 옮긴 것은 스키마 사실관계와 보안 모델상 정당합니다. `Document.owner_agent_id` 모델 추가도 fresh `create_all` 경로의 크래시를 막는 데 필요합니다.
+
+다만 현재 diff만으로는 **보안 민감 RLS 수정으로 merge하기엔 보강이 필요**합니다. 핵심 리스크는 ① `INSERT/UPDATE WITH CHECK`가 실제로 cross-tenant `repository_id`를 막는지 DB 레벨 테스트가 없고, ② `init_db.py`와 alembic `081`의 RLS 분류가 계속 중복 정의되며 테스트가 실제로는 `081`만 검증하고, ③ 이미 존재하는 migration `081`을 수정하는 방식은 기존 환경에 적용되지 않을 수 있다는 점입니다.
+
+---
+
+## 1) `chunks` JOIN RLS의 tenant isolation 검토
+
+### Diff 근거
+
+`alembic/versions/081_rls_force_lucas_kms_app.py`
+
+```diff
+ DIRECT_TENANT_TABLES = (
+     "repositories",
+-    "chunks",
+     "search_logs",
+     "intent_logs",
+ )
+```
+
+```diff
+ JOIN_TENANT_TABLES = {
+     "sections": "documents",
+     "blocks": "documents",
++    "chunks": "repositories",
+     "categories": "repositories",
+ }
+```
+
+```diff
+ JOIN_FK_COLUMNS = {
+     "sections": "document_id",
+     "blocks": "document_id",
++    "chunks": "repository_id",
+     "categories": "repository_id",
+ }
+```
+
+`src/scripts/init_db.py`
+
+```diff
+-    DIRECT_TENANT_TABLES = ("repositories", "chunks", "search_logs", "intent_logs")
++    DIRECT_TENANT_TABLES = ("repositories", "search_logs", "intent_logs")
+```
+
+```diff
++        "chunks": ("repositories", "repository_id"),
+```
+
+### 판단
+
+`chunks`에 `tenant_id`가 없고 `repository_id -> repositories.id -> repositories.tenant_id`로 귀속된다면 JOIN 정책이 맞습니다.
+
+정책이 다음 형태라면 tenant isolation은 대체로 보장됩니다.
+
+```sql
+EXISTS (
+  SELECT 1
+  FROM repositories p
+  WHERE p.id = chunks.repository_id
+    AND p.tenant_id = current_setting('app.current_tenant_id')::uuid
+)
+```
+
+다만 보안상 반드시 확인해야 할 조건이 있습니다.
+
+### 필수 조건 A — `INSERT`에 `WITH CHECK`가 있어야 함
+
+`SELECT/UPDATE/DELETE`의 `USING`만 있으면 부족합니다. `chunks`는 child table이므로 `INSERT` 시점에 다음이 강제되어야 합니다.
+
+```sql
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM repositories p
+    WHERE p.id = chunks.repository_id
+      AND p.tenant_id = current_setting('app.current_tenant_id')::uuid
+  )
+)
+```
+
+이게 없으면 tenant A 세션에서 tenant B의 `repository_id`를 넣어 cross-tenant write가 가능할 수 있습니다.
+
+특히 `UPDATE`도 중요합니다. 기존 tenant A chunk의 `repository_id`를 tenant B repository로 바꾸는 경우를 막으려면 `UPDATE` 정책에도 `WITH CHECK`가 필요합니다.
+
+권장 불변식:
+
+- `SELECT`: `USING parent.tenant_id = current_tenant`
+- `DELETE`: `USING parent.tenant_id = current_tenant`
+- `UPDATE`: `USING old parent.tenant_id = current_tenant` **and** `WITH CHECK new parent.tenant_id = current_tenant`
+- `INSERT`: `WITH CHECK parent.tenant_id = current_tenant`
+
+현재 설명상 “p_chunks_join_* 정책 5개 생성”을 확인했다고 했지만, 테스트 diff에는 실제 `WITH CHECK` 검증이 없습니다. 이건 보안 회귀 테스트로 반드시 넣는 게 좋습니다.
+
+### 필수 조건 B — `repositories` 자체 RLS가 정확해야 함
+
+`chunks` JOIN 정책은 부모 `repositories`의 `tenant_id`를 신뢰합니다. 따라서 `repositories` direct 정책도 다음을 만족해야 합니다.
+
+- `FORCE ROW LEVEL SECURITY`
+- app role이 table owner가 아님
+- `INSERT/UPDATE WITH CHECK tenant_id = current_tenant`
+- tenant 변경 update 금지 또는 동일 tenant만 허용
+
+`repositories`에서 `tenant_id`를 다른 tenant로 update할 수 있으면 `chunks`는 부모를 따라 통째로 다른 tenant로 이동할 수 있습니다.
+
+### 필수 조건 C — `current_setting` cast/NULL 처리 확인
+
+사용자가 적어준 예시는 다음 형태입니다.
+
+```sql
+p.tenant_id = current_setting('app.current_tenant_id')
+```
+
+`p.tenant_id`가 UUID이면 실제 SQL에서는 보통 cast가 필요합니다.
+
+```sql
+p.tenant_id = current_setting('app.current_tenant_id')::uuid
+```
+
+또는 더 방어적으로:
+
+```sql
+p.tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
+```
+
+`current_setting(..., true)`를 쓰지 않으면 GUC 미설정 시 에러가 납니다. 에러로 deny되는 것은 보안상 fail-closed이긴 하지만, fresh/auth-disabled 초기 요청에서 500을 만들 수 있습니다. 제품 의도에 따라 선택해야 합니다.
+
+### 필수 조건 D — custom GUC spoofing 모델 명확화
+
+`app.current_tenant_id` 같은 custom GUC는 DB 접속 권한이 있는 사용자가 직접 `SET`할 수 있습니다. 즉, 이 모델은 다음 전제에서만 안전합니다.
+
+- tenant 사용자는 DB에 직접 접속하지 않는다.
+- 오직 서버 애플리케이션만 `lucas_kms_app` role을 사용한다.
+- 애플리케이션이 인증/인가된 tenant id만 `SET LOCAL app.current_tenant_id`로 설정한다.
+- connection pool 반환 시 GUC가 reset된다.
+
+이건 기존 아키텍처의 전제일 수 있지만, KMS 보안 문서와 테스트에 명시하는 게 좋습니다.
+
+---
+
+## 2) `owner_agent_id`를 모델에만 추가하고 인덱스를 생략한 점
+
+### Diff 근거
+
+`src/core/models/document.py`
+
+```diff
++    owner_agent_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("agents.id", ondelete="SET NULL"),
++        nullable=True,
++        comment="agent 단위 write 격리 (alembic 072). 일반 KMS 문서는 NULL.",
++    )
+```
+
+### correctness/security 판단
+
+컬럼 자체 추가는 맞습니다. alembic 072가 이미 운영 DB에 만든 컬럼이고, fresh `create_all` 경로에서 누락되어 RLS 적용이 깨졌다면 모델에 추가해야 합니다.
+
+인덱스 생략은 즉시 보안 문제는 아닙니다. FK와 RLS expression의 correctness에는 영향이 없습니다.
+
+하지만 다음 이유로 그대로 두는 것은 schema drift를 남깁니다.
+
+- fresh `create_all` DB와 alembic-upgrade DB의 index set이 달라짐.
+- `owner_agent_id` 기반 write isolation 정책이나 query가 있으면 성능 차이가 커질 수 있음.
+- RLS predicate에 `owner_agent_id`가 들어간다면 index 누락은 tenant 규모가 커질 때 장애성 성능 문제가 될 수 있음.
+
+따라서 권장합니다.
+
+- alembic 072의 partial/composite index를 SQLAlchemy 모델에도 `Index(...)`로 반영.
+- 특히 PostgreSQL partial index라면 dialect option 사용.
+
+예:
+
+```python
+Index(
+    "ix_documents_owner_agent_id_not_null",
+    "owner_agent_id",
+    postgresql_where=owner_agent_id.isnot(None),
+)
+```
+
+정확한 이름과 조건은 072와 맞춰야 합니다.
+
+보안상 더 중요한 추가 확인:
+
+- `owner_agent_id`가 가리키는 `agents.id`가 같은 tenant의 agent인지 DB constraint 또는 RLS/write policy로 보장되는지 확인 필요.
+- 단순 FK만으로는 cross-tenant agent id 참조를 막지 못합니다.
+- migration 072의 원래 의도가 “agent 단위 write 격리”라면 `documents.tenant_id`와 `agents.tenant_id`의 일관성도 검증 대상입니다.
+
+---
+
+## 3) `DIRECT/JOIN` 분류가 `init_db.py`와 alembic `081`에 중복 정의되는 문제
+
+### 현재 diff의 문제
+
+`init_db.py`와 `081`에 동일한 테이블 분류가 각각 존재합니다.
+
+```python
+# init_db.py
+DIRECT_TENANT_TABLES = ("repositories", "search_logs", "intent_logs")
+JOIN_TENANT_TABLES = {
+    "sections": ("documents", "document_id"),
+    "blocks": ("documents", "document_id"),
+    "chunks": ("repositories", "repository_id"),
+    "categories": ("repositories", "repository_id"),
+}
+```
+
+```python
+# 081
+DIRECT_TENANT_TABLES = (
+    "repositories",
+    "search_logs",
+    "intent_logs",
+)
+
+JOIN_TENANT_TABLES = {
+    "sections": "documents",
+    "blocks": "documents",
+    "chunks": "repositories",
+    "categories": "repositories",
+}
+```
+
+테스트 설명은 “init_db._apply_rls_policies의 로컬 분류도 081과 동일해야 함”이라고 되어 있지만, 실제 테스트는 `MIGRATION_081`만 로드합니다.
+
+```python
+rls = _load_module(MIGRATION_081, "_rls_081")
+```
+
+`init_db.py`의 local constants는 함수 내부에 있어서 테스트가 직접 비교하지 않습니다. 따라서 현재 회귀 테스트는 이 중복을 막지 못합니다.
+
+### 보강 권고
+
+가장 좋은 방법은 RLS table classification을 단일 모듈로 빼는 것입니다.
+
+예:
+
+```python
+src/core/db/rls_tables.py
+
+DIRECT_TENANT_TABLES = (...)
+JOIN_TENANT_TABLES = {
+    "sections": ("documents", "document_id"),
+    ...
+}
+```
+
+그리고:
+
+- `scripts/init_db.py`가 import
+- alembic 081 또는 신규 migration이 import 또는 snapshot 사용
+
+단, alembic migration은 시간이 지나도 재현 가능해야 하므로 runtime code import를 싫어하는 팀도 있습니다. 그 경우에는 최소한 테스트에서 양쪽을 parse/inspect해서 동일성 검증을 해야 합니다.
+
+현재 구조를 유지한다면 `init_db._apply_rls_policies` 내부 상수를 module-level로 올려서 테스트 가능하게 만드는 편이 낫습니다.
+
+---
+
+## 4) create_all 기반 스키마와 alembic 스키마가 갈라지는 구조 문제
+
+이번에 발견된 두 건은 더 깊은 구조 문제의 증상입니다.
+
+- `owner_agent_id`: alembic에는 있는데 SQLAlchemy model에는 없음.
+- `chunks tenant_id`: RLS 분류는 tenant_id가 있다고 가정했지만 실제 schema/model/migration에는 없음.
+- 이전 1차 fix의 `Agent` import 누락도 `create_all` 경로와 runtime/migration 경로의 drift입니다.
+
+즉, fresh DB 경로가 다음처럼 이중화되어 있습니다.
+
+1. `Base.metadata.create_all()`
+2. 수동 seed
+3. 수동 RLS policy 생성
+
+반면 일반 DB evolution은 alembic migration입니다.
+
+이 구조에서는 drift가 계속 발생할 가능성이 높습니다. 보안 민감 제품에서는 특히 위험합니다. RLS는 “테이블 목록”, “컬럼 존재”, “FK 경로”, “role/grant”, “policy USING/WITH CHECK”가 모두 일치해야 하기 때문입니다.
+
+### 강력 권고
+
+가능하면 fresh DB도 alembic `upgrade head`로 통일하세요. 기존 문제였던 `user_role_enum` 이중 생성 버그를 idempotent하게 고치는 것이 장기적으로 더 안전합니다.
+
+예:
+
+```sql
+DO $$
+BEGIN
+  CREATE TYPE user_role_enum AS ENUM (...);
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+```
+
+또는 SQLAlchemy enum `create_type=False`/checkfirst 패턴 정리.
+
+만약 당장 alembic 통일이 어렵다면 다음을 CI에 추가해야 합니다.
+
+### 권장 CI drift test
+
+Postgres ephemeral DB 두 개를 띄웁니다.
+
+- DB A: `alembic upgrade head`
+- DB B: `Base.metadata.create_all()` + `init_db._apply_rls_policies()`
+
+그 후 비교:
+
+- tables
+- columns: type/nullability/default
+- FKs and ondelete
+- unique constraints
+- indexes, including partial indexes
+- enums
+- extensions
+- RLS enabled/forced 여부
+- policy names
+- policy command
+- policy `USING`
+- policy `WITH CHECK`
+- grants/roles
+
+도구는 `pg_dump --schema-only`, `migra`, `pg_catalog` query, 또는 SQLAlchemy Inspector + custom `pg_policy` query를 사용할 수 있습니다.
+
+보안상 특히 `pg_policy` 비교는 필수입니다.
+
+---
+
+## 5) 회귀 테스트의 허점
+
+### 현재 추가 테스트
+
+```python
+def test_rls_owner_tables_have_owner_agent_id_column()
+```
+
+```python
+def test_rls_table_classification_matches_schema()
+```
+
+방향은 좋지만 충분하지 않습니다.
+
+### 허점 A — `init_db.py` 분류를 검증하지 않음
+
+테스트 docstring은 다음을 말합니다.
+
+```python
+init_db._apply_rls_policies 의 로컬 분류도 081 과 동일해야 함 (두 곳 동기).
+```
+
+하지만 실제로는:
+
+```python
+rls = _load_module(MIGRATION_081, "_rls_081")
+```
+
+`081`만 확인합니다. `init_db.py`가 다시 `chunks`를 DIRECT로 되돌아가도 테스트가 잡지 못할 수 있습니다.
+
+### 허점 B — RLS table이 metadata에 없어도 통과 가능
+
+현재 direct check:
+
+```python
+direct_missing = [
+    t for t in rls.DIRECT_TENANT_TABLES
+    if t in tables and "tenant_id" not in tables[t].columns
+]
+```
+
+`t in tables` 조건 때문에 RLS가 존재하지 않는 테이블을 참조해도 실패하지 않습니다. JOIN도 동일합니다.
+
+보강해야 합니다.
+
+```python
+unknown_direct = [t for t in rls.DIRECT_TENANT_TABLES if t not in tables]
+unknown_join = [t for t in rls.JOIN_TENANT_TABLES if t not in tables]
+unknown_parent = [p for p in rls.JOIN_TENANT_TABLES.values() if p not in tables]
+assert not unknown_direct
+assert not unknown_join
+assert not unknown_parent
+```
+
+### 허점 C — JOIN FK가 실제 ForeignKey인지 확인하지 않음
+
+현재는 컬럼 존재만 봅니다.
+
+```python
+if t in tables and fk not in tables[t].columns
+```
+
+하지만 `chunks.repository_id`가 실제로 `repositories.id`를 참조하는 FK인지 확인하지 않습니다.
+
+보강 필요:
+
+- child table에 FK constraint 존재
+- FK target table이 expected parent인지 확인
+- parent table에 `tenant_id` 존재 확인
+- parent `tenant_id` type이 expected UUID인지 확인
+
+### 허점 D — `WITH CHECK` 검증 없음
+
+가장 중요한 보안 회귀 테스트가 없습니다. 반드시 DB-level test를 넣어야 합니다.
+
+권장 테스트 시나리오:
+
+1. tenant A, tenant B 생성
+2. repository A, repository B 생성
+3. `SET ROLE lucas_kms_app`
+4. `SET LOCAL app.current_tenant_id = tenant_a`
+5. tenant A repository로 chunk insert 성공
+6. tenant B repository로 chunk insert 실패
+7. tenant B chunk select 불가
+8. tenant A chunk를 tenant B repository로 update 실패
+9. tenant B tenant context로 tenant A chunk select 불가
+10. `RESET` 또는 GUC unset 상태에서 fail-closed 확인
+
+이 테스트는 static metadata test보다 훨씬 중요합니다.
+
+### 허점 E — RLS enabled/FORCE/role ownership 검증 없음
+
+정책이 존재해도 다음이 틀리면 무력화될 수 있습니다.
+
+- table owner로 접속하면 FORCE 없을 때 RLS bypass 가능
+- role에 `BYPASSRLS` 있으면 무력화
+- migration role과 app role 분리 실패
+- grants 누락 또는 과다
+
+`pg_class.relrowsecurity`, `pg_class.relforcerowsecurity`, `pg_roles.rolbypassrls`, table owner를 확인하는 테스트가 필요합니다.
+
+### 허점 F — owner_agent_id 속성 상세 검증 부족
+
+현재는 컬럼명 존재만 봅니다.
+
+```python
+if "owner_agent_id" not in model.__table__.columns
+```
+
+다음도 확인하는 편이 좋습니다.
+
+- type UUID
+- nullable true
+- FK target `agents.id`
+- `ondelete="SET NULL"`
+- alembic 072 index와 model index 일치
+
+---
+
+## migration 운영 관점의 중요한 지적
+
+`alembic/versions/081_rls_force_lucas_kms_app.py`를 직접 수정하는 것은 fresh migration에는 효과가 있지만, 이미 `081`이 적용된 DB에는 적용되지 않습니다.
+
+운영/스테이징/고객 DB 중 `081` revision이 이미 찍힌 곳이 있다면, alembic은 수정된 `081`을 다시 실행하지 않습니다.
+
+따라서 이 변경이 이미 배포된 revision을 고치는 것이라면 신규 migration이 필요합니다.
+
+예:
+
+- `083_fix_chunks_rls_join_policy.py`
+  - 기존 `chunks` direct policy가 있으면 drop
+  - `chunks` RLS enable/force 확인
+  - join policy create
+  - grants/owner 확인
+
+물론 기존 `081`이 fresh DB에서 항상 실패해서 실제로 적용된 환경이 없다면 영향은 제한적입니다. 그래도 보안 수정은 신규 migration으로 명시하는 편이 안전합니다.
+
+---
+
+## 구체적 보강 권고
+
+merge 전 최소 권고는 다음입니다.
+
+1. **DB-level cross-tenant RLS 테스트 추가**
+   - `chunks` insert/select/update/delete negative test 포함.
+   - 특히 cross-tenant `repository_id` INSERT 실패 검증.
+
+2. **`WITH CHECK` 검증**
+   - `pg_policy.polwithcheck`를 조회해서 `chunks` INSERT/UPDATE 정책에 parent tenant EXISTS가 있는지 확인.
+
+3. **`init_db.py`와 alembic `081` 분류 중복 제거 또는 테스트 가능화**
+   - shared constant module로 추출하거나,
+   - `init_db` constants를 module-level로 올리고 `081`과 equality test.
+
+4. **현재 테스트의 `if t in tables` 완화 제거**
+   - RLS 분류에 있는 테이블이 metadata에 없으면 실패해야 함.
+
+5. **JOIN FK의 실제 FK target 검증**
+   - `chunks.repository_id -> repositories.id`
+   - `categories.repository_id -> repositories.id`
+   - `sections.document_id -> documents.id`
+   - `blocks.document_id -> documents.id`
+
+6. **신규 alembic migration 필요성 판단**
+   - 이미 `081` 적용 가능성이 있는 환경이 있으면 반드시 새 migration으로 policy 수정.
+
+7. **`owner_agent_id` index drift 해소**
+   - 보안 필수는 아니지만 fresh schema와 migrated schema 일치를 위해 072의 index를 모델에 반영 권장.
+
+8. **장기적으로 fresh DB 경로를 alembic으로 통일**
+   - `create_all + 수동 RLS`는 계속 drift를 낳을 가능성이 큼.
+
+---
+
+## 최종 판단
+
+현재 diff는 핵심 원인에 대한 방향성은 맞고, fresh DB 크래시도 해결할 가능성이 높습니다. 그러나 KMS의 tenant isolation 수정으로는 테스트와 migration 운영 안전성이 아직 부족합니다.
+
+**Verdict: GO_WITH_CHANGES**
+
+조건부 승인입니다. 특히 `chunks`에 대한 실제 Postgres RLS negative test와 `INSERT/UPDATE WITH CHECK` 검증은 merge 전 보강을 권합니다.

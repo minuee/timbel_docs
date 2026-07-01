@@ -1,0 +1,82 @@
+skill:
+  id: diary_personal
+  version: "0.1"
+  domain: personal
+  description: "개인 일기 기록/검색 (감정 태깅)"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: log_diary
+  - intent: recall_diary
+
+slots:
+  - name: entry_text
+    type: text
+    required: true
+  - name: emotion
+    type: enum
+    values: [기쁨, 슬픔, 분노, 평온, 불안]
+  - name: entry_date
+    type: date
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: diary_greet.md
+    transitions:
+      - when: has_intent(log_diary)
+        to: capture
+      - when: has_intent(recall_diary)
+        to: recall
+      - llm_fallback: true
+
+  - id: capture
+    llm_slot_fill: [entry_text, emotion, entry_date]
+    transitions:
+      - when: slot_filled(entry_text)
+        to: save_entry
+      - llm_fallback: true
+
+  - id: save_entry
+    tool: diary.save
+    tool_args:
+      phone: $phone
+      tenant_id: $personal_tenant_id
+      entry_text: $entry_text
+      emotion: $emotion
+      date: $entry_date
+    on_exit:
+      llm_respond:
+        template: diary_saved.md
+    transitions:
+      - to: done
+
+  - id: recall
+    llm_slot_fill: [entry_text]
+    transitions:
+      - when: slot_filled(entry_text)
+        to: recall_exec
+      - llm_fallback: true
+
+  - id: recall_exec
+    tool: diary.search
+    tool_args:
+      phone: $phone
+      tenant_id: $personal_tenant_id
+      query: $entry_text
+      top_k: 5
+    on_exit:
+      llm_respond:
+        template: diary_recall.md
+    transitions:
+      - to: done
+
+  - id: done

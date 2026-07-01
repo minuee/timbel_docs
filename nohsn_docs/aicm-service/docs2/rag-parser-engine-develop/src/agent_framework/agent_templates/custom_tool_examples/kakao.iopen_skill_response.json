@@ -1,0 +1,116 @@
+{
+  "id": "kakao.iopen_skill_response",
+  "name": "kakao.iopen_skill_response",
+  "display_name": "카카오 i 오픈빌더 스킬 응답",
+  "description": "카카오 i 오픈빌더 챗봇 스킬서버용 응답 페이로드 빌더. 카카오 채널에 사용자가 메시지 전송 → 오픈빌더가 우리 서버로 webhook (Skill Request) → 우리는 5초 이내 SkillResponse JSON 반환. version 2.0 + simpleText / basicCard / carousel / quickReplies 지원. 5초 초과 시 callback URL 모드로 비동기 응답 (1분 내 1회).",
+  "category": "알림",
+  "vendor": "Kakao i Open Builder",
+  "vendor_url": "https://kakaobusiness.gitbook.io/main/tool/chatbot/skill_guide/answer_json_format",
+  "endpoint_url": "<YOUR_SKILL_SERVER_URL — 오픈빌더에 등록한 우리 서버 endpoint>",
+  "method": "POST",
+  "auth_headers": {
+    "X-Skill-Authorization": "<YOUR_STATIC_TOKEN — 오픈빌더 환경변수에 등록>",
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "description": "Skill Request — 오픈빌더가 우리에게 보내는 페이로드",
+    "required": ["userRequest", "bot", "intent"],
+    "properties": {
+      "intent": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string", "description": "발동된 인텐트 이름"}
+        }
+      },
+      "userRequest": {
+        "type": "object",
+        "required": ["user", "utterance"],
+        "properties": {
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string", "description": "카카오 사용자 ID (botUserKey)"},
+              "type": {"type": "string", "enum": ["botUserKey", "appUserId"]}
+            }
+          },
+          "utterance": {"type": "string", "description": "사용자 발화 원문"},
+          "lang": {"type": "string", "default": "kr"},
+          "timezone": {"type": "string", "default": "Asia/Seoul"},
+          "callbackUrl": {
+            "type": "string",
+            "description": "5초 초과 시 비동기 응답 POST URL (1분 1회 유효)"
+          },
+          "params": {"type": "object", "description": "엔티티 파싱 결과"}
+        }
+      },
+      "bot": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"}
+        }
+      },
+      "action": {
+        "type": "object",
+        "description": "스킬 호출 시점에 저장된 컨텍스트 (블록의 detailParams)"
+      },
+      "contexts": {
+        "type": "array",
+        "description": "유지 중인 컨텍스트 객체 목록"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Skill Response — 우리가 오픈빌더에게 반환할 페이로드 (version 2.0 필수)",
+    "example": {
+      "version": "2.0",
+      "useCallback": false,
+      "template": {
+        "outputs": [
+          {"simpleText": {"text": "안녕하세요. 어떤 도움이 필요하세요?"}}
+        ],
+        "quickReplies": [
+          {"label": "주문 조회", "action": "block", "blockId": "<BLOCK_ID>"},
+          {"label": "상담사 연결", "action": "message", "messageText": "상담사"}
+        ]
+      }
+    }
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "inbound",
+    "signature_method": "static_secret_token",
+    "verify_header": "X-Skill-Authorization",
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "카카오는 HMAC 시그니처 미지원 — (a) skill server URL 비공개 유지, (b) X-Skill-Authorization 헤더에 미리 합의된 정적 토큰 검증 (hmac.compare_digest), (c) source IP allowlist 는 카카오 발송 IP 대역 비공개로 사실상 불가. URL + 토큰 방어가 유일한 layer 이므로 두 값 모두 KMS / config_encrypted 저장 필수."
+  },
+  "operational_notes": {
+    "rate_limit": "사용자별 자유 발화 — 채널 단위 burst 시 카카오 측 throttle",
+    "retry_semantics": "5초 초과 시 자동 callback 모드로 전환 — 우리 서버가 useCallback=true 응답 + callbackUrl 로 1분 내 비동기 POST",
+    "response_sla_sec": 5,
+    "cost_label": "free (카카오 채널 1:1 발송 자체는 무료, 별도 발송 API 단가는 알림톡/친구톡 참조)",
+    "biz_account_required": true
+  },
+  "setup_instructions": [
+    "1. 카카오 비즈니스 채널 신청: https://center-pf.kakao.com → 사업자등록증 또는 건강보험자격득실확인서 업로드 (심사 1~3 영업일)",
+    "2. 카카오 i 오픈빌더 OBT 신청: https://i.kakao.com → 신청서 작성 (심사 ~6일)",
+    "3. 오픈빌더 콘솔 → 봇 생성 → 시나리오 → 블록에 스킬 연결",
+    "4. 스킬 등록: 콘솔 → 스킬 → '+ 추가' → URL = 우리 서버 endpoint (TLS 필수, public IP) + 헤더에 X-Skill-Authorization 입력",
+    "5. SkillResponse 빌드: version=2.0 고정. outputs 컴포넌트 사용 — simpleText / simpleImage / basicCard / commerceCard / listCard / itemCard / carousel.",
+    "6. 5초 SLA 처리: LLM 답변이 늦으면 즉시 useCallback=true + 1차 ack 메시지 응답 → 백그라운드에서 실제 답변 누적 → callbackUrl 로 1분 내 POST.",
+    "7. 보안: X-Skill-Authorization 토큰은 32 bytes 엔트로피 권장, KMS / config_encrypted 저장. URL 도 비공개 유지 (외부 docs 노출 금지).",
+    "8. 응답 빌드 시 주의: 빈 응답 시 fallback 블록 발동 → 항상 1개 이상 output 보장. quickReplies 는 한 번에 최대 10개. simpleText 의 text 1000자 제한.",
+    "9. 알림톡 (정보성 발송, 친구 아닌 사용자에게도 발송) 은 별도 — solapi.alimtalk_send 예시 참고."
+  ]
+}

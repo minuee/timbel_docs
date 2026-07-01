@@ -1,0 +1,17 @@
+name: grounded answer must not be empty
+references:
+  - memory: docs/2026-04-27-chat-sse-empty-response-debug-prep.md
+  - feedback: feedback_validation_must_include_multiturn_patterns.md
+notes: |
+  grounding (KB 검색) 가 발생한 turn 은 본문이 비어있어선 안 된다.
+  이전 사례: tool_call 성공 + citations 페이로드 정상이지만 token stream
+  은 0 byte. 사용자에겐 빈 말풍선만 보였음.
+chat:
+  - tenant: personal
+    account: demo-admin
+    user: 우리 회사 휴가 정책 알려줘
+    expect:
+      assistant_body_nonempty: true
+      # citation 마커가 1개 이상이거나, citations payload 가 있거나,
+      # 본문 자체가 의미있는 길이 — 셋 중 하나는 만족해야 한다.
+      assistant_body_pattern: ".{20,}"

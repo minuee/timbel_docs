@@ -1,0 +1,121 @@
+# 공통 인터뷰 질문 — 모든 19 카테고리에 적용.
+#
+# `<category>.yaml` 의 questions 가 자동으로 이 셋을 prepend / append.
+# id 는 카테고리와 충돌 없게 ``common_*`` prefix 사용.
+
+common_questions:
+  - id: common_business_size
+    label: "운영 규모는 어느 정도인가요?"
+    type: multiple_choice
+    options: ["1인 운영", "2-5명", "6-20명", "21명 이상"]
+    required: true
+    section: 페르소나
+
+  - id: common_target_customer
+    label: "주요 고객층은 어떻게 되나요?"
+    type: text
+    example: "20-40대 여성, 직장인, 가족 단위 등"
+    required: true
+    section: 페르소나
+
+  - id: common_response_tone
+    label: "응대 톤은 어떻게 가져가시나요?"
+    type: multiple_choice
+    options:
+      - "정중하고 격식 있게"
+      - "친근하고 따뜻하게"
+      - "전문적이고 신뢰감 있게"
+      - "유머러스하고 캐주얼하게"
+      - "차분하고 전문적이게"
+    required: true
+    section: 응답 톤
+
+  - id: common_language_preference
+    label: "다국어 응대가 필요한가요?"
+    type: multiple_choice
+    options: ["한국어만", "한국어 + 영어", "한국어 + 영어 + 일본어/중국어", "기타"]
+    required: false
+    section: 응답 톤
+
+  - id: common_business_hours
+    label: "운영 시간은 어떻게 되나요?"
+    type: text
+    example: "평일 10-22시 / 주말 10-21시 / 정기 휴무 매주 월요일"
+    required: true
+    section: 응대 시나리오
+
+  - id: common_holiday_policy
+    label: "공휴일·임시 휴무 정책은요?"
+    type: text
+    example: "공휴일 정상 영업 / 명절 연휴 휴무 / 임시 휴무는 카카오톡 채널 사전 공지"
+    required: false
+    section: 응대 시나리오
+
+  - id: common_top_questions
+    label: "고객이 가장 자주 묻는 질문 3-5개를 알려주세요."
+    type: textarea
+    example: "1) 가격 / 2) 예약 방법 / 3) 위치"
+    required: true
+    section: 응대 시나리오
+
+  - id: common_escalation_policy
+    label: "어떤 경우에 사람 (직원·매니저) 에게 연결해야 하나요?"
+    type: textarea
+    example: "환불 / 클레임 / 사고 / 정책 외 요구"
+    required: true
+    section: 에스컬레이션
+
+  - id: common_escalation_channel
+    label: "에스컬레이션 채널 (담당자 / 매니저 / 본사) 은요?"
+    type: text
+    example: "1차: 담당 직원, 2차: 매장 매니저, 3차: 본사 CS"
+    required: true
+    section: 에스컬레이션
+
+  - id: common_emergency_contact
+    label: "응급 / 사고 발생 시 우선 연락처는?"
+    type: text
+    example: "119 / 매장 매니저 / 응급 전용 전화번호"
+    required: false
+    section: 에스컬레이션
+
+  - id: common_forbidden_topics
+    label: "절대 답변하면 안 되는 영역 / 금지 사항은요?"
+    type: textarea
+    example: "의학적 진단 / 다른 고객 정보 / 임의 할인 약속"
+    required: true
+    section: 금지 사항
+
+  - id: common_personal_info_policy
+    label: "개인정보 / 본인 확인 정책은?"
+    type: text
+    example: "예약 변경·취소는 본인 이름 + 연락처 일치 시만 처리"
+    required: false
+    section: 금지 사항
+
+  - id: common_tools_priority
+    label: "주로 활용할 도구는 무엇인가요?"
+    type: multiple_select
+    options:
+      - "kms_rag.search (지식 조회)"
+      - "schedule.create (일정 등록)"
+      - "schedule.cancel (일정 취소)"
+      - "mail.send (메일 발송)"
+      - "sms.send (문자 발송)"
+      - "crm.lead.create (영업 리드 생성)"
+    required: false
+    section: 도구 사용 가이드
+
+  - id: common_failure_response
+    label: "정보가 없거나 모를 때는 어떻게 응답해야 하나요?"
+    type: textarea
+    example: "추측 절대 금지. '확인 후 연락드릴게요. 잠시만 기다려주세요.' 후 매니저 연결."
+    required: true
+    section: 실패 응답 패턴
+
+  - id: common_brand_voice
+    label: "사업장의 고유 브랜드 가치 / 슬로건이 있으면 알려주세요."
+    type: text
+    example: "정성을 담아 / 365일 안전 우선 / 가족처럼 모십니다"
+    required: false
+    section: 페르소나

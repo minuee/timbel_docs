@@ -1,0 +1,49 @@
+skill:
+  id: block_quick_lookup
+  version: "1.1"
+  domain: kms
+  description: "블록 단위 빠른 조회 (요약 카드)"
+
+availability:
+  scope: all
+  visibility: auto
+
+triggers:
+  - intent: lookup_block
+
+slots:
+  - name: query
+    type: text
+    required: true
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: block_quick_lookup_greet_on_enter.md
+    transitions:
+      - when: has_intent(lookup_block)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [query]
+    transitions:
+      - when: slot_filled(query)
+        to: search
+      - llm_fallback: true
+
+  - id: search
+    tool: kms_rag.search
+    tool_args:
+      query: $query
+      top_k: 3
+      tenant_id: $tenant_id
+    on_exit:
+      llm_respond:
+        template: block_quick_lookup_search_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

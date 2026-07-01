@@ -1,0 +1,50 @@
+skill:
+  id: mood_check
+  version: "1.1"
+  domain: personal
+  description: "오늘의 기분 체크 (5단계 + 메모)"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: check_mood
+
+slots:
+  - name: mood
+    type: enum
+    values: [매우좋음, 좋음, 보통, 나쁨, 매우나쁨]
+    required: true
+  - name: mood_memo
+    type: text
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: mood_check_greet_on_enter.md
+    transitions:
+      - when: has_intent(check_mood)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [mood, mood_memo]
+    transitions:
+      - when: slot_filled(mood)
+        to: save
+      - llm_fallback: true
+
+  - id: save
+    on_exit:
+      llm_respond:
+        template: mood_check_save_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

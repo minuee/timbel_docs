@@ -1,0 +1,68 @@
+# converted from yaml/health_routine.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: health_routine
+  version: '1.1'
+  domain: general
+  description: 시니어가 산책·식사·운동·수면 같은 일상 건강 루틴 시간을 안내받을 때 사용. 약 복용 시간·복약 알림·복약 기록은 medication_tracker
+    로 위임 (책임 경계 분리).
+availability:
+  scope: personal
+  visibility: auto
+triggers:
+- intent: health_routine
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: time
+  type: text
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 시니어 일상 건강 루틴 안내 전문가. 산책·식사·운동·수면 시간 안내.
+
+        톤: 친절·존댓말. 큰 글씨로 짧은 문장.
+
+        스킬 설명: 시니어가 산책·식사·운동·수면 같은 일상 건강 루틴 시간을 안내받을 때 사용. 약 복용 시간·복약 알림·복약 기록은 medication_tracker
+        로 위임 (책임 경계 분리).'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - time
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(time)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: 활동 시간 안내 쿼리
+    phone: $phone
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 시니어 일상 건강 루틴 안내 전문가. 산책·식사·운동·수면 시간 안내.
+
+        톤: 친절·존댓말. 큰 글씨로 짧은 문장.
+
+        스킬: 시니어가 산책·식사·운동·수면 같은 일상 건강 루틴 시간을 안내받을 때 사용. 약 복용 시간·복약 알림·복약 기록은 medication_tracker
+        로 위임 (책임 경계 분리).'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: 안내드립니다. {활동}는 {kms_search_result}입니다.
+  transitions:
+  - to: done
+- id: done

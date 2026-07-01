@@ -1,0 +1,50 @@
+skill:
+  id: faq_quick_answer
+  version: "1.1"
+  domain: public
+  description: "자주 묻는 질문 빠른 답변"
+
+availability:
+  scope: business_only
+  business_type: public
+  visibility: opt-in
+
+triggers:
+  - intent: ask_faq
+
+slots:
+  - name: faq_query
+    type: text
+    required: true
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: faq_quick_answer_greet_on_enter.md
+    transitions:
+      - when: has_intent(ask_faq)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [faq_query]
+    transitions:
+      - when: slot_filled(faq_query)
+        to: search
+      - llm_fallback: true
+
+  - id: search
+    tool: kms_rag.search
+    tool_args:
+      query: $faq_query
+      top_k: 3
+      tenant_id: $tenant_id
+    on_exit:
+      llm_respond:
+        template: faq_quick_answer_search_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

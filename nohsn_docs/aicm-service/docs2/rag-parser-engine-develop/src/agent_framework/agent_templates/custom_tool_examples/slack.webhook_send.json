@@ -1,0 +1,69 @@
+{
+  "id": "slack.webhook_send",
+  "name": "slack.webhook_send",
+  "display_name": "Slack 채널 알림",
+  "description": "Slack Incoming Webhook 으로 채널에 메시지를 발송합니다. Slack 워크스페이스에 앱을 생성하고 Incoming Webhooks 를 활성화하면 채널별 Webhook URL 이 발급됩니다.",
+  "category": "알림",
+  "vendor": "Slack",
+  "vendor_url": "https://api.slack.com/messaging/webhooks",
+  "endpoint_url": "<YOUR_WEBHOOK_URL — https://hooks.slack.com/services/T.../B.../...>",
+  "method": "POST",
+  "auth_headers": {},
+  "input_schema": {
+    "type": "object",
+    "required": ["text"],
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "채널에 표시될 메시지 본문"
+      },
+      "username": {
+        "type": "string",
+        "default": "Locus",
+        "description": "메시지 발신자 표시명 (옵션)"
+      },
+      "icon_emoji": {
+        "type": "string",
+        "default": ":robot_face:",
+        "description": "발신자 아이콘 이모지 (옵션)"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "string",
+    "description": "Slack 응답 본문 (성공 시 'ok')"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "secret_in_url",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "Webhook URL 자체가 비밀 — 노출되면 누구나 메시지 송출 가능. 정기 폐기/재생성 권장. 양방향 봇은 별도 slack.chat_postmessage + Events API 사용."
+  },
+  "operational_notes": {
+    "rate_limit": "워크스페이스당 ~1 msg/sec (short burst 허용). 초과 시 429.",
+    "retry_semantics": "5xx 시 지수 백오프, 4xx 는 재시도 금지 (signature 만료 케이스 제외)",
+    "response_sla_sec": null,
+    "cost_label": "free",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://api.slack.com/apps 접속 후 'Create New App' → 'From scratch'",
+    "2. 앱 이름(예: Locus)과 워크스페이스 선택 후 생성",
+    "3. 왼쪽 메뉴 'Incoming Webhooks' → 토글 'On'으로 활성화",
+    "4. 'Add New Webhook to Workspace' 클릭 → 알림을 받을 채널 선택 후 허용",
+    "5. 발급된 Webhook URL(https://hooks.slack.com/services/...) 복사",
+    "6. 위 URL 을 endpoint_url 에 붙여넣기 — auth_headers 는 비워두어도 됩니다",
+    "7. 보안: URL 이 노출되면 누구나 채널에 송출 가능 — Git 커밋·로그·스크린샷에서 마스킹. 분기마다 재발급 권장.",
+    "8. 양방향 (사용자 메시지 수신) 이 필요하면 별도 Slack Events API + Bot Token 구성을 사용 — slack.chat_postmessage 예시 참고."
+  ]
+}

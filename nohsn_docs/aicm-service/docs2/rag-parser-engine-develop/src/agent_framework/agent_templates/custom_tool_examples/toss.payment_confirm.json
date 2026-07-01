@@ -1,0 +1,71 @@
+{
+  "id": "toss.payment_confirm",
+  "name": "toss.payment_confirm",
+  "display_name": "토스 결제 승인",
+  "description": "토스페이먼츠 결제 승인 API 로 클라이언트가 인증 완료한 결제를 최종 승인합니다. 시크릿 키를 Basic Auth 로 전달합니다. 주의: 실제 결제가 처리되므로 requires_confirm = true.",
+  "category": "결제/사업",
+  "vendor": "Toss Payments",
+  "vendor_url": "https://docs.tosspayments.com/reference#결제-승인",
+  "endpoint_url": "https://api.tosspayments.com/v1/payments/confirm",
+  "method": "POST",
+  "auth_headers": {
+    "Authorization": "Basic <BASE64(YOUR_SECRET_KEY:)>",
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["paymentKey", "orderId", "amount"],
+    "properties": {
+      "paymentKey": {
+        "type": "string",
+        "description": "결제 키 (클라이언트 SDK 의 successUrl 에서 전달받는 paymentKey)"
+      },
+      "orderId": {
+        "type": "string",
+        "description": "주문 ID (가맹점 발급, 6~64자, 영숫자+특수문자)"
+      },
+      "amount": {
+        "type": "integer",
+        "description": "결제 금액 (원화 정수, 클라이언트와 동일해야 함)"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "토스 결제 객체 ({\"paymentKey\": \"...\", \"orderId\": \"...\", \"status\": \"DONE\", \"totalAmount\": 10000, ...})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "payment",
+    "requires_sender_tier": "verified",
+    "requires_confirm": true,
+    "conflict_check": ["duplicate_payment"]
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "Basic",
+    "verify_header": "Authorization",
+    "replay_protection": "idempotency_via_orderId",
+    "tls_required": true,
+    "ip_allowlist_supported": true,
+    "notes": "시크릿 키는 절대 클라이언트 노출 금지 — 서버 사이드만. orderId 는 가맹점이 발급하는 고유값 — 같은 orderId 로 중복 confirm 시도 시 에러로 보호됨. 결제 webhook (성공/실패) 은 별도 검증 (Idempotency-Key 헤더 + 서명) 필수."
+  },
+  "operational_notes": {
+    "rate_limit": "결제 confirm 은 가맹점 트래픽 기반 — 명시적 한도 없으나 burst 시 throttle",
+    "retry_semantics": "5xx 시 동일 paymentKey/orderId 로 재시도 가능 (idempotent), 4xx 는 재시도 금지",
+    "response_sla_sec": 30,
+    "cost_label": "paid (PG 수수료, 카드 ~3.0%, 계좌 ~1.5%)",
+    "biz_account_required": true
+  },
+  "setup_instructions": [
+    "1. https://developers.tosspayments.com 에서 '개발자 센터 시작하기' → 계정 생성",
+    "2. '내 개발 정보' → 테스트 시크릿 키 복사 (test_sk_로 시작)",
+    "3. auth_headers 의 Authorization 값: 'Basic ' + base64(시크릿키 + ':') — 콜론(:) 포함!",
+    "   예: base64('test_sk_abc123:') — Python: base64.b64encode(b'test_sk_abc123:').decode()",
+    "4. 실 서비스 전 클라이언트 SDK 연동 완료 후 paymentKey/orderId 를 successUrl 에서 수신하도록 구성",
+    "5. 테스트 모드: 테스트 키 사용 시 실제 결제 미발생 — 운영 전 충분히 검증 필수",
+    "6. 운영 키 발급: 사업자등록 + 심사 후 live_sk_ 키 발급 — 대시보드에서 전환",
+    "7. 보안: 시크릿 키는 절대 클라이언트·git 노출 금지. KMS / config_encrypted. live 키는 서버 IP allowlist 필수.",
+    "8. 결제 webhook 수신 (paymentStatusChanged 등) 시 Toss-Signature (HMAC-SHA256) 검증 + Idempotency-Key 로 중복 처리 방지."
+  ]
+}

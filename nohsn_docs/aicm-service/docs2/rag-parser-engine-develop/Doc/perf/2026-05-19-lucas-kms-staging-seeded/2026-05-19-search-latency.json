@@ -1,0 +1,200 @@
+{
+  "suite": "search_latency",
+  "warmup": 2,
+  "measure": 10,
+  "results": [
+    {
+      "label": "single::saas_intro",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.72,
+      "p50_ms": 6.62,
+      "p95_ms": 8.61,
+      "p99_ms": 8.61,
+      "min_ms": 5.61,
+      "max_ms": 8.61,
+      "extra": {}
+    },
+    {
+      "label": "single::csap_levels",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.56,
+      "p50_ms": 6.44,
+      "p95_ms": 7.47,
+      "p99_ms": 7.47,
+      "min_ms": 5.93,
+      "max_ms": 7.47,
+      "extra": {}
+    },
+    {
+      "label": "single::nara_register",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.75,
+      "p50_ms": 6.69,
+      "p95_ms": 7.22,
+      "p99_ms": 7.22,
+      "min_ms": 5.9,
+      "max_ms": 7.22,
+      "extra": {}
+    },
+    {
+      "label": "single::noisy_citation",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.53,
+      "p50_ms": 6.51,
+      "p95_ms": 7.24,
+      "p99_ms": 7.24,
+      "min_ms": 5.7,
+      "max_ms": 7.24,
+      "extra": {}
+    },
+    {
+      "label": "filtered::filter_doc_type",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.77,
+      "p50_ms": 6.6,
+      "p95_ms": 7.8,
+      "p99_ms": 7.8,
+      "min_ms": 5.91,
+      "max_ms": 7.8,
+      "extra": {}
+    },
+    {
+      "label": "multi_turn::nara_flow::turn1",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.6,
+      "p50_ms": 6.56,
+      "p95_ms": 7.66,
+      "p99_ms": 7.66,
+      "min_ms": 6.0,
+      "max_ms": 7.66,
+      "extra": {}
+    },
+    {
+      "label": "multi_turn::nara_flow::turn2",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 23.18,
+      "p50_ms": 7.68,
+      "p95_ms": 162.69,
+      "p99_ms": 162.69,
+      "min_ms": 6.54,
+      "max_ms": 162.69,
+      "extra": {}
+    },
+    {
+      "label": "multi_turn::nara_flow::turn3",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.21,
+      "p50_ms": 6.08,
+      "p95_ms": 6.99,
+      "p99_ms": 6.99,
+      "min_ms": 5.76,
+      "max_ms": 6.99,
+      "extra": {}
+    },
+    {
+      "label": "multi_turn::csap_flow::turn1",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.63,
+      "p50_ms": 6.6,
+      "p95_ms": 7.97,
+      "p99_ms": 7.97,
+      "min_ms": 5.66,
+      "max_ms": 7.97,
+      "extra": {}
+    },
+    {
+      "label": "multi_turn::csap_flow::turn2",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 7.29,
+      "p50_ms": 7.09,
+      "p95_ms": 8.86,
+      "p99_ms": 8.86,
+      "min_ms": 6.05,
+      "max_ms": 8.86,
+      "extra": {}
+    },
+    {
+      "label": "multi_turn::csap_flow::turn3",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 8.47,
+      "p50_ms": 8.05,
+      "p95_ms": 10.56,
+      "p99_ms": 10.56,
+      "min_ms": 6.53,
+      "max_ms": 10.56,
+      "extra": {}
+    },
+    {
+      "label": "ood::stocks_ood",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 7.2,
+      "p50_ms": 6.87,
+      "p95_ms": 9.44,
+      "p99_ms": 9.44,
+      "min_ms": 6.37,
+      "max_ms": 9.44,
+      "extra": {
+        "expect_intent_gate_skip": true
+      }
+    },
+    {
+      "label": "cold::cold_saas_intro",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.41,
+      "p50_ms": 6.26,
+      "p95_ms": 7.2,
+      "p99_ms": 7.2,
+      "min_ms": 5.92,
+      "max_ms": 7.2,
+      "extra": {
+        "cache_bypass": "nonce_per_call"
+      }
+    },
+    {
+      "label": "cold::cold_csap_levels",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 7.15,
+      "p50_ms": 6.79,
+      "p95_ms": 8.27,
+      "p99_ms": 8.27,
+      "min_ms": 6.32,
+      "max_ms": 8.27,
+      "extra": {
+        "cache_bypass": "nonce_per_call"
+      }
+    },
+    {
+      "label": "cold::cold_nara_register",
+      "count": 10,
+      "errors": 0,
+      "mean_ms": 6.61,
+      "p50_ms": 6.59,
+      "p95_ms": 7.24,
+      "p99_ms": 7.24,
+      "min_ms": 5.67,
+      "max_ms": 7.24,
+      "extra": {
+        "cache_bypass": "nonce_per_call"
+      }
+    }
+  ],
+  "profile": "integrated",
+  "base_url": "http://localhost:5201",
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "generated_at_utc": "2026-05-19T10:24:30.728849+00:00",
+  "mock": false
+}

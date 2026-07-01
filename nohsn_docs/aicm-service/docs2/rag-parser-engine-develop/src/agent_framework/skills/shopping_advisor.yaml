@@ -1,0 +1,65 @@
+# converted from yaml/shopping_advisor.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: shopping_advisor
+  version: '1.1'
+  domain: retail
+  description: 구매 결정 도움 — 스펙 비교·리뷰 요약·가격 추세. 특정 쇼핑몰 추천 금지.
+availability:
+  scope: personal
+  visibility: auto
+triggers:
+- intent: shopping_advisor
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 일상 소비에 관심 많은 일반 소비자.
+
+        톤: 친절·존댓말. 구매 결정을 돕는 짧은 문장.
+
+        스킬 설명: 구매 결정 도움 — 스펙 비교·리뷰 요약·가격 추세. 특정 쇼핑몰 추천 금지.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: 제품명 및 비교할 제품 스펙, 리뷰, 가격 추세 검색
+    phone: $phone
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 일상 소비에 관심 많은 일반 소비자.
+
+        톤: 친절·존댓말. 구매 결정을 돕는 짧은 문장.
+
+        스킬: 구매 결정 도움 — 스펙 비교·리뷰 요약·가격 추세. 특정 쇼핑몰 추천 금지.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '제품 {제품명}과 {비교할 제품}의 정보는 다음과 같습니다: {kms_search_result}'
+  transitions:
+  - to: done
+- id: done

@@ -1,0 +1,16 @@
+name: intent classifier graceful when no skills match
+references:
+  - memory: project_real_usage_bugs_20260424.md
+  - feedback: feedback_pattern_over_case_enumeration.md
+notes: |
+  사용자 발화가 어떤 active skill 에도 매칭되지 않을 때, 시스템은
+  "지원하지 않는 의도입니다" 같은 안내를 graceful 하게 제공하고
+  empty body 나 traceback 노출이 있어선 안 된다.
+chat:
+  - tenant: personal
+    account: demo-admin
+    user: 양자컴퓨터로 라면 끓이는 법 알려줘
+    expect:
+      assistant_body_nonempty: true
+      # error / traceback 단어가 본문에 노출되지 않아야 한다.
+      tools_none_of: []  # 강제 X — LLM 이 일반 답변 또는 안내 둘 다 OK.

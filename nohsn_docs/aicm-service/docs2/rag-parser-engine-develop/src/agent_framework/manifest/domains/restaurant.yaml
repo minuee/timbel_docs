@@ -1,0 +1,15 @@
+# 맛집 / 레스토랑 추천 — 위치 기반 검색 + 메뉴 정보.
+# 현재는 미구현.
+id: restaurant_finder
+label: 맛집 찾기
+icon: utensils
+status: upcoming
+sort_order: 90
+
+# 노출 그룹 — 맛집 추천은 모든 그룹.
+available_for_groups: [personal, company, business, sole_proprietor]
+
+upcoming_message: 맛집 추천 / 메뉴 정보 기능은 차기 릴리스에서 지원할 예정입니다.
+
+chat_intents:
+  - restaurant_menu_info

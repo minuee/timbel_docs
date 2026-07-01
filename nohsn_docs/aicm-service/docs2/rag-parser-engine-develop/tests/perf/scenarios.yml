@@ -1,0 +1,92 @@
+# Public-SaaS scenario query sets for performance benchmarking.
+# 데이터 driven — 코드에 query 하드코딩 금지 (feedback_no_hardcoding_first_principle).
+# 신규 시나리오 추가 시 같은 키 구조 유지 — runner 가 자동 pickup.
+
+search:
+  single:
+    - id: saas_intro
+      query: "공공기관 SaaS 도입 절차 알려줘"
+      top_k: 10
+    - id: csap_levels
+      query: "CSAP 인증 등급별 요구사항"
+      top_k: 10
+    - id: nara_register
+      query: "조달청 등록 어떻게?"
+      top_k: 10
+    - id: noisy_citation
+      query: "p.73 가스공사 답변"
+      top_k: 10
+
+  filtered:
+    - id: filter_doc_type
+      query: "공공기관 SaaS 도입 절차"
+      top_k: 5
+      filters:
+        document_type: ["guide", "policy"]
+
+  multi_turn:
+    - id: nara_flow
+      turns:
+        - "조달청 등록 어떻게?"
+        - "필요 서류는?"
+        - "기간은?"
+    - id: csap_flow
+      turns:
+        - "CSAP 인증 등급은?"
+        - "표준 등급 요건은?"
+        - "유효기간?"
+
+  out_of_domain:
+    - id: stocks_ood
+      query: "주식 매매 수수료"
+      expect_intent_gate_skip: true
+
+  # Phase 5 T5.4 — cold-path 측정 보강 (warm-cache 우회).
+  # 각 query 에 random nonce 가 자동 부착되어 *서버 cache 미적중* 보장.
+  # runner 는 cold_unique group 을 보면 ?nonce=<uuid> 를 자동 추가한다.
+  cold_unique:
+    - id: cold_saas_intro
+      query: "공공기관 SaaS 도입 절차 알려줘"
+      top_k: 10
+    - id: cold_csap_levels
+      query: "CSAP 인증 등급별 요구사항"
+      top_k: 10
+    - id: cold_nara_register
+      query: "조달청 등록 어떻게?"
+      top_k: 10
+
+rag_assist:
+  scenarios:
+    - id: saas_full_flow
+      query: "공공기관 SaaS 도입 절차 알려줘"
+      history: []
+    - id: nara_register_full
+      query: "조달청 등록 어떻게?"
+      history: []
+    - id: csap_table
+      query: "CSAP 인증 등급별 요구사항"
+      history: []
+    - id: multi_turn_followup
+      query: "필요 서류는?"
+      history:
+        - role: user
+          content: "조달청 등록 어떻게?"
+        - role: assistant
+          content: "조달청 디지털서비스몰 입점 절차는 사전 준비, 신청, 심사 단계로 나뉩니다."
+
+ingest:
+  documents:
+    - id: small_30p
+      label: "30-page sample"
+      pages: 30
+      relative_path: "Doc/TestDoc/sample_30p.pdf"
+    - id: large_150p
+      label: "150-page sample"
+      pages: 150
+      relative_path: "Doc/TestDoc/sample_150p.pdf"
+  concurrency_levels: [1, 2, 4, 8]
+  timeout_seconds: 600
+
+repetitions:
+  warmup: 2
+  measure: 10

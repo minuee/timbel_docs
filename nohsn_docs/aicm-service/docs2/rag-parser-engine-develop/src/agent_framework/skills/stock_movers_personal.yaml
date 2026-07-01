@@ -1,0 +1,56 @@
+skill:
+  id: stock_movers_personal
+  version: "0.1"
+  domain: personal
+  description: "KRX 시장 동향 — 급등주 / 급락주 / 거래량 top N"
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: stock_market_movers
+
+role:
+  persona: "주식 시장 동향 안내자. KRX 데이터만 사용."
+  tone: "간결한 존댓말. 추천·예측 금지."
+  knowledge_scope:
+    - 급등주
+    - 급락주
+    - 거래량 top
+    - KOSPI
+    - KOSDAQ
+
+trigger_examples:
+  - "오늘 급등주 top 5"
+  - "급락주 보여줘"
+  - "코스피 거래량 top 10"
+  - "오늘 시장 동향"
+
+slots:
+  - name: market
+    type: enum
+    values: [KOSPI, KOSDAQ, ALL]
+  - name: top_n
+    type: number
+
+initial_state: greet
+states:
+  - id: greet
+    transitions:
+      - when: has_intent(stock_market_movers)
+        to: do_tool
+      - llm_fallback: true
+
+  - id: do_tool
+    tool: stock.market_movers
+    tool_args:
+      market: $market
+      top_n: $top_n
+    on_exit:
+      llm_respond:
+        template: stock_movers_answer.md
+    transitions:
+      - to: done
+
+  - id: done

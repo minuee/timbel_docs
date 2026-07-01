@@ -1,0 +1,48 @@
+skill:
+  id: branch_finder
+  version: "1.1"
+  domain: finance
+  description: "가까운 지점·ATM 찾기 (지역 기반)"
+
+availability:
+  scope: business_only
+  business_type: finance
+  visibility: opt-in
+
+triggers:
+  - intent: find_branch
+
+slots:
+  - name: region
+    type: text
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: branch_finder_greet_on_enter.md
+    transitions:
+      - when: has_intent(find_branch)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [region]
+    transitions:
+      - when: slot_filled(region)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: branch_finder_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

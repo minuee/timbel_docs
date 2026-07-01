@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Locus-KMS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 920px; margin: 40px auto; padding: 0 20px; line-height: 1.5; color: #222; }
+    h1 { font-size: 28px; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 14px; margin-bottom: 30px; }
+    .nav { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 32px; }
+    @media (min-width: 720px) { .nav { grid-template-columns: repeat(3, 1fr); } }
+    .nav a { display: block; padding: 16px 18px; border: 1px solid #ddd; border-radius: 8px; text-decoration: none; color: #1a1a1a; background: #fafafa; }
+    .nav a:hover { background: #f0f4ff; border-color: #4a90e2; }
+    .nav a strong { display: block; font-size: 15px; margin-bottom: 4px; }
+    .nav a span { font-size: 12px; color: #777; }
+    h2 { font-size: 18px; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px; margin-top: 28px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; }
+    th { background: #f5f5f5; }
+    code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+    .config { background: #fffbe6; padding: 12px 16px; border-radius: 6px; font-size: 13px; margin: 20px 0; }
+    .config input { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: 280px; font-family: monospace; font-size: 12px; }
+    #api-status { font-weight: bold; }
+    .ok { color: #2a9d3f; }
+    .err { color: #d32f2f; }
+  </style>
+  <script src="config.js"></script>
+  <script src="nav.js"></script>
+</head>
+<body>
+  <h1>Locus-KMS</h1>
+  <div class="subtitle">KMS-only standalone &mdash; 문서 업로드 / 노트 / 검색 / RAG / Multi-tenant 격리</div>
+
+  <div class="config">
+    <strong>API base:</strong> <code id="api-base-display"></code>
+    &nbsp;|&nbsp; <strong>tenant:</strong> <code id="tenant-display"></code>
+    &nbsp;|&nbsp; <strong>healthz:</strong> <span id="api-status">확인 중...</span>
+    <br><br>
+    <label>API URL 변경: <input id="api-input" placeholder="http://localhost:5201"></label>
+    <button onclick="setApi()">적용</button>
+  </div>
+
+  <h2>주요 페이지</h2>
+  <div class="nav">
+    <a href="upload.html"><strong>문서 업로드</strong><span>PDF/DOCX/MD/HTML/TXT &mdash; 파일 업로드 또는 노트 수동 작성</span></a>
+    <a href="library.html"><strong>라이브러리</strong><span>저장소(repo) 관리 + 문서 list + 편집 진입</span></a>
+    <a href="search.html"><strong>검색 / RAG</strong><span>하이브리드 검색 + RAG 답변 SSE 스트리밍</span></a>
+    <a href="repository-groups.html"><strong>저장소 그룹</strong><span>RepositoryGroup CRUD + default 설정 + multi-repo scope</span></a>
+    <a id="swagger-link" href="" target="_blank"><strong>Swagger UI</strong><span>전체 API 인터랙티브 문서 (192 endpoints)</span></a>
+  </div>
+
+  <h2>구현된 기능 요약</h2>
+  <table>
+    <thead><tr><th>영역</th><th>기능</th><th>endpoint</th></tr></thead>
+    <tbody>
+      <tr><td>저장소</td><td>repo CRUD</td><td><code>GET/POST /api/v1/tenants/{tid}/repositories</code></td></tr>
+      <tr><td>저장소 그룹</td><td>CRUD + default 설정</td><td><code>GET/POST/PATCH/DELETE /api/v1/repository-groups</code></td></tr>
+      <tr><td>tenant</td><td>tenant 생성/조회</td><td><code>GET/POST /api/v1/tenants</code></td></tr>
+      <tr><td>문서</td><td>upload (multipart)</td><td><code>POST /api/v1/documents/upload</code></td></tr>
+      <tr><td>문서</td><td>list / 상세 / 삭제</td><td><code>GET/DELETE /api/v1/documents</code></td></tr>
+      <tr><td>노트</td><td>수동 작성</td><td><code>POST /api/v1/notes</code></td></tr>
+      <tr><td>블럭</td><td>list / 편집 / validity</td><td><code>GET PATCH /api/v1/blocks/{id}</code></td></tr>
+      <tr><td>검색</td><td>하이브리드 (BGE-M3 + reranker)</td><td><code>POST /api/v1/search</code></td></tr>
+      <tr><td>RAG</td><td>retrieve / assist-stream SSE</td><td><code>POST /api/v1/rag/(retrieve|assist-stream)</code></td></tr>
+      <tr><td>시스템</td><td>healthz / OpenAPI</td><td><code>GET /health</code> · <code>GET /openapi.json</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>운영 모드</h2>
+  <table>
+    <tr><th>모드</th><th>인증</th><th>설명</th></tr>
+    <tr><td>무인증 (default)</td><td>없음</td><td><code>LUCAS_AUTH_DISABLED=true</code> &mdash; 헤더 없이 호출</td></tr>
+    <tr><td>JWT</td><td>Authorization: Bearer</td><td><code>LUCAS_AUTH_DISABLED=false</code> + <code>JWT_SECRET_KEY</code> 설정</td></tr>
+  </table>
+
+  <h2>참조 문서</h2>
+  <ul>
+    <li><a href="../QUICKSTART.md" target="_blank">QUICKSTART.md</a> &mdash; 정직 체크리스트</li>
+    <li><a href="../docs/api/lucas-kms-api-reference.md" target="_blank">API Reference</a> &mdash; 2019 LOC, curl/Python/JS 예시</li>
+    <li><a href="../docs/deployment/lucas-kms-operator-manual.md" target="_blank">운영자 매뉴얼</a></li>
+  </ul>
+
+  <script>
+    document.getElementById('api-base-display').textContent = window.LUCAS_API_BASE;
+    document.getElementById('tenant-display').textContent = window.LUCAS_TENANT_ID;
+    document.getElementById('swagger-link').href = window.LUCAS_API_BASE + '/docs';
+    fetch(window.LUCAS_API_BASE + '/health', { mode: 'cors' })
+      .then(r => r.json())
+      .then(d => {
+        const el = document.getElementById('api-status');
+        el.textContent = d.status === 'ok' ? '✓ 정상' : '⚠ ' + JSON.stringify(d);
+        el.className = d.status === 'ok' ? 'ok' : 'err';
+      })
+      .catch(e => {
+        const el = document.getElementById('api-status');
+        el.textContent = '✗ 연결 실패 (' + e.message + ')';
+        el.className = 'err';
+      });
+    function setApi() {
+      const v = document.getElementById('api-input').value.trim();
+      if (v) { localStorage.setItem('LUCAS_API_BASE', v); window.location.reload(); }
+    }
+  </script>
+</body>
+</html>

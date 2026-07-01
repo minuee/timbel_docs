@@ -1,0 +1,52 @@
+skill:
+  id: inbound_greeting_v2
+  version: "1.1"
+  domain: public
+  description: "콜센터 표준 인입 응대 — 인사·본인확인·문의유형 분류"
+
+availability:
+  scope: business_only
+  business_type: public
+  visibility: opt-in
+
+triggers:
+  - intent: inbound_call
+
+slots:
+  - name: caller_name
+    type: text
+    required: true
+  - name: inquiry_type
+    type: enum
+    values: [상품문의, 계약변경, 불만접수, 단순안내, 기타]
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: inbound_greeting_v2_greet_on_enter.md
+    transitions:
+      - when: has_intent(inbound_call)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [caller_name, inquiry_type]
+    transitions:
+      - when: slot_filled(inquiry_type)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: inbound_greeting_v2_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

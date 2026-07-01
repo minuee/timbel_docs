@@ -1,0 +1,46 @@
+# Staging override: 기존 image 재사용 + Locus-KMS 의 src/scripts mount (본체 AICM-APIs 미사용)
+services:
+  lucas-kms-api:
+    image: aicm-apis-api
+    build: !reset null
+    volumes:
+      - /home/Ricky-Dev/Locus-KMS/src:/app/src:ro
+      - /home/Ricky-Dev/AICM-APIs/packages/lucas-shared/src/lucas_shared:/app/lucas_shared:ro
+      - /home/Ricky-Dev/Locus-KMS/alembic:/app/alembic:ro
+      - /home/Ricky-Dev/Locus-KMS/alembic.ini:/app/alembic.ini:ro
+    environment:
+      PYTHONPATH: /app
+      CORS_ORIGINS: "http://localhost:5252,http://localhost:5251,http://localhost:5101,http://localhost:5102,http://localhost:3000,http://localhost:8080,http://localhost:5173"
+      ENABLE_SWAGGER: "true"
+      ENV: dev
+      SWAGGER_AUTH_MODE: none
+      LUCAS_AUTH_DISABLED: "true"
+    command: >
+      uvicorn src.api.main_kms:create_kms_app
+      --factory --host 0.0.0.0 --port 8000
+      --workers 1
+  lucas-kms-worker-large:
+    image: aicm-apis-pipeline-worker-large
+    build: !reset null
+    volumes:
+      - /home/Ricky-Dev/Locus-KMS/src:/app/src:ro
+      - /home/Ricky-Dev/AICM-APIs/packages/lucas-shared/src/lucas_shared:/app/lucas_shared:ro
+    environment:
+      PYTHONPATH: /app
+  lucas-kms-worker-small:
+    image: aicm-apis-pipeline-worker-small
+    build: !reset null
+    volumes:
+      - /home/Ricky-Dev/Locus-KMS/src:/app/src:ro
+      - /home/Ricky-Dev/AICM-APIs/packages/lucas-shared/src/lucas_shared:/app/lucas_shared:ro
+    environment:
+      PYTHONPATH: /app
+  migrate:
+    image: aicm-apis-api
+    build: !reset null
+    volumes:
+      - /home/Ricky-Dev/Locus-KMS/src:/app/src:ro
+      - /home/Ricky-Dev/Locus-KMS/scripts:/app/scripts:ro
+      - /home/Ricky-Dev/AICM-APIs/packages/lucas-shared/src/lucas_shared:/app/lucas_shared:ro
+    environment:
+      PYTHONPATH: /app

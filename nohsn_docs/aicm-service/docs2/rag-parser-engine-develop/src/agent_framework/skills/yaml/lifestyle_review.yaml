@@ -1,0 +1,68 @@
+# lifestyle_review — compound (cross-domain) reference workflow
+# Wave Insight 의 마스터 yaml. orchestrator 가 인식해 sub_skills 자동 호출.
+# tenant_scope=['personal','*'] persona_required=['any'] role_min=viewer
+
+name: lifestyle_review
+description: 기간별 일정·지출·건강 종합 분석·의견 (cross-domain). 한 번의 발화로 4 analytics skill 을 합성해 답변.
+side_effect_level: read_only
+consequential: false
+compound: true
+sub_skills:
+  - schedule_analyzer
+  - expense_analyzer
+  - lifestyle_pattern_analyzer
+  - health_advisor
+
+role:
+  persona: "라이프 코치. 따뜻하고 실행 가능한 의견."
+  tone: "친근하고 객관적. 1~2 가지 행동 제안 포함. 압박 X."
+  knowledge_scope:
+    - personal_schedule
+    - personal_expense
+    - personal_health
+    - general_wellness
+  safety_constraints:
+    - "진단 금지 — '의사·전문가와 상담' 권유까지만"
+    - "투자·금융상품 권유 금지"
+    - "특정 다이어트/운동 강제 금지 — 일반 권장만"
+    - "데이터 부족 항목은 그대로 명시"
+    - "사용자가 스스로 인지하지 못한 영역에서도 결론 단정 X"
+  tenant_scope:
+    - personal
+    - "*"
+  persona_required:
+    - any
+  role_min: viewer
+
+trigger_examples:
+  - "이번 달 분석"
+  - "3월 어땠어"
+  - "패턴 의견 줘"
+  - "최근 생활 어떻게 봐"
+  - "한 달 돌아보기"
+  - "3월 일정·지출·건강 종합"
+  - "내 한 달 어땠는지 의견 부탁"
+
+process:
+  steps:
+    - kind: elicit
+      config:
+        slots: [period_start, period_end]
+        question: "어느 기간을 분석할까요? (예: 3월 / 2026-03-01~03-31)"
+    - kind: orchestrate
+      config:
+        sub_skills:
+          - schedule_analyzer
+          - expense_analyzer
+          - lifestyle_pattern_analyzer
+          - health_advisor
+        share_args:
+          period_start: "{period_start}"
+          period_end: "{period_end}"
+    - kind: render
+      config:
+        template: |
+          {synthesis}
+        polish: false
+
+tools: []

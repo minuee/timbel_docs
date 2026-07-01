@@ -1,0 +1,47 @@
+category: leisure_sports
+label: "레저 스포츠"
+description: "스키·서핑·요가·헬스·골프·낚시 등 활동 / 장비 대여 SOP."
+
+questions:
+  - id: ls_activity_type
+    label: "주요 액티비티 종류?"
+    type: multiple_select
+    options:
+      - "스키·스노보드"
+      - "서핑·SUP"
+      - "등산·트레킹"
+      - "골프"
+      - "낚시"
+      - "요가·필라테스"
+      - "헬스·PT"
+      - "기타 야외 액티비티"
+    required: true
+    section: 페르소나
+
+  - id: ls_difficulty_levels
+    label: "난이도 / 코스 분류?"
+    type: textarea
+    example: "초보·중급·상급 / 가이드 동반 / 자율 / 어린이 동반 가능 코스"
+    required: true
+    section: 응대 시나리오
+
+  - id: ls_equipment_rental
+    label: "장비 대여 가능 여부 / 변상 정책?"
+    type: textarea
+    example: "헬멧 / 보드 / 슈트 대여 / 분실·파손 시리얼 변상 (KMS 가격표)"
+    required: true
+    section: 응대 시나리오
+
+  - id: ls_safety_protocol
+    label: "안전 수칙 / 사고 / 부상 시 프로토콜?"
+    type: textarea
+    example: "헬멧 의무 / 가이드 동반 / 사고 시 119 + 가이드 호출 + 보험 안내"
+    required: true
+    section: 에스컬레이션
+
+  - id: ls_weather_policy
+    label: "날씨 / 자연 변수로 인한 일정 변경·취소 정책?"
+    type: textarea
+    example: "기상 악화 시 자동 취소 + 전액 환불 또는 일정 변경"
+    required: true
+    section: 응대 시나리오

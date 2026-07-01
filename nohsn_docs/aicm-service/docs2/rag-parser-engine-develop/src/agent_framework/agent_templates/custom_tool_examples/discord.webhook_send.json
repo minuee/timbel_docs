@@ -1,0 +1,68 @@
+{
+  "id": "discord.webhook_send",
+  "name": "discord.webhook_send",
+  "display_name": "Discord 채널 알림",
+  "description": "Discord Webhook 으로 서버 채널에 메시지를 발송합니다. 채널 설정에서 Webhook URL 을 생성하면 즉시 사용 가능합니다.",
+  "category": "알림",
+  "vendor": "Discord",
+  "vendor_url": "https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
+  "endpoint_url": "<YOUR_WEBHOOK_URL — https://discord.com/api/webhooks/.../.../...>",
+  "method": "POST",
+  "auth_headers": {},
+  "input_schema": {
+    "type": "object",
+    "required": ["content"],
+    "properties": {
+      "content": {
+        "type": "string",
+        "description": "채널에 표시될 메시지 본문 (최대 2000자)",
+        "maxLength": 2000
+      },
+      "username": {
+        "type": "string",
+        "default": "Locus",
+        "description": "발신자 표시명 (옵션)"
+      },
+      "avatar_url": {
+        "type": "string",
+        "description": "발신자 아바타 이미지 URL (옵션)"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Discord 응답 (성공 시 HTTP 204 No Content, 에러 시 JSON)"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "secret_in_url",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "양방향 (slash command / 버튼) 인터랙션은 Ed25519 서명 검증 필수 — discord.application_command 또는 별도 어댑터 사용. Webhook URL 노출 = 도용 위험."
+  },
+  "operational_notes": {
+    "rate_limit": "Webhook 당 30 req/min (HTTP 429 X-RateLimit-* 헤더 참고)",
+    "retry_semantics": "429 시 Retry-After 헤더 준수, 5xx 지수 백오프",
+    "response_sla_sec": null,
+    "cost_label": "free",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. Discord 서버에서 알림을 보낼 채널 우클릭 → '채널 수정'",
+    "2. '연동' 탭 → '웹후크' → '새 웹후크' 클릭",
+    "3. 이름(예: Locus)과 아바타 이미지 설정 후 저장",
+    "4. '웹후크 URL 복사' 클릭",
+    "5. 복사된 URL(https://discord.com/api/webhooks/...)을 endpoint_url 에 붙여넣기",
+    "6. auth_headers 는 비워두어도 됩니다 — URL 자체에 인증 토큰 포함",
+    "7. 보안: Webhook URL 은 비밀. 외부 노출 시 즉시 재생성. 양방향 인터랙션은 Discord Application + Ed25519 (X-Signature-Ed25519) 검증 필요."
+  ]
+}

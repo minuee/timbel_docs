@@ -1,0 +1,22 @@
+name: cross-turn mail to schedule (메일 → 그 일정 등록해)
+references:
+  - commit: 3caff49 feat(plan_generation) 직전 turn 메일 결과 → schedule.create cross-turn 패턴
+  - memory: project_real_usage_bugs_20260424.md
+notes: |
+  메일 처리 후 사용자가 "그 일정 등록해" 같은 참조 발화를 하면 직전 turn
+  의 메일에서 추출한 일정으로 schedule.create 가 실행돼야 한다.
+  이전 사례: 직전 turn context 가 끊겨 LLM 이 "어떤 일정?" 되묻거나
+  무관한 일정을 등록.
+chat:
+  - tenant: personal
+    account: demo-admin
+    user: 받은편지함 정리해줘
+    expect:
+      assistant_body_nonempty: true
+
+  # 직전 turn 메일에서 일정성 항목이 있다고 가정하고 cross-turn reference.
+  - tenant: personal
+    account: demo-admin
+    user: 그 중 일정 있는 거 등록해
+    expect:
+      tools_any_of: ["schedule.create", "schedule.bulk_create"]

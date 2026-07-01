@@ -1,0 +1,45 @@
+category: travel_agency
+label: "여행사"
+description: "패키지·자유여행·항공·호텔 예약 SOP."
+
+questions:
+  - id: ta_specialty
+    label: "주력 여행 상품?"
+    type: multiple_select
+    options:
+      - "국내 패키지"
+      - "해외 패키지"
+      - "자유여행 항공·호텔"
+      - "단체 / 기업 출장"
+      - "허니문·럭셔리"
+      - "테마 여행 (배낭·크루즈 등)"
+    required: true
+    section: 페르소나
+
+  - id: ta_visa_handling
+    label: "비자 / 여권 / 출입국 안내 정책?"
+    type: textarea
+    example: "주요국 비자 발급 대행 / 여권 만료 6개월 미만 거절 안내"
+    required: true
+    section: 응대 시나리오
+
+  - id: ta_insurance_policy
+    label: "여행자 보험 권장 / 가입 정책?"
+    type: textarea
+    example: "전 상품 권장 / 자체 가입 가능 / 보장 범위 안내"
+    required: true
+    section: 응대 시나리오
+
+  - id: ta_emergency_contact
+    label: "현지 응급 / 영사콜센터 안내 정책?"
+    type: textarea
+    example: "영사콜센터 +82-2-3210-0404 / 현지 응급번호 / 매니저 24시간 핫라인"
+    required: true
+    section: 에스컬레이션
+
+  - id: ta_advisory_handling
+    label: "외교부 여행 경보 (자제·철수) 발효 시 안내 정책?"
+    type: textarea
+    example: "경보 단계별 사전 고지 / 신중 결정 권고 / 환불·일정 조정 매니저 안내"
+    required: true
+    section: 금지 사항

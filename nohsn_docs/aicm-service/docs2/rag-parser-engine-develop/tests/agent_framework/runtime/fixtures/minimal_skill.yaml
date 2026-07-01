@@ -1,0 +1,14 @@
+skill:
+  id: echo_bot
+  version: "0.1"
+  domain: test
+  description: "echo"
+triggers:
+  - intent: echo
+slots: []
+initial_state: s_greet
+states:
+  - id: s_greet
+    transitions:
+      - to: done
+  - id: done

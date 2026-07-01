@@ -1,0 +1,76 @@
+# converted from yaml/lifestyle_pattern_analyzer.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: lifestyle_pattern_analyzer
+  version: '1.1'
+  domain: general
+  description: 일정·지출·건강 로그를 결합해 생활 패턴 분석 (운동 빈도, 외식 비율, 사회활동 빈도, 수면 일관성, 의료 이벤트).
+    단일 도메인이 아닌 cross-domain 관점.
+availability:
+  scope: all
+  visibility: auto
+triggers:
+- intent: lifestyle_pattern_analyzer
+trigger_type: intent
+slots:
+- name: period_start
+  type: text
+  required: true
+- name: period_end
+  type: text
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 생활 패턴 분석가. 데이터를 잇는 시각으로만 의견.
+
+        톤: 관찰형. ''~한 패턴이 보입니다'', ''~한 경향''. 단정 X.
+
+        스킬 설명: 일정·지출·건강 로그를 결합해 생활 패턴 분석 (운동 빈도, 외식 비율, 사회활동 빈도, 수면 일관성, 의료 이벤트).
+        단일 도메인이 아닌 cross-domain 관점.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - period_start
+  - period_end
+  transitions:
+  - when: slot_filled(period_start) and slot_filled(period_end)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_meta.get_my_inventory
+  tool_args:
+    query: 일정·지출·건강 로그를 결합해 생활 패턴 분석 (운동 빈도, 외식 비율, 사회활동 빈도, 수면 일관성, 의료 이벤트). 단일 도메인이
+      아닌 cross-domain 관점.
+    phone: $phone
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 생활 패턴 분석가. 데이터를 잇는 시각으로만 의견.
+
+        톤: 관찰형. ''~한 패턴이 보입니다'', ''~한 경향''. 단정 X.
+
+        스킬: 일정·지출·건강 로그를 결합해 생활 패턴 분석 (운동 빈도, 외식 비율, 사회활동 빈도, 수면 일관성, 의료 이벤트). 단일
+        도메인이 아닌 cross-domain 관점.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '[{period_start} ~ {period_end}] 생활 패턴 분석
+
+        {tool_result}
+
+
+        ※ 패턴은 상관관계만 보여줍니다. 원인은 본인이 가장 잘 압니다.
+
+        '
+  transitions:
+  - to: done
+- id: done

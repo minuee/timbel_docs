@@ -1,0 +1,17 @@
+name: feed endpoint returns at least 1 item for seeded admin
+references:
+  - memory: project_session_resume_20260426.md (seed feed_event INSERT)
+  - spec: docs/superpowers/specs/2026-04-28-frontend-v3-ux-overhaul-design.md PR P3
+notes: |
+  feed 시드 후 GET /api/v1/feed 는 demo-admin 에게 최소 1개 항목을
+  반환해야 한다. 빈 응답은 cron 워커 / 시드 / 권한 중 어느 단계가 깨졌단
+  신호.
+http:
+  - request:
+      method: GET
+      path: /api/v1/feed?limit=20
+      auth_account: demo-admin
+      tenant: personal
+    expect:
+      status: 200
+      body_contains: "items"

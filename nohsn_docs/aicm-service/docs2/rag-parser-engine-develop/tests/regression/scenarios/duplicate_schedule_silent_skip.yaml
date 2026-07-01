@@ -1,0 +1,22 @@
+name: duplicate schedule create — second turn must mark duplicate
+references:
+  - memory: project_real_usage_bugs_20260424.md (중복 등록)
+  - feedback: feedback_validation_must_include_multiturn_patterns.md
+notes: |
+  같은 일정 (제목·시간 동일) 을 두 번 등록하려 하면 두 번째 시도는 silent
+  insert 가 아니라 사용자에게 "이미 등록된 일정" 안내가 가야 한다.
+  본 시나리오는 backend 가 duplicate flag 를 응답에 표시하는지,
+  본문이 안내 문구를 포함하는지 검증.
+chat:
+  - tenant: personal
+    account: demo-admin
+    user: 5월 1일 오전 10시 회의 일정 등록해
+    expect:
+      tools_any_of: ["schedule.create"]
+
+  - tenant: personal
+    account: demo-admin
+    user: 5월 1일 오전 10시 회의 일정 등록해
+    expect:
+      # 두 번째에도 schedule.create 자체는 시도 가능 — 단 응답에 중복 표식.
+      assistant_body_pattern: "(이미|중복|동일한)"

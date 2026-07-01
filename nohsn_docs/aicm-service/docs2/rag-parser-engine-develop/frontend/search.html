@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Locus-KMS — 검색 / RAG</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 1000px; margin: 30px auto; padding: 0 20px; }
+    h1 { font-size: 24px; }
+    a.back { color: #4a90e2; text-decoration: none; font-size: 13px; }
+    .scope-bar { background: #f5f5f5; padding: 12px 14px; border-radius: 6px; margin: 14px 0; }
+    .scope-bar label.radio { display: inline-block; margin-right: 18px; font-size: 13px; cursor: pointer; }
+    .scope-bar label.radio input { vertical-align: middle; margin-right: 4px; }
+    .scope-detail { margin-top: 12px; padding: 10px 12px; background: white; border: 1px solid #ddd; border-radius: 4px; display: none; }
+    .scope-detail.active { display: block; }
+    .scope-detail .hint { font-size: 11px; color: #888; margin-bottom: 6px; }
+    .checkbox-list { max-height: 160px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 6px 10px; background: #fafafa; }
+    .checkbox-list label { display: block; padding: 3px 0; font-size: 13px; cursor: pointer; }
+    .checkbox-list input[type=checkbox] { margin-right: 6px; vertical-align: middle; }
+    .repo-meta { color: #888; font-size: 11px; margin-left: 4px; }
+    .query-bar { margin: 16px 0; display: flex; gap: 8px; }
+    select, input[type=text] { padding: 8px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    input[type=text].query { flex: 1; }
+    button { padding: 8px 16px; font-size: 14px; background: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #3978c2; }
+    .tabs { margin: 20px 0 10px; border-bottom: 2px solid #e0e0e0; }
+    .tabs button { background: none; color: #777; border: none; padding: 10px 16px; }
+    .tabs button.active { color: #1a1a1a; border-bottom: 2px solid #4a90e2; margin-bottom: -2px; font-weight: 600; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .hit { padding: 12px 16px; margin: 10px 0; background: #fafafa; border-left: 3px solid #4a90e2; border-radius: 4px; }
+    .hit .score { font-size: 11px; color: #777; }
+    .hit .content { margin-top: 6px; font-size: 14px; }
+    .hit .source { font-size: 12px; color: #999; margin-top: 4px; }
+    #rag-stream { padding: 16px; background: #f7faff; border-radius: 6px; min-height: 100px; white-space: pre-wrap; font-size: 14px; line-height: 1.6; }
+    .meta { font-size: 12px; color: #777; }
+  </style>
+  <script src="config.js"></script>
+  <script src="nav.js"></script>
+</head>
+<body>
+  <a href="index.html" class="back">&larr; 메인</a>
+  <h1>검색 / RAG</h1>
+
+  <div class="scope-bar">
+    <strong style="font-size:13px;">검색 scope:</strong>
+    <label class="radio"><input type="radio" name="scope" value="default" checked onchange="onScopeChange()"> default (tenant 기본 group)</label>
+    <label class="radio"><input type="radio" name="scope" value="specified" onchange="onScopeChange()"> specified (개별 선택)</label>
+    <label class="radio"><input type="radio" name="scope" value="group" onchange="onScopeChange()"> group</label>
+    <label class="radio"><input type="radio" name="scope" value="tenant_all" onchange="onScopeChange()"> tenant_all</label>
+
+    <div id="scope-specified" class="scope-detail">
+      <div class="hint">검색할 repo 를 체크 (1개 이상)</div>
+      <div class="checkbox-list" id="repo-checks"><em>불러오는 중...</em></div>
+    </div>
+
+    <div id="scope-group" class="scope-detail">
+      <div class="hint">group 선택</div>
+      <select id="group-select"><option value="">(group 불러오는 중...)</option></select>
+      <a href="repository-groups.html" style="margin-left:8px; font-size:12px; color:#4a90e2;">group 관리 &rarr;</a>
+    </div>
+
+    <div id="scope-tenant_all" class="scope-detail">
+      <div class="hint">tenant 전체 + 제외할 repo 선택 (선택)</div>
+      <div class="checkbox-list" id="exclude-checks"><em>불러오는 중...</em></div>
+    </div>
+  </div>
+
+  <div class="query-bar">
+    <input type="text" id="query-input" class="query" placeholder="예: 군 장병 적금 우대 금리">
+    <button onclick="run()">검색</button>
+  </div>
+
+  <div class="tabs">
+    <button class="active" onclick="setTab(this, 'search')">하이브리드 검색</button>
+    <button onclick="setTab(this, 'rag')">RAG (assist-stream SSE)</button>
+  </div>
+
+  <div id="panel-search" class="panel active">
+    <div class="meta" id="search-meta"></div>
+    <div id="search-results"></div>
+  </div>
+
+  <div id="panel-rag" class="panel">
+    <div class="meta" id="rag-meta"></div>
+    <div id="rag-stream">결과가 여기에 표시됩니다.</div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const tid = () => window.LUCAS_TENANT_ID;
+    let currentTab = 'search';
+    let repos = [];
+    let groups = [];
+
+    function setTab(btn, name) {
+      document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      $('panel-' + name).classList.add('active');
+      currentTab = name;
+    }
+
+    function currentScope() {
+      const r = document.querySelector('input[name=scope]:checked');
+      return r ? r.value : 'default';
+    }
+
+    function onScopeChange() {
+      const s = currentScope();
+      ['specified', 'group', 'tenant_all'].forEach(k => {
+        const el = $('scope-' + k);
+        if (el) el.classList.toggle('active', k === s);
+      });
+    }
+
+    async function api(path, opts = {}) {
+      const r = await fetch(window.LUCAS_API_BASE + path, {
+        ...opts,
+        headers: { 'X-Tenant-Id': tid(), ...(opts.headers || {}) },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${JSON.stringify(d)}`);
+      return d;
+    }
+
+    async function loadRepos() {
+      try {
+        const r = await api(`/api/v1/tenants/${tid()}/repositories?limit=100`);
+        repos = r.data?.items || r.data || [];
+      } catch (e) {
+        console.error(e);
+        repos = [];
+      }
+      renderRepoChecks('repo-checks');
+      renderRepoChecks('exclude-checks');
+    }
+
+    function renderRepoChecks(elId) {
+      const el = $(elId);
+      if (!repos.length) {
+        el.innerHTML = '<em>repo 없음</em>';
+        return;
+      }
+      el.innerHTML = repos.map(r =>
+        `<label><input type="checkbox" value="${r.id}"> ${escapeHtml(r.name)} <span class="repo-meta">(${r.document_count || 0} docs)</span></label>`
+      ).join('');
+    }
+
+    async function loadGroups() {
+      try {
+        const r = await api(`/api/v1/tenants/${tid()}/repository-groups`);
+        groups = r.data?.items || r.data || [];
+      } catch (e) {
+        console.error(e);
+        groups = [];
+      }
+      const sel = $('group-select');
+      if (!groups.length) {
+        sel.innerHTML = '<option value="">(group 없음 — repository-groups.html 에서 생성)</option>';
+        return;
+      }
+      sel.innerHTML = groups.map(g =>
+        `<option value="${g.id}">${escapeHtml(g.name)}${g.is_default ? ' (default)' : ''} — ${(g.repository_ids || []).length} repos</option>`
+      ).join('');
+    }
+
+    function checkedValues(elId) {
+      return Array.from(document.querySelectorAll('#' + elId + ' input[type=checkbox]:checked')).map(c => c.value);
+    }
+
+    function buildScopePayload() {
+      const scope = currentScope();
+      const body = { scope };
+      if (scope === 'specified') {
+        const ids = checkedValues('repo-checks');
+        if (!ids.length) throw new Error('specified scope — repo 를 1개 이상 선택하세요');
+        body.repository_ids = ids;
+      } else if (scope === 'group') {
+        const gid = $('group-select').value;
+        if (!gid) throw new Error('group scope — group 을 선택하세요');
+        body.group_id = gid;
+      } else if (scope === 'tenant_all') {
+        const excl = checkedValues('exclude-checks');
+        if (excl.length) body.exclude_repository_ids = excl;
+      }
+      return body;
+    }
+
+    async function run() {
+      const query = $('query-input').value.trim();
+      if (!query) return;
+      let scopePayload;
+      try {
+        scopePayload = buildScopePayload();
+      } catch (e) {
+        if (currentTab === 'search') $('search-results').innerHTML = '<span style="color:#d32f2f">' + escapeHtml(e.message) + '</span>';
+        else $('rag-stream').textContent = e.message;
+        return;
+      }
+      if (currentTab === 'search') return doSearch(query, scopePayload);
+      return doRag(query, scopePayload);
+    }
+
+    async function doSearch(query, scopePayload) {
+      $('search-results').innerHTML = '<em>검색 중...</em>';
+      const t0 = performance.now();
+      try {
+        const body = { query, ...scopePayload };
+        const r = await fetch(window.LUCAS_API_BASE + '/api/v1/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': tid() },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        const ms = Math.round(performance.now() - t0);
+        const data = d.data || {};
+        const results = data.results || [];
+        const scopeInfo = data.applied_scope ? ` / scope=${data.applied_scope}` : '';
+        $('search-meta').textContent = `hits ${results.length} / total ${data.total_candidates ?? '-'} / latency ${data.latency_ms ?? ms}ms${scopeInfo}`;
+        $('search-results').innerHTML = results.length ? results.map(h => `
+          <div class="hit">
+            <div class="score">score=${(h.score || 0).toFixed(3)}</div>
+            <div class="content">${escapeHtml(h.content || h.text || '').slice(0, 500)}</div>
+            <div class="source">${escapeHtml(h.source_location?.file_url || h.document_id?.slice(0,8) || '')} ${h.source_location?.page_number ? ('· p.' + h.source_location.page_number) : ''}</div>
+          </div>
+        `).join('') : '<em>결과 없음</em>';
+      } catch (e) {
+        $('search-results').innerHTML = '<span style="color:#d32f2f">' + e.message + '</span>';
+      }
+    }
+
+    async function doRag(query, scopePayload) {
+      $('rag-stream').textContent = '';
+      $('rag-meta').textContent = '연결 중...';
+      const t0 = performance.now();
+      const body = { query, ...scopePayload };
+      try {
+        const r = await fetch(window.LUCAS_API_BASE + '/api/v1/rag/assist-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': tid(), 'Accept': 'text/event-stream' },
+          body: JSON.stringify(body),
+        });
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        let firstToken = null;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let nl;
+          while ((nl = buf.indexOf('\n\n')) >= 0) {
+            const chunk = buf.slice(0, nl); buf = buf.slice(nl + 2);
+            const lines = chunk.split('\n');
+            let event = 'message', dataStr = '';
+            lines.forEach(l => {
+              if (l.startsWith('event:')) event = l.slice(6).trim();
+              else if (l.startsWith('data:')) dataStr += l.slice(5).trim();
+            });
+            if (event === 'token' && dataStr) {
+              if (firstToken === null) { firstToken = performance.now() - t0; $('rag-meta').textContent = `first_token ${Math.round(firstToken)}ms`; }
+              try { const t = JSON.parse(dataStr); $('rag-stream').textContent += (t.text || ''); } catch { $('rag-stream').textContent += dataStr; }
+            } else if (event === 'done') {
+              const total = Math.round(performance.now() - t0);
+              $('rag-meta').textContent = `first_token ${Math.round(firstToken||0)}ms / total ${total}ms`;
+            } else if (event === 'error') {
+              $('rag-stream').textContent += '\n\n[error] ' + dataStr;
+            }
+          }
+        }
+      } catch (e) {
+        $('rag-stream').textContent = 'error: ' + e.message;
+      }
+    }
+
+    function escapeHtml(s) { return String(s||'').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":"&#39;"}[c])); }
+
+    (async () => {
+      await loadRepos();
+      await loadGroups();
+      onScopeChange();
+    })();
+  </script>
+</body>
+</html>

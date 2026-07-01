@@ -1,0 +1,44 @@
+name: chat upload requires bearer + tenant
+references:
+  - codex_review_log: docs/superpowers/specs/2026-04-28-frontend-v3-codex-review-log.md P1-4
+  - spec: docs/superpowers/specs/2026-04-28-frontend-v3-ux-overhaul-design.md §6.4
+  - hardening: docs/superpowers/specs/2026-04-28-frontend-v3-codex-review-log.md P1-1/P1-2/P2-1/P2-5
+notes: |
+  Step 1, 2 는 file payload 를 함께 보낸다 — file 없이 보내면 FastAPI body
+  validation 이 auth 보다 먼저 실행되어 422 를 반환하므로 401 (auth gate)
+  을 검증할 수 없다.
+http:
+  - request:
+      method: POST
+      path: /agent/chat/upload
+      headers: {}
+      file: { name: "test.txt", content: "x" }
+    expect: { status: 401 }
+  - request:
+      method: POST
+      path: /agent/chat/upload
+      headers: { Authorization: "Bearer notvalid" }
+      file: { name: "test.txt", content: "x" }
+    expect: { status: 401 }
+  - request:
+      method: POST
+      path: /agent/chat/upload
+      auth_account: demo-admin
+      tenant: personal
+      file: { name: "test.txt", content: "hello" }
+    expect: { status: 201 }
+  - request:
+      method: POST
+      path: /agent/chat/upload
+      auth_account: demo-admin
+      headers: { X-Tenant-ID: "00000000-0000-0000-0000-000000000999" }
+      file: { name: "test.txt", content: "hello" }
+    expect: { status: 403 }
+  # P2-1 — 빈 X-Tenant-ID 는 personal fallback 으로 흐르지 않고 400.
+  - request:
+      method: POST
+      path: /agent/chat/upload
+      auth_account: demo-admin
+      headers: { X-Tenant-ID: "" }
+      file: { name: "test.txt", content: "hello" }
+    expect: { status: 400 }

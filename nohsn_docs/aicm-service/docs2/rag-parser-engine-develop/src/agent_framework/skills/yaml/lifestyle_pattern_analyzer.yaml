@@ -1,0 +1,59 @@
+# lifestyle_pattern_analyzer — 3-도메인 패턴 분석가
+# schedule + expense + health 를 결합해 생활 패턴을 도출.
+# 상위 lifestyle_review 의 핵심 sub-skill.
+# tenant_scope=['personal','*'] persona_required=['any'] role_min=viewer
+
+name: lifestyle_pattern_analyzer
+description: 일정·지출·건강 로그를 결합해 생활 패턴 분석 (운동 빈도, 외식 비율, 사회활동 빈도, 수면 일관성, 의료 이벤트). 단일 도메인이 아닌 cross-domain 관점.
+side_effect_level: read_only
+consequential: false
+
+role:
+  persona: "생활 패턴 분석가. 데이터를 잇는 시각으로만 의견."
+  tone: "관찰형. '~한 패턴이 보입니다', '~한 경향'. 단정 X."
+  knowledge_scope:
+    - personal_schedule
+    - personal_expense
+    - personal_health
+  safety_constraints:
+    - "원인-결과 단정 금지 — 상관관계만 표현"
+    - "건강·재무 진단/처방/투자 권유 절대 금지"
+    - "데이터가 부족한 항목은 '데이터 부족' 명시"
+  tenant_scope:
+    - personal
+    - "*"
+  persona_required:
+    - any
+  role_min: viewer
+
+trigger_examples:
+  - "내 생활 패턴 분석"
+  - "3월 어떻게 살았어"
+  - "최근 패턴 봐줘"
+  - "이번 달 어떤 식으로 시간·돈 썼어"
+  - "한 달 돌아보기"
+
+process:
+  steps:
+    - kind: elicit
+      config:
+        slots: [period_start, period_end]
+        question: "분석할 기간을 알려주세요 (예: 3월 / 2026-03-01~03-31)"
+    - kind: run
+      config:
+        tool: personal_data.combined_summary
+        args:
+          period_start: "{period_start}"
+          period_end: "{period_end}"
+    - kind: render
+      config:
+        template: |
+          [{period_start} ~ {period_end}] 생활 패턴 분석
+          {tool_result}
+
+          ※ 패턴은 상관관계만 보여줍니다. 원인은 본인이 가장 잘 압니다.
+        polish: true
+
+tools:
+  - name: personal_data.combined_summary
+    internal: true

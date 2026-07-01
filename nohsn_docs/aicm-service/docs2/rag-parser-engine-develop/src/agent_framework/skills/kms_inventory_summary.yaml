@@ -1,0 +1,34 @@
+skill:
+  id: kms_inventory_summary
+  version: "0.1"
+  domain: kms
+  description: "현재 테넌트의 지식 자원 상태·용량·최근 변동 요약 (read_only)"
+
+availability:
+  scope: all
+  visibility: auto
+
+# Phase 3: 사용자가 "내 KMS 에 문서 몇 개", "용량", "최근 추가" 같은 자원 상태
+# 질의를 하면 이 skill 이 매칭. side_effect_level=read_only 이므로 ExecutionPolicy
+# 가드 없이 즉시 실행.
+triggers:
+  - intent: kms_inventory_query
+
+trigger_type: intent
+
+slots: []
+
+initial_state: summarize
+states:
+  - id: summarize
+    tool: kms_inventory.get_summary
+    tool_args:
+      tenant_id: $tenant_id
+      personal_tenant_id: $personal_tenant_id
+    on_exit:
+      llm_respond:
+        template: kms_inventory_summary.md
+    transitions:
+      - to: done
+
+  - id: done

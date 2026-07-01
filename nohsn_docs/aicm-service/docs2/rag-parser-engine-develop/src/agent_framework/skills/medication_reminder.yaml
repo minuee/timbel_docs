@@ -1,0 +1,56 @@
+skill:
+  id: medication_reminder
+  version: "1.1"
+  domain: medical
+  description: "복약 알림 설정 (약명·시간·빈도)"
+
+availability:
+  scope: business_only
+  business_type: medical
+  visibility: opt-in
+
+triggers:
+  - intent: set_medication_reminder
+
+slots:
+  - name: medicine_name
+    type: text
+    required: true
+  - name: dose_time
+    type: datetime
+    required: true
+    must_be_specific: true
+  - name: frequency
+    type: enum
+    values: [1일1회, 1일2회, 1일3회, 1일4회, 주1회, 격일]
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: medication_reminder_greet_on_enter.md
+    transitions:
+      - when: has_intent(set_medication_reminder)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [medicine_name, dose_time, frequency]
+    transitions:
+      - when: slot_filled(frequency)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: medication_reminder_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

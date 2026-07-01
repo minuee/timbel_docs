@@ -1,0 +1,39 @@
+category: finance
+label: "금융"
+description: "보험·대출·투자·은행 SOP. 자본시장법·보험업법·신용정보법 준수."
+
+questions:
+  - id: fn_business_type
+    label: "금융 업무 유형은 무엇인가요?"
+    type: multiple_choice
+    options: ["보험 대리점", "대출 상담", "투자 자문", "은행·증권 지점", "기타"]
+    required: true
+    section: 페르소나
+
+  - id: fn_licensed_advisors
+    label: "자격 보유 상담사 (보험설계사·재무설계사·투자권유대행인 등) 가 있나요?"
+    type: text
+    example: "보험설계사 5명 / 재무설계사 1명 / 투자권유 자격 X"
+    required: true
+    section: 에스컬레이션
+
+  - id: fn_compliance_taboo
+    label: "절대 답변하면 안 되는 표현 — 권유성·단정성 표현 예시."
+    type: textarea
+    example: "수익 보장 / 원금 손실 없음 / 이 상품이 무조건 좋다 / 즉시 가입 권유"
+    required: true
+    section: 금지 사항
+
+  - id: fn_fraud_protocol
+    label: "보이스피싱 / 사기 의심 시 안내 프로토콜."
+    type: textarea
+    example: "즉시 송금 중단 → 112 / 1332 신고 → 매니저 즉시 연결"
+    required: true
+    section: 실패 응답 패턴
+
+  - id: fn_consultation_methods
+    label: "상담 가능 채널과 시간."
+    type: textarea
+    example: "방문 평일 9-18시 / 화상 상담 가능 / 주말 사전 예약"
+    required: true
+    section: 응대 시나리오

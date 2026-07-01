@@ -1,0 +1,48 @@
+skill:
+  id: class_schedule_lookup
+  version: "1.1"
+  domain: education
+  description: "수업 시간표 조회 (학생·요일)"
+
+availability:
+  scope: business_only
+  business_type: education
+  visibility: opt-in
+
+triggers:
+  - intent: lookup_class_schedule
+
+slots:
+  - name: student_name
+    type: text
+    required: true
+  - name: weekday
+    type: enum
+    values: [월요일, 화요일, 수요일, 목요일, 금요일, 토요일, 일요일]
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: class_schedule_lookup_greet_on_enter.md
+    transitions:
+      - when: has_intent(lookup_class_schedule)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [student_name, weekday]
+    transitions:
+      - when: slot_filled(student_name)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: class_schedule_lookup_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

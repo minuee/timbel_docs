@@ -1,0 +1,424 @@
+## 재검증 결과
+
+보강으로 **일부 핵심 결함은 실제로 개선**되었습니다. 특히 `chunks`를 DIRECT에서 JOIN 정책으로 옮긴 점, `init_db.py`와 `081` 모두에서 `chunks.repository_id -> repositories.tenant_id` 경로를 사용하게 한 점, 그리고 실제 Postgres에서 cross-tenant `INSERT` negative test를 추가한 점은 이전보다 확실히 좋아졌습니다.
+
+하지만 이전 `GO_WITH_CHANGES`의 merge-condition이 **완전히 해소되었다고 보기는 어렵습니다.** 특히 이번 보강 과정에서 발견된 `kms_app BYPASSRLS=true`는 별도 이슈로 미룰 수 없는 수준의 RLS 보안 문제입니다.
+
+최종 verdict는 아래와 같습니다.
+
+## Verdict: FAIL_WITH_NOTES
+
+이유는 명확합니다.
+
+> 실제 운영/app role이 `BYPASSRLS`를 가지고 있으면, 현재 추가된 RLS 정책과 behavioral test는 운영 보안성을 보장하지 못합니다.
+
+`rls_probe`라는 NOBYPASSRLS 테스트 전용 role로 정책 자체가 동작함을 확인한 것은 유용하지만, 실제 app이 사용하는 role이 RLS를 우회한다면 tenant isolation은 여전히 깨집니다.
+
+---
+
+# 항목별 평가
+
+## 1. `chunks` DIRECT → JOIN 재분류
+
+### 상태: 해결됨
+
+이 변경은 맞습니다.
+
+```python
+DIRECT_TENANT_TABLES = (
+    "repositories",
+    "search_logs",
+    "intent_logs",
+)
+
+JOIN_TENANT_TABLES = {
+    "sections": "documents",
+    "blocks": "documents",
+    "chunks": "repositories",
+    "categories": "repositories",
+}
+```
+
+`chunks`에 `tenant_id`가 없고 `repository_id`를 통해 `repositories.tenant_id`로 격리해야 하므로, 이전 결함의 핵심 원인은 잘 수정되었습니다.
+
+`init_db.py`도 동일하게 수정된 점은 좋습니다.
+
+---
+
+## 2. DB-level behavioral test 추가
+
+### 상태: 부분 해결
+
+추가된 테스트는 가치가 있습니다.
+
+검증하는 내용:
+
+- real `init_db.py` 경로 실행
+- 실제 throwaway Postgres DB 사용
+- NOBYPASSRLS role 사용
+- tenant A context에서 tenant A repo chunk insert 성공
+- tenant A context에서 tenant B repo chunk insert 실패
+
+이건 이전보다 큰 진전입니다.
+
+다만 이전 권장 시나리오 전체를 충족하지는 않습니다.
+
+아직 빠진 것:
+
+1. tenant B chunk `SELECT` 불가
+2. tenant A chunk를 tenant B repository로 `UPDATE` 실패
+3. tenant B tenant context에서 tenant A chunk `SELECT` 불가
+4. `RESET` 또는 GUC unset 상태에서 fail-closed 확인
+5. 실제 app role, 즉 `lucas_kms_app` 또는 현재 운영 role로 검증
+
+특히 5번이 치명적입니다.
+
+현재 테스트는 다음과 같은 의미입니다.
+
+> “정상적인 NOBYPASSRLS role로 실행하면 정책은 동작한다.”
+
+하지만 보안상 더 중요한 질문은 이것입니다.
+
+> “실제 앱이 사용하는 role로 실행해도 정책이 강제되는가?”
+
+이번 diff는 이 질문에 아직 “예”라고 답하지 못합니다.
+
+---
+
+## 3. `WITH CHECK` 검증
+
+### 상태: 부분 해결, 아직 부족
+
+cross-tenant `INSERT`가 RLS로 실패했다는 점은 `INSERT WITH CHECK`가 적어도 `init_db.py` 경로에서는 어느 정도 동작한다는 behavioral 증거입니다.
+
+하지만 이전 요청은 다음이었습니다.
+
+> `pg_policy.polwithcheck`를 조회해서 `chunks` INSERT/UPDATE 정책에 parent tenant EXISTS가 있는지 확인.
+
+이번 diff에는 `pg_policy.polwithcheck` catalog 검증이 없습니다.
+
+또한 behavioral test도 `INSERT`만 확인하고 `UPDATE`는 확인하지 않습니다. 따라서 다음 회귀는 아직 잡지 못합니다.
+
+- `INSERT WITH CHECK`는 있는데 `UPDATE WITH CHECK`가 없음
+- `UPDATE USING`은 있지만 `repository_id`를 다른 tenant repository로 바꾸는 것을 허용
+- `chunks` policy가 `USING`만 있고 `WITH CHECK`가 누락되어 특정 write 경로가 열림
+- alembic `081` 경로와 `init_db.py` 경로의 실제 policy expression 차이
+
+따라서 `WITH CHECK` 검증은 “일부 behavioral coverage 추가” 수준이지, 이전 merge-condition을 완전히 만족했다고 보기는 어렵습니다.
+
+권장 추가 검증:
+
+```sql
+SELECT
+  polname,
+  polcmd,
+  pg_get_expr(polqual, polrelid) AS using_expr,
+  pg_get_expr(polwithcheck, polrelid) AS check_expr
+FROM pg_policy
+WHERE polrelid = 'chunks'::regclass;
+```
+
+그리고 test에서 최소한 다음을 assert해야 합니다.
+
+- `chunks` INSERT policy의 `polwithcheck`가 NULL이 아님
+- `repositories` join 또는 `EXISTS`가 포함됨
+- `repository_id`가 parent join 조건에 포함됨
+- `current_setting('app.current_tenant_id'...)` 또는 동등 tenant context가 포함됨
+- UPDATE policy에도 동일한 `WITH CHECK`가 있음
+
+---
+
+## 4. 정적 테스트의 `if t in tables` 완화 제거
+
+### 상태: 해결됨
+
+이전의 silent skip 위험은 개선되었습니다.
+
+현재 테스트는 DIRECT/JOIN 분류에 있는 테이블이 metadata에 없거나 필요한 컬럼이 없으면 실패합니다.
+
+이 부분은 좋습니다.
+
+---
+
+## 5. JOIN FK target 검증
+
+### 상태: 거의 해결, 단 한 가지 보강 필요
+
+현재 테스트는 FK 대상 table name만 확인합니다.
+
+```python
+targets = {
+    f.column.table.name for f in tables[t].columns[fk].foreign_keys
+}
+if parent not in targets:
+    ...
+```
+
+이전 권고는 더 구체적으로 다음이었습니다.
+
+- `chunks.repository_id -> repositories.id`
+- `categories.repository_id -> repositories.id`
+- `sections.document_id -> documents.id`
+- `blocks.document_id -> documents.id`
+
+즉, parent table뿐 아니라 target column이 `id`인지도 확인해야 합니다.
+
+현재 검증은 `chunks.repository_id -> repositories.some_other_column`이어도 통과할 수 있습니다.
+
+권장 수정:
+
+```python
+targets = {
+    f"{f.column.table.name}.{f.column.name}"
+    for f in tables[t].columns[fk].foreign_keys
+}
+expected = f"{parent}.id"
+assert expected in targets
+```
+
+이건 보안 치명도는 낮지만, 이전 요청을 정확히 만족하려면 보강해야 합니다.
+
+---
+
+## 6. `owner_agent_id` 속성 검증
+
+### 상태: 해결됨
+
+다음 항목을 테스트에 추가한 것은 좋습니다.
+
+- column 존재
+- UUID 타입
+- nullable true
+- FK target `agents`
+- `ondelete="SET NULL"`
+
+모델에도 실제 컬럼을 추가했고, fresh `create_all` 경로에서 `owner_agent_id` 누락으로 RLS 적용이 깨지는 문제도 해결될 가능성이 높습니다.
+
+다만 FK target도 table뿐 아니라 `agents.id`까지 확인하면 더 좋습니다.
+
+현재:
+
+```python
+assert fks[0].column.table.name == "agents"
+```
+
+권장:
+
+```python
+assert fks[0].target_fullname == "agents.id"
+```
+
+---
+
+## 7. 072 index parity
+
+### 상태: 대체로 해결됨
+
+`Document.__table_args__`에 072의 index를 반영한 것은 좋습니다.
+
+다만 이번 테스트 diff에는 index parity 자체를 assert하는 테스트는 보이지 않습니다. 모델에 추가했으므로 실질 개선은 되었지만, 회귀 방지를 위해서는 index 이름과 column set, partial predicate까지 확인하는 정적 테스트가 있으면 더 좋습니다.
+
+보안 필수는 아니므로 blocker는 아닙니다.
+
+---
+
+## 8. `init_db.py`와 alembic `081` 분류 중복
+
+### 상태: 미해결
+
+이번에 두 파일을 수동으로 모두 수정한 것은 맞지만, drift 방지는 아직 없습니다.
+
+특히 테스트 docstring에는 다음처럼 적혀 있습니다.
+
+> `init_db._apply_rls_policies`의 로컬 분류도 081과 동일해야 함
+
+하지만 실제 테스트는 `081` module만 로드합니다. `init_db.py`의 로컬 변수는 함수 내부 local이라 테스트에서 비교하지 않습니다.
+
+즉, 현재 테스트는 다음을 보장하지 않습니다.
+
+- `init_db.py`의 DIRECT/JOIN 분류와 `081`의 DIRECT/JOIN 분류가 계속 동일한지
+- future change에서 한쪽만 수정되는 drift를 잡는지
+
+이전 권고 중 “shared constant module로 추출하거나 equality test”는 아직 미해결입니다.
+
+다만 이번 diff에서 양쪽이 실제로 맞게 수정되었으므로, 즉시 치명적 결함은 아닙니다. 그러나 장기 회귀 방지 측면에서는 여전히 남아 있습니다.
+
+---
+
+# 가장 큰 미해결: app role BYPASSRLS
+
+## 상태: 미해결, 보안상 blocker
+
+이번 보강 설명에 다음이 있습니다.
+
+> 중요 발견: 운영 역할 `kms_app`은 `rolbypassrls=true`라 RLS 우회 — 정책 enforcement 검증은 NOBYPASSRLS 역할로 수행. (`kms_app BYPASSRLS`는 별도 이슈로 보고 예정.)
+
+이건 별도 이슈로 미룰 수 없습니다.
+
+RLS 기반 tenant isolation fix의 핵심 전제는 다음입니다.
+
+1. 실제 app role이 `BYPASSRLS`가 아니어야 함
+2. 실제 app role이 table owner가 아니어야 함
+3. table에 RLS가 enabled 되어야 함
+4. 가능하면 `FORCE ROW LEVEL SECURITY`가 설정되어야 함
+5. app role로 실제 query를 날렸을 때 cross-tenant 접근이 차단되어야 함
+
+현재 behavioral test는 `rls_probe`라는 별도 role을 만들어서 검증합니다.
+
+```sql
+CREATE ROLE rls_probe NOLOGIN NOBYPASSRLS;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO rls_probe;
+SET ROLE rls_probe;
+```
+
+이 테스트는 정책 expression 자체가 동작하는지 확인하는 데는 유용하지만, 운영 app role의 안전성을 검증하지 않습니다.
+
+만약 실제 운영 connection이 `kms_app`으로 붙고 `kms_app.rolbypassrls=true`라면:
+
+- `ENABLE ROW LEVEL SECURITY` 무력화
+- `FORCE ROW LEVEL SECURITY`도 BYPASSRLS role에는 방어가 안 됨
+- `WITH CHECK`도 무력화
+- 이번에 추가한 `chunks` policy도 실 운영에서는 enforcement되지 않음
+
+따라서 이 상태에서는 PASS를 줄 수 없습니다.
+
+---
+
+# 반드시 추가되어야 하는 최소 검증
+
+## A. 실제 app role의 BYPASSRLS 검증
+
+예:
+
+```sql
+SELECT rolname, rolbypassrls
+FROM pg_roles
+WHERE rolname IN ('lucas_kms_app', 'kms_app');
+```
+
+테스트 assert:
+
+```python
+assert roles["lucas_kms_app"].rolbypassrls is False
+```
+
+그리고 실제로 앱이 아직 `kms_app`을 사용한다면:
+
+```python
+assert roles["kms_app"].rolbypassrls is False
+```
+
+또는 `kms_app`이 정말 deprecated라면:
+
+- app config가 `lucas_kms_app`을 사용함을 검증
+- `kms_app`에 DML grant가 없음을 검증
+- `kms_app`으로는 application access가 불가능함을 검증
+
+## B. table owner 검증
+
+```sql
+SELECT
+  c.relname,
+  pg_get_userbyid(c.relowner) AS owner,
+  c.relrowsecurity,
+  c.relforcerowsecurity
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relname IN ('chunks', 'repositories', 'documents', 'sections', 'blocks', 'categories');
+```
+
+assert:
+
+- `relrowsecurity = true`
+- `relforcerowsecurity = true`
+- owner가 app role이 아님
+- owner는 migration/DDL role이어야 함
+
+## C. 실제 app role로 behavioral test 실행
+
+현재 `rls_probe` test는 유지해도 좋지만, 다음이 반드시 추가되어야 합니다.
+
+```sql
+SET ROLE lucas_kms_app;
+SET app.current_tenant_id = '<tenant A>';
+```
+
+그리고:
+
+1. tenant A repository로 chunk insert 성공
+2. tenant B repository로 chunk insert 실패
+3. tenant B chunk select 불가
+4. tenant A chunk를 tenant B repository로 update 실패
+5. tenant B context에서 tenant A chunk select 불가
+6. GUC unset 또는 invalid 상태에서 fail-closed
+
+## D. `pg_policy.polwithcheck` catalog 검증
+
+특히 `chunks`에 대해:
+
+```sql
+SELECT
+  polname,
+  polcmd,
+  pg_get_expr(polqual, polrelid) AS using_expr,
+  pg_get_expr(polwithcheck, polrelid) AS check_expr
+FROM pg_policy
+WHERE polrelid = 'chunks'::regclass;
+```
+
+확인해야 할 것:
+
+- INSERT policy에 `WITH CHECK` 존재
+- UPDATE policy에 `WITH CHECK` 존재
+- `repositories` parent join 사용
+- `chunks.repository_id = repositories.id` 조건 존재
+- `repositories.tenant_id`와 `app.current_tenant_id` 비교 존재
+
+---
+
+# migration 운영 관점
+
+`081` in-place 수정이 안전하다는 설명은 이해했습니다.
+
+> staging alembic_version 비어있음 + chunks RLS 정책 부재 → 081은 어디에도 적용된 적 없음
+
+다만 리뷰 관점에서는 이것은 코드 diff만으로 검증하기 어렵습니다. 실제로 모든 운영/스테이징/고객 DB에 대해 inventory가 완료되었다는 release note나 migration decision record가 있어야 합니다.
+
+조건부로는 수용 가능합니다.
+
+- 정말 아무 환경에도 `081`이 성공 적용된 적 없다면 in-place 수정 가능
+- 하나라도 적용된 환경이 있다면 신규 `083` 필요
+
+이 항목은 현재 단독 blocker로 보지는 않지만, 배포 체크리스트에는 남겨야 합니다.
+
+---
+
+# 결론
+
+이번 보강은 이전보다 확실히 좋아졌습니다.
+
+해결된 부분:
+
+- `chunks`를 JOIN tenant policy로 재분류
+- `init_db.py`와 `081` 둘 다 수정
+- metadata skip 완화 제거
+- 기본 FK 분류 검증 추가
+- `owner_agent_id` 모델 drift 해소
+- 실제 Postgres behavioral INSERT negative test 추가
+
+하지만 아직 미해결인 핵심 blocker가 있습니다.
+
+가장 중요한 미해결:
+
+1. 실제 운영/app role인 `kms_app`이 `BYPASSRLS=true`라는 사실
+2. behavioral test가 실제 app role이 아니라 `rls_probe` 전용 role로만 수행됨
+3. `WITH CHECK` catalog 검증이 없음
+4. UPDATE/SELECT/fail-closed behavioral coverage가 없음
+5. RLS enabled/FORCE/table owner/grants 검증이 없음
+
+따라서 이번 상태는 보안-sensitive multi-tenant RLS fix로는 아직 merge-safe하지 않습니다.
+
+## Final Verdict: FAIL_WITH_NOTES
+
+`rls_probe`로 정책이 동작한다는 점은 확인됐지만, 실제 app role이 RLS를 우회할 수 있는 상태라면 tenant isolation 보장이 성립하지 않습니다. `kms_app BYPASSRLS`를 제거하거나 실제 app role이 `lucas_kms_app NOBYPASSRLS`로만 동작함을 코드/설정/DB-level test로 증명한 뒤 재검토해야 합니다.

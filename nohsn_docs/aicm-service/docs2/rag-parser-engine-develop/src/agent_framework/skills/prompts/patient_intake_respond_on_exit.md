@@ -1,0 +1,1 @@
+{patient_name}({birth_date})님 — 주증상 '{chief_complaint}' 접수되었습니다.

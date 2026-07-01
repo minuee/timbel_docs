@@ -1,0 +1,69 @@
+# converted from yaml/leave_application.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: leave_application
+  version: '1.1'
+  domain: general
+  description: 휴가 신청 — 연차·반차·경조사 사유·기간 입력. 결재 라인 안내.
+availability:
+  scope: all
+  visibility: auto
+triggers:
+- intent: leave_application
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+- name: period
+  type: text
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: HR 부서 3년차 직원. 휴가 관리 전문가.
+
+        톤: 친절·존댓말. 사용자 불안 해소하는 간결한 문장.
+
+        스킬 설명: 휴가 신청 — 연차·반차·경조사 사유·기간 입력. 결재 라인 안내.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  - period
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2) and slot_filled(period)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: 휴가 신청 절차 및 결재 라인 안내
+    phone: $phone
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: HR 부서 3년차 직원. 휴가 관리 전문가.
+
+        톤: 친절·존댓말. 사용자 불안 해소하는 간결한 문장.
+
+        스킬: 휴가 신청 — 연차·반차·경조사 사유·기간 입력. 결재 라인 안내.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '신청하신 {휴가 종류}에 대한 정보입니다: {kms_search_result}'
+  transitions:
+  - to: done
+- id: done

@@ -1,0 +1,87 @@
+{
+  "id": "trello.create_card",
+  "name": "trello.create_card",
+  "display_name": "Trello 카드 생성",
+  "description": "Trello REST API 로 지정한 리스트에 카드를 생성합니다. API Key 와 Token 을 쿼리 파라미터로 전달합니다.",
+  "category": "협업/CRM",
+  "vendor": "Trello",
+  "vendor_url": "https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-post",
+  "endpoint_url": "https://api.trello.com/1/cards",
+  "method": "POST",
+  "auth_headers": {
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["key", "token", "idList", "name"],
+    "properties": {
+      "key": {
+        "type": "string",
+        "description": "Trello API Key (https://trello.com/app-key 에서 발급)"
+      },
+      "token": {
+        "type": "string",
+        "description": "Trello OAuth Token (API Key 페이지 하단 'Generate a Token' 링크)"
+      },
+      "idList": {
+        "type": "string",
+        "description": "카드를 추가할 리스트 ID (리스트 URL 또는 GET /boards/{id}/lists 로 조회)"
+      },
+      "name": {
+        "type": "string",
+        "description": "카드 이름 (제목)",
+        "maxLength": 16384
+      },
+      "desc": {
+        "type": "string",
+        "description": "카드 설명 (마크다운 지원, 옵션)"
+      },
+      "due": {
+        "type": "string",
+        "description": "마감일 (ISO 8601 형식, 예: 2026-05-10T09:00:00.000Z, 옵션)"
+      },
+      "pos": {
+        "type": "string",
+        "default": "bottom",
+        "enum": ["top", "bottom"],
+        "description": "리스트 내 카드 위치"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "생성된 Trello 카드 객체 ({\"id\": \"...\", \"name\": \"...\", \"url\": \"https://trello.com/c/...\"})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "static_secret_token",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "key + token 이 query string 으로 전송됨 — URL 로그에 노출됨. Header 방식 (Authorization: 'OAuth oauth_consumer_key=...') 도 지원 — 운영에서는 OAuth 1.0 이 더 안전."
+  },
+  "operational_notes": {
+    "rate_limit": "API key 당 100 req / 10 sec, token 당 300 req / 10 sec",
+    "retry_semantics": "429 시 Retry-After 준수, 5xx 지수 백오프",
+    "response_sla_sec": null,
+    "cost_label": "free (Trello free 플랜 포함)",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://trello.com/app-key 에서 'API Key' 복사",
+    "2. 같은 페이지 하단 'You can manually generate a Token' 링크 클릭 → 권한 허용 → Token 복사",
+    "3. 카드를 추가할 보드/리스트 열기 → URL 에서 보드 ID 확인 (trello.com/b/<BOARD_ID>/...)",
+    "4. 리스트 ID 조회: GET https://api.trello.com/1/boards/<BOARD_ID>/lists?key=<KEY>&token=<TOKEN>",
+    "5. input_schema 의 key, token, idList 를 위에서 얻은 값으로 고정하거나 런타임 입력으로 구성",
+    "6. 무료 플랜에서도 REST API 전체 기능 사용 가능 — 별도 결제 불필요",
+    "7. 보안: key + token 은 KMS / config_encrypted. URL 로그 마스킹 필수 (key/token 파라미터). 운영 환경에서는 OAuth 1.0 헤더 방식 고려."
+  ]
+}

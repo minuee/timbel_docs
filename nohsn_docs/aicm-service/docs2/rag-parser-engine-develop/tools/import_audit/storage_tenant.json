@@ -1,0 +1,52 @@
+{
+  "qdrant_collection": {},
+  "es_index": {},
+  "minio_bucket": {},
+  "redis_key": {
+    ") or 0)\n                tokens = int(await redis.get(f": [
+      "src/api/services/metrics_collector.py",
+      "src/src/api/services/metrics_collector.py",
+      "src/src/src/api/services/metrics_collector.py",
+      "src/src/src/src/api/services/metrics_collector.py"
+    ],
+    ") or 0\n                )\n                errors = int(await redis.get(f": [
+      "src/api/services/metrics_collector.py",
+      "src/src/api/services/metrics_collector.py",
+      "src/src/src/api/services/metrics_collector.py",
+      "src/src/src/src/api/services/metrics_collector.py"
+    ],
+    ") or 0)\n            result[": [
+      "src/api/services/metrics_collector.py",
+      "src/src/api/services/metrics_collector.py",
+      "src/src/src/api/services/metrics_collector.py",
+      "src/src/src/src/api/services/metrics_collector.py"
+    ],
+    ")\n        if redis is None:\n            return ConflictResult(False, ToolOutcome.OK, ": [
+      "src/agent_framework/runtime/conflict_checks.py"
+    ],
+    ")\n        log.info(": [
+      "src/src/src/src/integration/api_gateway/api_key_manager.py",
+      "src/src/src/integration/api_gateway/api_key_manager.py",
+      "src/src/integration/api_gateway/api_key_manager.py",
+      "src/integration/api_gateway/api_key_manager.py"
+    ]
+  },
+  "kafka_topic": {
+    "aicm.document.blocked": [
+      "src/api/routers/notes.py",
+      "src/api/routers/blocks.py",
+      "src/src/api/routers/notes.py",
+      "src/src/api/routers/blocks.py",
+      "src/src/src/api/routers/notes.py",
+      "src/src/src/api/routers/blocks.py",
+      "src/src/src/src/api/routers/notes.py",
+      "src/src/src/src/api/routers/blocks.py"
+    ],
+    "aicm.document.uploaded": [
+      "src/api/routers/blocks.py",
+      "src/src/api/routers/blocks.py",
+      "src/src/src/api/routers/blocks.py",
+      "src/src/src/src/api/routers/blocks.py"
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+skill:
+  id: loan_inquiry
+  version: "1.1"
+  domain: finance
+  description: "대출 상품 안내 (목적·희망금액 기반 추천)"
+
+availability:
+  scope: business_only
+  business_type: finance
+  visibility: opt-in
+
+triggers:
+  - intent: inquire_loan
+
+slots:
+  - name: loan_purpose
+    type: enum
+    values: [주택, 전세, 사업자금, 생활자금, 자동차, 기타]
+    required: true
+  - name: loan_amount
+    type: number
+    required: true
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: loan_inquiry_greet_on_enter.md
+    transitions:
+      - when: has_intent(inquire_loan)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [loan_purpose, loan_amount]
+    transitions:
+      - when: slot_filled(loan_amount)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: loan_inquiry_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

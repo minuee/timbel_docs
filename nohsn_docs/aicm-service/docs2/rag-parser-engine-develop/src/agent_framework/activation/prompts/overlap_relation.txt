@@ -1,0 +1,23 @@
+역할: 지식관리자. 신규 문서 요약과 기존 문서 1건을 비교해 관계를 판정.
+
+출력(JSON):
+{
+  "relation": "duplicate" | "supersedes_existing" | "superseded_by_existing"
+              | "conflicts" | "complementary" | "unrelated",
+  "confidence": 0.0~1.0,
+  "evidence": "한 문장 근거 (한국어)"
+}
+
+판정 기준:
+- duplicate: 같은 정보가 다른 표현으로 90% 이상 중첩
+- supersedes_existing: 신규가 더 최신이거나 정확 — 시간성·범위·정확도 중 하나 이상 우위
+- superseded_by_existing: 기존이 오히려 더 정확·완전
+- conflicts: 동일 주제 반대 사실 — 진위 판단 필요
+- complementary: 기존을 확장/보완하는 새 정보
+- unrelated: 주제·대상이 다름
+
+--- 입력 ---
+신규 요약: {new_summary}
+기존 제목: {peer_title}
+기존 발췌: {peer_snippet}
+시간 힌트: {temporal_hint}

@@ -1,0 +1,166 @@
+[project]
+name = "aicm"
+version = "0.8.0"
+description = "AI Content Manager — 산업 무관 범용 지식관리 플랫폼"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+
+dependencies = [
+    # Web Framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.9",
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+    "alembic>=1.13.0",
+
+    # Vector Store
+    "qdrant-client>=1.12.0,<1.13.0",
+
+    # Elasticsearch (서버가 8.x 이므로 SDK 도 8.x 로 pin; 9.x 는 media-type 거절)
+    "elasticsearch[async]>=8.15.0,<9",
+
+    # Kafka
+    "aiokafka>=0.11.0",
+
+    # Redis
+    "redis[hiredis]>=5.0.0",
+
+    # Embedding & Reranking — GPU 환경에서는 [ml] extras로 설치
+    # "FlagEmbedding>=1.2.0",
+    # "torch>=2.2.0",
+    # "transformers>=4.44.0",
+    # "sentence-transformers>=3.0.0",
+
+    # Document Parsing
+    "pdfplumber>=0.11.0",         # PDF 텍스트+표+좌표 (chunk_service 검증 완료)
+    "pypdfium2>=5.1.0",           # PDF 보조 처리
+    "pdfminer.six>=20231228",     # PDF 텍스트 마이닝
+    "python-docx>=1.1.0",         # DOCX 보조 파싱
+    "python-pptx>=1.0.0",         # PPTX 파싱
+    "openpyxl>=3.1.0",            # XLSX
+    "beautifulsoup4>=4.12.0",     # HTML
+    "lxml>=5.0.0",
+
+    # OCR — PaddleOCR는 GPU 환경에서만 설치 (optional-dependencies.ocr 참조)
+    "Pillow>=10.0.0",
+
+    # Korean NLP
+    "kss>=6.0.0",                 # 한국어 문장 분리
+    "konlpy>=0.6.0",              # 형태소 분석
+
+    # LLM Clients
+    "openai>=1.40.0",                 # vLLM OpenAI-compatible client (Gemma 4)
+
+    # Templating (agent_framework response prompts)
+    "jinja2>=3.1.4",                  # CVE-2024-22195/34064 영향 이하 버전 제외
+
+    # Scheduler (agent_framework scheduled triggers — Task 19)
+    "APScheduler>=3.10",
+
+    # RSS / News (agent_framework NewsWorker — E코스)
+    "feedparser>=6.0.10",
+
+    # 한국 주식 데이터·분석 (agent_framework stock_data / stock_analyze)
+    # pykrx 의 ticker_list 엔드포인트가 종종 빈 응답 — finance-datareader 가 fallback.
+    # stockstats — 기술적 지표 (RSI/MACD/Bollinger). pandas-ta 는 Python 3.12+ 요구.
+    # OpenDartReader — DART 전자공시 (DART_API_KEY env 시 활성).
+    "pykrx>=1.0.45",
+    "finance-datareader>=0.9.50",
+    "stockstats>=0.6.0",
+    "OpenDartReader>=0.2.0",
+
+    # Object Storage
+    "minio>=7.2.0",
+
+    # Presentation
+    "python-pptx>=1.0.0",
+
+    # Utilities
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "structlog>=24.1.0",
+    "httpx>=0.27.0",
+    "prometheus-client>=0.20.0",
+    "python-jose[cryptography]>=3.3.0",  # JWT
+    "passlib[bcrypt]>=1.7.4",
+    "pyotp>=2.9.0",                       # TOTP 2FA
+    "qrcode[pil]>=7.4.0",                # QR 코드 생성
+    "tiktoken>=0.7.0",            # 토큰 카운팅
+    "minio>=7.2.0",               # MinIO/S3 오브젝트 스토리지
+    "docker>=7.0.0",              # 개발용 관리 API가 컨테이너 재시작에 사용
+
+    # Phase 13: rate limiting (분당 30 chat / 60 default)
+    "slowapi>=0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "httpx>=0.27.0",
+    "testcontainers>=4.0.0",
+    "factory-boy>=3.3.0",
+    "black>=24.0.0",
+    "ruff>=0.5.0",
+    "isort>=5.13.0",
+    "mypy>=1.10.0",
+    "locust>=2.20.0",
+]
+ml = [
+    "FlagEmbedding>=1.2.0",
+    "torch>=2.2.0",
+    "transformers>=4.44.0",
+    "sentence-transformers>=3.0.0",
+]
+ocr = [
+    "paddlepaddle-gpu>=3.0.0",
+    "paddleocr>=3.0.0",
+    "paddlex>=3.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+markers = [
+    "regression: live regression scenarios — needs running API + seed accounts (KMS-Plus PR P9)",
+    "requires_db: integration test requiring live PostgreSQL (uses DATABASE_URL env)",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+# ---------------------------------------------------------------------------
+# uv workspace (Phase 3 v0.1) — packages/ 하위 패키지 정의.
+# 본격 src/ → packages/ 이동은 v0.2 별도 release branch.
+# ---------------------------------------------------------------------------
+[tool.uv.workspace]
+members = ["packages/lucas-shared"]
+

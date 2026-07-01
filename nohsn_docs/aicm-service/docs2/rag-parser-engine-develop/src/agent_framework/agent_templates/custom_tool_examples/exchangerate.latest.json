@@ -1,0 +1,58 @@
+{
+  "id": "exchangerate.latest",
+  "name": "exchangerate.latest",
+  "display_name": "환율 조회 (ExchangeRate API)",
+  "description": "ExchangeRate-API 의 최신 환율을 조회합니다. 기준 통화(base) 대비 전 세계 160+ 통화의 환율을 반환합니다. 무료 티어: 월 1,500건. API 키는 URL 에 포함됩니다.",
+  "category": "정보/검색",
+  "vendor": "ExchangeRate-API",
+  "vendor_url": "https://www.exchangerate-api.com/docs/standard-requests",
+  "endpoint_url": "https://v6.exchangerate-api.com/v6/<YOUR_API_KEY>/latest/USD",
+  "method": "GET",
+  "auth_headers": {},
+  "input_schema": {
+    "type": "object",
+    "required": [],
+    "properties": {
+      "_note": {
+        "type": "string",
+        "description": "이 API 는 GET 파라미터 없이 endpoint_url 만으로 호출됩니다. 기준 통화를 변경하려면 URL 의 'USD' 부분을 원하는 통화 코드(예: KRW, EUR, JPY)로 교체하세요."
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "ExchangeRate-API 응답 ({\"result\": \"success\", \"base_code\": \"USD\", \"conversion_rates\": {\"KRW\": 1350.5, \"JPY\": 149.3, ...}})"
+  },
+  "risk_metadata": {
+    "side_effect": "read",
+    "scope": "any",
+    "requires_sender_tier": "member",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound_query",
+    "signature_method": "secret_in_url",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "API 키가 URL path 에 포함됨 — referer 헤더·로그·CDN 캐시 등에 노출 가능. 노출 시 대시보드에서 즉시 재생성."
+  },
+  "operational_notes": {
+    "rate_limit": "Free 티어: 월 1,500 req, 갱신 24h",
+    "retry_semantics": "5xx 지수 백오프",
+    "response_sla_sec": null,
+    "cost_label": "free → 유료 ($10/월~ Pro)",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://www.exchangerate-api.com 에서 'Get Free Key' 클릭",
+    "2. 이메일 입력 후 무료 계정 생성 → 이메일 인증",
+    "3. 대시보드에서 API Key 복사",
+    "4. endpoint_url 의 <YOUR_API_KEY> 를 발급받은 키로 교체",
+    "5. 기준 통화 변경: URL 마지막 'USD' 를 원하는 코드로 변경 (예: KRW, EUR, JPY, CNY)",
+    "6. 무료 티어: 월 1,500건, 갱신 주기 24시간 — 실시간 필요 시 유료 플랜 업그레이드",
+    "7. 보안: API 키가 URL path 에 포함되므로 reverse proxy 캐시·로그 정책에서 마스킹 필요. config_encrypted 저장."
+  ]
+}

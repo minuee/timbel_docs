@@ -1,0 +1,72 @@
+skill:
+  id: stock_analyze_personal
+  version: "0.1"
+  domain: personal
+  description: "주식 종목 종합 분석 — 시세·기술적 지표·추세·공시·뉴스 톤. 사실 정리만."
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: stock_analyze
+
+role:
+  persona: "주식 정보 정리 도우미. 객관적 사실·신호만 진술."
+  tone: "간결한 존댓말. 추측·매수·매도 권고 절대 금지."
+  knowledge_scope:
+    - 시세
+    - 기술적 지표
+    - 변동성
+    - 추세
+    - 공시
+    - 뉴스 톤
+  safety_constraints:
+    - "매수 매도 권고 금지"
+    - "수익 보장 단언 금지"
+    - "특정 종목에 대한 평가성 단정 금지"
+    - "모든 응답에 투자 자문이 아닙니다 면책 1줄 포함"
+
+trigger_examples:
+  - "삼성전자 내일 전망 어때"
+  - "카카오 분석해줘"
+  - "현대차 흐름 봐줘"
+  - "005930 종합 분석"
+  - "SK하이닉스 RSI 어때"
+  - "LG에너지솔루션 최근 공시 있어?"
+
+slots:
+  - name: symbol
+    type: text
+    required: true
+
+initial_state: greet
+states:
+  - id: greet
+    transitions:
+      - when: has_intent(stock_analyze)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [symbol]
+    transitions:
+      - when: slot_filled(symbol)
+        to: do_tool
+      - llm_fallback: true
+
+  - id: do_tool
+    tool: stock.analyze
+    tool_args:
+      symbol: $symbol
+      # 첫 호출 시 KR-FinBert 다운로드 (~400MB) 가 무거움 — 기본 false.
+      # 필요 시 사용자가 "뉴스 톤도 봐줘" 발화로 별도 요청.
+      include_news: false
+      include_disclosures: true
+    on_exit:
+      llm_respond:
+        template: stock_analyze_answer.md
+    transitions:
+      - to: done
+
+  - id: done

@@ -1,0 +1,57 @@
+# schedule_analyzer — 일정 데이터 분석가
+# Wave Insight (cross-domain) 의 sub-skill. 단독 호출도 가능.
+# tenant_scope=['personal','*'] persona_required=['any'] role_min=viewer
+
+name: schedule_analyzer
+description: 일정 데이터 기간별 카테고리 분류·시간 분포·인사이트 분석. 회의/식사/운동/병원 같은 카테고리 비중과 시간대 패턴 도출.
+side_effect_level: read_only
+consequential: false
+# PR-A — 일정 도메인은 KMS RAG 검색 불필요. tool 호출 (personal_data.get_schedules) 가 사실 출처.
+retrieval: tool
+
+role:
+  persona: "데이터 분석가. 일정 흐름을 객관적 시각으로 정리."
+  tone: "차분하고 정확. 통계 + 1~2개 인사이트. 단정 X."
+  knowledge_scope:
+    - personal_schedule
+    - time_management
+  safety_constraints:
+    - "추측한 일정 카테고리는 '추정' 명시"
+    - "일정 비공개 영역(개인 노트) 추측 금지"
+  tenant_scope:
+    - personal
+    - "*"
+  persona_required:
+    - any
+  role_min: viewer
+
+trigger_examples:
+  - "이번 달 일정 어땠어"
+  - "3월 일정 분석해줘"
+  - "내가 시간 어디다 썼어"
+  - "지난주 미팅 비중 어땠어"
+  - "한 달 일정 패턴 보여줘"
+
+process:
+  steps:
+    - kind: elicit
+      config:
+        slots: [period_start, period_end]
+        question: "분석할 기간을 알려주세요 (예: 3월 / 2026-03-01~03-31)"
+    - kind: run
+      config:
+        tool: personal_data.get_schedules
+        args:
+          period_start: "{period_start}"
+          period_end: "{period_end}"
+    - kind: render
+      config:
+        template: |
+          [{period_start} ~ {period_end}] 일정 분석
+          - 카테고리 분포: {tool_result}
+          ※ 의미 있는 패턴은 lifestyle_pattern_analyzer 와 결합해 보면 더 잘 보입니다.
+        polish: true
+
+tools:
+  - name: personal_data.get_schedules
+    internal: true

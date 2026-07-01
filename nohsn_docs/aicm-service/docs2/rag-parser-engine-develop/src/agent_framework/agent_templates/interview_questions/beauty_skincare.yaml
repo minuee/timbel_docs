@@ -1,0 +1,45 @@
+category: beauty_skincare
+label: "뷰티 & 스킨케어"
+description: "화장품 매장·스킨케어 클리닉·스파·에스테틱 SOP."
+
+questions:
+  - id: bs_service_type
+    label: "주요 서비스 유형은요?"
+    type: multiple_select
+    options:
+      - "화장품 판매"
+      - "피부관리·페이셜"
+      - "왁싱·제모"
+      - "메이크업"
+      - "의료 시술 (의사 동반)"
+      - "스파·마사지"
+    required: true
+    section: 페르소나
+
+  - id: bs_skin_type_consultation
+    label: "피부 타입 / 사전 상담 절차?"
+    type: textarea
+    example: "초진 무료 피부 진단 / 피부 타입 4분류 / 알레르기·임신 사전 고지 필수"
+    required: true
+    section: 응대 시나리오
+
+  - id: bs_package_pricing
+    label: "패키지 / 멤버십 / 회원권 가격 구조?"
+    type: textarea
+    example: "단품 1회 / 5회 패키지 (10% 할인) / VIP 멤버 20% 적립"
+    required: true
+    section: 응대 시나리오
+
+  - id: bs_side_effect_protocol
+    label: "시술 부작용·알레르기 발생 시 대응 프로토콜."
+    type: textarea
+    example: "즉시 시술 중단 + 의료진 안내 / 응급 시 119 / 사진·영수증 보관"
+    required: true
+    section: 에스컬레이션
+
+  - id: bs_medical_disclaimer
+    label: "의료적 표현 금지 정책 (광고 표현)."
+    type: textarea
+    example: "100% 효과 / 절대 부작용 없음 / 즉시 효과 등 사용 금지"
+    required: true
+    section: 금지 사항

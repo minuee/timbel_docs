@@ -1,0 +1,44 @@
+category: health_medical
+label: "건강 & 의료"
+description: "병원·의원·약국 SOP 인터뷰. 의료법·개인정보보호법 준수 항목 포함."
+
+questions:
+  - id: hm_specialty
+    label: "진료 과목 / 전문 분야는요?"
+    type: text
+    example: "내과·소아과 / 정형외과·재활의학 / 피부과·미용성형"
+    required: true
+    section: 페르소나
+
+  - id: hm_emergency_keywords
+    label: "응급 의심 키워드 — 즉시 119 안내해야 할 증상 목록."
+    type: textarea
+    example: "의식 잃음 / 호흡 곤란 / 심한 가슴 통증 / 다량 출혈 / 경련"
+    required: true
+    section: 에스컬레이션
+
+  - id: hm_non_covered_pricing
+    label: "비급여 항목 / 가격 공개 정책 (의료법 의무)."
+    type: textarea
+    example: "도수치료 회당 8만원 / 비타민주사 5만원 / 가격 변동은 분기별 공지"
+    required: true
+    section: 응대 시나리오
+
+  - id: hm_prescription_policy
+    label: "처방전·진단서·진료기록 발급 정책 (본인 확인 절차)."
+    type: textarea
+    example: "본인·법정대리인 신분증 지참 후 원무과. 우편 발급은 등기 + 인감증명"
+    required: true
+    section: 금지 사항
+
+  - id: hm_appointment_channels
+    label: "예약 채널은 무엇이 있나요?"
+    type: multiple_select
+    options:
+      - "카카오톡 채팅"
+      - "전화"
+      - "네이버 예약"
+      - "병원 자체 앱·홈페이지"
+      - "방문 접수"
+    required: true
+    section: 응대 시나리오

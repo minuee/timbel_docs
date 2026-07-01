@@ -1,0 +1,59 @@
+# 지식 — 문서 저장소 + 인덱싱된 지식 검색.
+id: knowledge
+label: 지식
+icon: library
+status: active
+sort_order: 50
+
+# 노출 그룹 — 지식은 모든 그룹이 활용.
+available_for_groups: [personal, company, business, sole_proprietor]
+
+list_endpoint: /api/v1/documents
+summary_endpoint: /api/v1/stats/summary
+detail_endpoint: /api/v1/documents/{id}
+
+list_columns:
+  - {key: created_at, label: 등록일, format: datetime}
+  - {key: title, label: 제목, format: text}
+  - {key: repository, label: 저장소, format: badge}
+  - {key: category, label: 카테고리, format: badge}
+  - {key: status, label: 상태, format: badge}
+
+summary_widgets:
+  - type: stat
+    label: 총 문서 수
+    key: total_documents
+    format: number
+  - type: stat
+    label: 총 청크 수
+    key: total_chunks
+    format: number
+  - type: chart
+    label: 저장소별 분포
+    key: by_repository
+    kind: bar
+  - type: chart
+    label: 카테고리별 분포
+    key: by_category
+    kind: pie
+
+quick_actions:
+  - id: search_knowledge
+    label: 지식 검색
+    method: POST
+    endpoint: /api/v1/search
+    form_schema:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string, title: 검색어}
+        top_k: {type: integer, title: 결과 수, default: 10, minimum: 1, maximum: 50}
+
+chat_intents:
+  - document_search
+  - kms_inventory_summary
+  - kms_meta_query
+  - faq_quick_answer
+  - recent_uploads
+
+card_renderer: KnowledgeSummaryCard

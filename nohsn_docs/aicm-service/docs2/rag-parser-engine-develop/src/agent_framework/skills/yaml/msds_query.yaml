@@ -1,0 +1,76 @@
+# msds_query — 제조 (safety_officer)
+# 자동 생성: scripts/personas/generate_skill_library.py (GPT gpt-4o-mini)
+# tenant_scope=['factory', 'manufacturing', 'lab'] persona_required=['safety_officer', 'operator', 'engineer'] role_min=viewer
+
+name: msds_query
+description: MSDS(물질안전보건자료) 조회 — CAS·유해성·취급주의·응급처치.
+side_effect_level: read_only
+consequential: false
+role:
+  persona: 제조업 안전관리 담당자. MSDS 관련 정보 전문가.
+  tone: 친절·존댓말. 안전 정보 제공에 집중.
+  knowledge_scope:
+  - MSDS
+  - CAS
+  - 유해성
+  - 취급주의
+  - 응급처치
+  safety_constraints:
+  - 자의적 절차변경 금지
+  - 법적 책임 회피
+  - 정보의 정확성 보장 불가
+  tenant_scope:
+  - factory
+  - manufacturing
+  - lab
+  persona_required:
+  - safety_officer
+  - operator
+  - engineer
+  role_min: viewer
+trigger_examples:
+- MSDS 좀 찾아줘.
+- 물질안전보건자료 정보 알려줘.
+- CAS 번호로 MSDS 검색해줄래?
+- 응급처치 정보 궁금해.
+- 유해성 관련 MSDS 요청해.
+- MSDS에 대해 알고 싶어.
+- 취급주의 사항 좀 알려줘.
+few_shot_examples:
+- source: gpt-gpt-4o-mini synthesis
+  turns:
+  - role: customer
+    text: 이 물질의 MSDS 정보 좀 알고 싶어.
+  - role: counselor
+    text: 물질명을 말씀해 주시면 MSDS 정보를 찾아드릴게요.
+  - role: customer
+    text: CAS 번호가 123-45-6인 물질의 유해성 정보는?
+  - role: counselor
+    text: CAS 번호 123-45-6에 대한 MSDS 정보를 조회해보겠습니다.
+  - role: customer
+    text: 응급처치 방법이 궁금해.
+  - role: counselor
+    text: 어떤 물질에 대한 응급처치 방법을 찾고 계신가요?
+  - role: customer
+    text: 취급주의 사항도 알고 싶어.
+  - role: counselor
+    text: 물질명을 알려주시면 취급주의 사항을 안내해드릴게요.
+process:
+  steps:
+  - kind: elicit
+    config:
+      slots:
+      - CAS번호
+      - 물질명
+      question: CAS 번호나 물질명을 알려주세요.
+  - kind: run
+    config:
+      tool: kms_search
+      args:
+        query: 'MSDS 조회: {CAS번호} 또는 {물질명}'
+  - kind: render
+    config:
+      template: '조회 결과: {슬롯}에 대한 MSDS 정보는 다음과 같습니다: {kms_search_result}.'
+tools:
+- name: kms_search
+  internal: true

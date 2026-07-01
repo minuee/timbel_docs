@@ -1,0 +1,87 @@
+{
+  "id": "ncp.sens_sms",
+  "name": "ncp.sens_sms",
+  "display_name": "NCP SENS SMS 발송",
+  "description": "네이버 클라우드 플랫폼(NCP) SENS(Simple & Easy Notification Service) SMS API 로 문자를 발송합니다. HMAC-SHA256 서명 인증 방식입니다. 주의: 인증 서명은 별도 서버사이드 처리 필요 — 아래 setup_instructions 참고.",
+  "category": "SMS/메일",
+  "vendor": "Naver Cloud",
+  "vendor_url": "https://api.ncloud-docs.com/docs/ai-application-service-sens-smsv2",
+  "endpoint_url": "https://sens.apigw.ntruss.com/sms/v2/services/<YOUR_SERVICE_ID>/messages",
+  "method": "POST",
+  "auth_headers": {
+    "Content-Type": "application/json; charset=utf-8",
+    "x-ncp-apigw-timestamp": "<TIMESTAMP_MS — 서버에서 자동 생성>",
+    "x-ncp-iam-access-key": "<YOUR_NCP_ACCESS_KEY>",
+    "x-ncp-apigw-signature-v2": "<HMAC_SHA256_SIGNATURE — 서버에서 자동 생성>"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["type", "from", "messages"],
+    "properties": {
+      "type": {
+        "type": "string",
+        "enum": ["SMS", "LMS", "MMS"],
+        "default": "SMS",
+        "description": "메시지 타입"
+      },
+      "from": {
+        "type": "string",
+        "description": "발신번호 (사전 등록된 번호, 예: 01012345678)"
+      },
+      "content": {
+        "type": "string",
+        "description": "기본 메시지 내용 (messages[].content 없을 때 사용)"
+      },
+      "messages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["to"],
+          "properties": {
+            "to": {"type": "string", "description": "수신번호"},
+            "content": {"type": "string", "description": "개별 메시지 (옵션)"}
+          }
+        },
+        "description": "수신자 목록"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "NCP SENS 응답 ({\"requestId\": \"...\", \"requestTime\": \"...\", \"statusCode\": \"202\"})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": true,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "HMAC-SHA256",
+    "verify_header": "x-ncp-apigw-signature-v2",
+    "replay_protection": "timestamp",
+    "tls_required": true,
+    "ip_allowlist_supported": true,
+    "notes": "서명 base string: AccessKey + '\\n' + Timestamp + '\\n' + Method + '\\n' + URL → HMAC-SHA256(SecretKey) → Base64. Timestamp 는 epoch ms — NCP 서버 시각 기준 5분 이내. SecretKey 는 노출 시 즉시 회전."
+  },
+  "operational_notes": {
+    "rate_limit": "서비스 ID 당 600 req/min (기본)",
+    "retry_semantics": "5xx 지수 백오프, 401/403 (서명 오류) 은 재시도 금지",
+    "response_sla_sec": null,
+    "cost_label": "paid (SMS 약 8.6원, LMS 약 25원, MMS 약 100원)",
+    "biz_account_required": true
+  },
+  "setup_instructions": [
+    "1. https://www.ncloud.com 로그인 → Console → SENS 서비스 활성화",
+    "2. SENS → SMS → 서비스 등록 → Service ID 발급 (endpoint_url 의 <YOUR_SERVICE_ID> 교체)",
+    "3. 발신번호 등록: SENS → 발신번호 관리 → 번호 인증",
+    "4. IAM → 인증키 관리 → Access Key / Secret Key 발급",
+    "5. 중요: x-ncp-apigw-timestamp 와 x-ncp-apigw-signature-v2 헤더는 요청 시마다 HMAC-SHA256 으로 동적 생성해야 합니다. 직접 호출보다는 NCP SDK 또는 서버 미들웨어 사용 권장.",
+    "6. 서명 공식: HMAC-SHA256(AccessKey + \\n + Timestamp + \\n + Method + \\n + URL, SecretKey) → Base64",
+    "7. 참고 문서: https://api.ncloud-docs.com/docs/common-ncpapigw-authorization",
+    "8. 보안: SecretKey 는 절대 평문 저장 금지 (KMS / config_encrypted). 서명 timestamp 는 5분 이내. IP allowlist 지원 — 운영 환경에서는 NCP Console → 인증 IP 등록 권장.",
+    "9. 발송 결과 확인: 발송 후 30초 ~ 수분 사이에 NCP Console 또는 개별 message status API 로 확인. 발송 실패 시 별도 webhook 등록 가능."
+  ]
+}

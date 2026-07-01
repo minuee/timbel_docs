@@ -1,0 +1,73 @@
+{
+  "id": "naver.papago_translate",
+  "name": "naver.papago_translate",
+  "display_name": "Papago 번역",
+  "description": "네이버 클라우드 플랫폼 Papago Neural Machine Translation API 로 텍스트를 번역합니다. 한국어 품질이 우수하며 한↔영, 한↔일, 한↔중 번역에 특히 강합니다.",
+  "category": "정보/검색",
+  "vendor": "Naver Cloud",
+  "vendor_url": "https://api.ncloud-docs.com/docs/ai-naver-clovaapi-papago",
+  "endpoint_url": "https://naveropenapi.apigw.ntruss.com/nmt/v1/translation",
+  "method": "POST",
+  "auth_headers": {
+    "X-NCP-APIGW-API-KEY-ID": "<YOUR_NCP_CLIENT_ID>",
+    "X-NCP-APIGW-API-KEY": "<YOUR_NCP_CLIENT_SECRET>",
+    "Content-Type": "application/json"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": ["source", "target", "text"],
+    "properties": {
+      "source": {
+        "type": "string",
+        "description": "원문 언어 코드",
+        "enum": ["ko", "en", "ja", "zh-CN", "zh-TW", "es", "fr", "de", "ru", "pt", "it", "vi", "th", "id"]
+      },
+      "target": {
+        "type": "string",
+        "description": "번역 언어 코드",
+        "enum": ["ko", "en", "ja", "zh-CN", "zh-TW", "es", "fr", "de", "ru", "pt", "it", "vi", "th", "id"]
+      },
+      "text": {
+        "type": "string",
+        "description": "번역할 텍스트 (최대 5,000자)",
+        "maxLength": 5000
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Papago 응답 ({\"message\": {\"result\": {\"srcLangType\": \"ko\", \"tarLangType\": \"en\", \"translatedText\": \"...\"}}})"
+  },
+  "risk_metadata": {
+    "side_effect": "read",
+    "scope": "any",
+    "requires_sender_tier": "member",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound_query",
+    "signature_method": "static_secret_token",
+    "verify_header": "X-NCP-APIGW-API-KEY",
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": true,
+    "notes": "Client ID / Secret 두 값 헤더 분리 전송. 노출 시 NCP 콘솔에서 즉시 재발급. CLOVA Studio 와 별개 service — 혼동 주의."
+  },
+  "operational_notes": {
+    "rate_limit": "QPS 10 (Application 당)",
+    "retry_semantics": "5xx 지수 백오프, 429 시 retry-after 준수",
+    "response_sla_sec": null,
+    "cost_label": "free (월 10,000자) → 종량제 (100자당 0.15원)",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. https://www.ncloud.com 로그인 → Console → AI·NAVER API → Papago NMT",
+    "2. 서비스 신청 → Application 등록 → 이름(예: Locus Translate) 입력",
+    "3. Application 상세 → 'Client ID' 와 'Client Secret' 복사",
+    "4. auth_headers 의 X-NCP-APIGW-API-KEY-ID = Client ID, X-NCP-APIGW-API-KEY = Client Secret 으로 교체",
+    "5. 무료 티어: 월 10,000자 — 초과 시 종량제 (100자당 0.15원)",
+    "6. 주의: 'auto' 언어 감지 미지원 — source 언어를 반드시 명시해야 합니다",
+    "7. 보안: Client ID / Secret 은 KMS / config_encrypted 저장. NCP Console → IP allowlist 등록 시 운영 환경 IP 만 허용 권장."
+  ]
+}

@@ -1,0 +1,48 @@
+skill:
+  id: escalation_to_human
+  version: "1.1"
+  domain: public
+  description: "사람 상담사로 인계 (사유·콜백번호)"
+
+availability:
+  scope: business_only
+  business_type: public
+  visibility: opt-in
+
+triggers:
+  - intent: escalate_to_human
+
+slots:
+  - name: escalation_reason
+    type: text
+    required: true
+  - name: callback_number
+    type: phone
+    required: true
+
+initial_state: greet
+states:
+  - id: greet
+    on_enter:
+      llm_respond:
+        template: escalation_to_human_greet_on_enter.md
+    transitions:
+      - when: has_intent(escalate_to_human)
+        to: collect
+      - llm_fallback: true
+
+  - id: collect
+    llm_slot_fill: [escalation_reason, callback_number]
+    transitions:
+      - when: slot_filled(callback_number)
+        to: respond
+      - llm_fallback: true
+
+  - id: respond
+    on_exit:
+      llm_respond:
+        template: escalation_to_human_respond_on_exit.md
+    transitions:
+      - to: done
+
+  - id: done

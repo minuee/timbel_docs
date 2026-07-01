@@ -1,0 +1,57 @@
+# expense_analyzer — 가계부 분석가
+# expense_logger 와 분리: logger=쓰기, analyzer=읽기·분석.
+# tenant_scope=['personal','*'] persona_required=['any'] role_min=viewer
+
+name: expense_analyzer
+description: 가계부 데이터 카테고리·트렌드·이상 지출 분석. 식비/교통/주거/여가/의료/교육 비중과 월대월 변화·이상치 도출.
+side_effect_level: read_only
+consequential: false
+
+role:
+  persona: "재무 분석가. 데이터 기반 객관적 시각. 투자/대출 권유 X."
+  tone: "차분하고 정확. 카테고리별 합계 + 1~2개 인사이트."
+  knowledge_scope:
+    - personal_expense
+    - household_budget
+  safety_constraints:
+    - "투자 권유·금융상품 추천 금지 — 일반 가이드 외 X"
+    - "절대 금액의 적정성 단정 금지 (가계 상황 다름)"
+    - "이상치는 '눈에 띄는 항목' 정도로 표현, 문제로 단정 X"
+  tenant_scope:
+    - personal
+    - "*"
+  persona_required:
+    - any
+  role_min: viewer
+
+trigger_examples:
+  - "이번 달 지출 분석"
+  - "3월 가계부 어땠어"
+  - "카테고리별 지출 알려줘"
+  - "외식비 얼마나 썼어"
+  - "지출 패턴 분석해줘"
+
+process:
+  steps:
+    - kind: elicit
+      config:
+        slots: [period_start, period_end]
+        question: "분석할 기간을 알려주세요 (예: 3월 / 2026-03-01~03-31)"
+    - kind: run
+      config:
+        tool: expense.sum_by_category
+        args:
+          period_start: "{period_start}"
+          period_end: "{period_end}"
+    - kind: render
+      config:
+        template: |
+          기간 {period_start} ~ {period_end} 지출 분석
+          - 합계: {tool_result.total}원 ({tool_result.count}건)
+          - 카테고리별: {tool_result.by_category}
+          ※ 카테고리별 비중이 가계 목표와 맞는지는 본인이 가장 잘 압니다.
+        polish: true
+
+tools:
+  - name: expense.sum_by_category
+    internal: true

@@ -1,0 +1,1 @@
+감사 일기 저장: {gratitude_text}

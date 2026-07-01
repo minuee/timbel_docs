@@ -1,0 +1,65 @@
+# converted from yaml/child_schedule.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: child_schedule
+  version: '1.1'
+  domain: education
+  description: 자녀 학원·등하원·학교 일정 통합 관리. 형제별 분리 가능.
+availability:
+  scope: personal
+  visibility: auto
+triggers:
+- intent: child_schedule
+trigger_type: intent
+slots:
+- name: slot_1
+  type: text
+  required: true
+- name: slot_2
+  type: text
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 자녀 학원과 학교 일정을 관리하는 부모.
+
+        톤: 친절·존댓말. 부모의 고민을 이해하는 따뜻한 문장.
+
+        스킬 설명: 자녀 학원·등하원·학교 일정 통합 관리. 형제별 분리 가능.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - slot_1
+  - slot_2
+  transitions:
+  - when: slot_filled(slot_1) and slot_filled(slot_2)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: kms_rag.search
+  tool_args:
+    query: 자녀 이름의 일정 종류
+    phone: $phone
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 자녀 학원과 학교 일정을 관리하는 부모.
+
+        톤: 친절·존댓말. 부모의 고민을 이해하는 따뜻한 문장.
+
+        스킬: 자녀 학원·등하원·학교 일정 통합 관리. 형제별 분리 가능.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '{자녀 이름}의 {일정 종류}는 {kms_search_result}입니다.'
+  transitions:
+  - to: done
+- id: done

@@ -1,0 +1,121 @@
+skill:
+  id: schedule_personal
+  version: "0.3"
+  domain: personal
+  description: "개인 일정 등록/조회"
+  # PR-A — 일정 등록/조회는 KMS RAG 검색 불필요. tool (schedule.list/create) 가 사실 출처.
+  # v1 loader 는 이 키를 무시하지만, v2 카탈로그 매칭 시 메타 일관성 유지.
+  retrieval: tool
+
+availability:
+  scope: personal
+  visibility: auto
+
+triggers:
+  - intent: create_schedule
+  - intent: list_schedule
+
+# PR-H2 — SkillV2 카탈로그 (auto_loader.select_skill) 가 후보로 인식하도록 role +
+# trigger_examples 추가. 옛 yaml (role 없음) 은 v2 loader 에서 카탈로그 누락되어
+# select_skill 이 schedule_personal 을 후보에서 못 봐, 일정 등록·조회 발화가
+# daily_briefing 같은 generic skill 로 잘못 매칭되던 회귀의 직접 원인.
+role:
+  persona: "개인 일정 도우미. 약속·미팅·이벤트 등록·조회·삭제 전담."
+  tone: "친근한 존댓말. 핵심만 간결히."
+  knowledge_scope:
+    - 일정
+    - 약속
+    - 미팅
+    - 스케줄
+    - 캘린더
+  safety_constraints:
+    - 사용자 일정 정보를 외부에 공유하지 않는다.
+    - 시각·장소가 모호하면 추측하지 않고 사용자에게 되묻는다.
+
+trigger_examples:
+  - "내일 저녁 6시 약속 등록해줘"
+  - "다음 주 화요일 미팅 추가"
+  - "오늘 일정 알려줘"
+  - "이번주 일정 보여줘"
+  - "내일 뭐 있어?"
+  - "약속 잡아줘"
+  - "회의 일정 등록"
+
+# PR-C — 등록 필수 슬롯: title + when. who/where 는 선택 (대화 맥락에서 자주 누락).
+# multi-slot AND 가드 (slots_filled(title, when)) 는 transitions 에서 적용.
+# slot 정의에 모두 등록해 slot_filler 가 LLM 추출 시도하도록 유지.
+slots:
+  - name: title
+    type: text
+    required: true
+  - name: when
+    type: datetime
+    required: true
+    must_be_specific: true   # "내일 저녁" 같이 시각 누락 시 미충족
+  - name: who
+    type: text
+  - name: where
+    type: text
+  - name: recurrence
+    type: rrule
+  - name: phone
+    type: phone
+    source: identity
+
+initial_state: greet
+states:
+  - id: greet
+    # 2026-04-28 — greet 의 on_enter 제거. 사용자 신고: greet 의 LLM 답변 +
+    # collect 의 LLM 답변 두 발화가 한 turn 에 보임. greet 는 의도 분기만
+    # 담당 (silent), 실제 사용자 응답은 collect/query 의 on_enter 한 곳에서.
+    transitions:
+      - when: has_intent(create_schedule)
+        to: collect
+      - when: has_intent(list_schedule)
+        to: query
+      - llm_fallback: true
+
+  - id: collect
+    on_enter:
+      llm_respond:
+        template: schedule_collect.md
+    # who / where 도 함께 추출 시도 — 채워지면 schedule_confirm.md 가 그대로 사용.
+    llm_slot_fill: [title, when, who, where, recurrence]
+    transitions:
+      # 2026-04-30 P11-19c — guard 를 (title, when) 으로 완화. where 는 선택.
+      # 옛 (title, when, where) 가드는 cross-turn 시간 변경 발화 ('시간을 오후 2시
+      # 로 해줘') 에서 where 가 평생 안 채워져 collect 무한 루프. collect prompt
+      # 가 한 번 물어보지만 답이 없거나 모호하면 그대로 create 진행 — schedule_store
+      # 가 같은 title 자동 merge 처리.
+      - when: slots_filled(title, when)
+        to: create
+      - llm_fallback: true
+
+  - id: create
+    tool: schedule.create
+    tool_args:
+      phone: $phone
+      tenant_id: $personal_tenant_id
+      title: $title
+      when: $when
+      who: $who
+      where: $where
+      recurrence: $recurrence
+    on_exit:
+      llm_respond:
+        template: schedule_confirm.md
+    transitions:
+      - to: done
+
+  - id: query
+    tool: schedule.list
+    tool_args:
+      phone: $phone
+      tenant_id: $personal_tenant_id
+    on_exit:
+      llm_respond:
+        template: schedule_query_answer.md
+    transitions:
+      - to: done
+
+  - id: done

@@ -1,0 +1,44 @@
+category: plants_flowers
+label: "식물 & 꽃배달"
+description: "화원·꽃배달·식물 판매·플라워 클래스 SOP."
+
+questions:
+  - id: pf_business_type
+    label: "주력 영역?"
+    type: multiple_select
+    options:
+      - "꽃다발·화환 (생일·결혼·조문)"
+      - "관엽·화분 식물"
+      - "원예 자재"
+      - "플라워 클래스"
+      - "결혼·행사 장식"
+    required: true
+    section: 페르소나
+
+  - id: pf_delivery_area
+    label: "배달 가능 지역 / 시간 / 추가 요금?"
+    type: textarea
+    example: "서울 전 지역 당일 배달 / 14시 마감 / 도서산간 +1.5만원"
+    required: true
+    section: 응대 시나리오
+
+  - id: pf_seasonal_pricing
+    label: "성수기 (졸업·발렌타인·어버이날) 가격·예약 정책?"
+    type: textarea
+    example: "성수기 +30% / 1주일 전 사전 주문 권장 / 당일 주문 거절 가능"
+    required: true
+    section: 응대 시나리오
+
+  - id: pf_funeral_protocol
+    label: "조문·장례 화환 응대 정책 (정중한 톤)?"
+    type: textarea
+    example: "정중·차분한 응대 / 매니저 직접 응대 / 받는 분 정보 정확히 확인"
+    required: true
+    section: 응답 톤
+
+  - id: pf_plant_care_advice
+    label: "식물 관리 가이드 / 시들음 클레임 정책?"
+    type: textarea
+    example: "분양 시 관리법 안내 / 7일 이내 시들음 사진 전송 시 무상 교환"
+    required: false
+    section: 응대 시나리오

@@ -1,0 +1,53 @@
+# converted from yaml/expense_analyzer.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: expense_analyzer
+  version: '1.1'
+  domain: finance
+  description: 가계부 데이터 카테고리·트렌드·이상 지출 분석. 식비/교통/주거/여가/의료/교육 비중과 월대월 변화·이상치 도출.
+availability:
+  scope: all
+  visibility: auto
+triggers:
+- intent: expense_analyzer
+trigger_type: intent
+slots:
+- name: period_start
+  type: date
+  required: true
+- name: period_end
+  type: date
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  transitions:
+  - when: has_intent(expense_analyzer)
+    to: collect
+  - llm_fallback: true
+- id: collect
+  llm_slot_fill:
+  - period_start
+  - period_end
+  transitions:
+  - when: slot_filled(period_start) and slot_filled(period_end)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  # 2026-04-28 — 잘못된 tool (kms_inventory.get_summary) → 실제 expense store
+  # 의 sum_by_category 로 교체. expense.create 와 같은 namespace 의 조회 도구.
+  tool: expense.sum_by_category
+  tool_args:
+    period_start: $period_start
+    period_end: $period_end
+    phone: $phone
+    tenant_id: $personal_tenant_id
+  on_exit:
+    llm_respond:
+      template: expense_analyzer_summary.md
+  transitions:
+  - to: done
+- id: done

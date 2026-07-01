@@ -1,0 +1,43 @@
+category: kids_baby
+label: "유아 & 아동"
+description: "아기·어린이 용품 / 키즈카페 / 어린이집 SOP."
+
+questions:
+  - id: kb_business_type
+    label: "운영 형태?"
+    type: multiple_choice
+    options: ["용품 판매", "키즈카페·놀이공간", "어린이집·유치원", "장난감·교구", "출산·유아용품 종합"]
+    required: true
+    section: 페르소나
+
+  - id: kb_age_range
+    label: "주요 타겟 연령?"
+    type: multiple_select
+    options:
+      - "신생아 (0-12개월)"
+      - "영아 (1-3세)"
+      - "유아 (4-6세)"
+      - "어린이 (7-12세)"
+    required: true
+    section: 페르소나
+
+  - id: kb_safety_certification
+    label: "안전 인증 (KC 등) 정책 / 리콜 대응?"
+    type: textarea
+    example: "KC 인증 제품만 판매 / 리콜 발생 시 즉시 사용 중단 안내·환불"
+    required: true
+    section: 금지 사항
+
+  - id: kb_emergency_protocol
+    label: "어린이 안전 사고 / 응급 시 프로토콜?"
+    type: textarea
+    example: "119 + 보호자 연락 + 매니저 즉시 / 응급 키트 항상 배치"
+    required: true
+    section: 에스컬레이션
+
+  - id: kb_guardian_consent
+    label: "보호자 동의 / 본인 확인 정책 (미성년자)?"
+    type: textarea
+    example: "구매·서비스 보호자 동의 필수 / 키즈카페 보호자 동반 / 어린이집 등하원 인계 인증"
+    required: true
+    section: 응대 시나리오

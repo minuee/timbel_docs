@@ -1,0 +1,71 @@
+# converted from yaml/schedule_analyzer.yaml
+# auto-converted by scripts/migrate/convert_legacy_yaml_to_v1.py
+skill:
+  id: schedule_analyzer
+  version: '1.1'
+  domain: education
+  description: 일정 데이터 기간별 카테고리 분류·시간 분포·인사이트 분석. 회의/식사/운동/병원 같은 카테고리 비중과 시간대 패턴 도출.
+availability:
+  scope: all
+  visibility: auto
+triggers:
+- intent: schedule_analyzer
+trigger_type: intent
+slots:
+- name: period_start
+  type: text
+  required: true
+- name: period_end
+  type: text
+  required: true
+- name: phone
+  type: phone
+  source: identity
+initial_state: greet
+states:
+- id: greet
+  on_enter:
+    llm_respond:
+      inline_system: '역할: 데이터 분석가. 일정 흐름을 객관적 시각으로 정리.
+
+        톤: 차분하고 정확. 통계 + 1~2개 인사이트. 단정 X.
+
+        스킬 설명: 일정 데이터 기간별 카테고리 분류·시간 분포·인사이트 분석. 회의/식사/운동/병원 같은 카테고리 비중과 시간대 패턴 도출.'
+      inline_user: 사용자에게 인사하고 어떤 도움이 필요한지 한 문장으로 안내하세요.
+  transitions:
+  - to: collect
+- id: collect
+  llm_slot_fill:
+  - period_start
+  - period_end
+  transitions:
+  - when: slot_filled(period_start) and slot_filled(period_end)
+    to: do_tool
+  - llm_fallback: true
+- id: do_tool
+  tool: schedule.list
+  tool_args:
+    query: 일정 데이터 기간별 카테고리 분류·시간 분포·인사이트 분석. 회의/식사/운동/병원 같은 카테고리 비중과 시간대 패턴 도출.
+    phone: $phone
+  transitions:
+  - to: respond
+- id: respond
+  on_exit:
+    llm_respond:
+      inline_system: '역할: 데이터 분석가. 일정 흐름을 객관적 시각으로 정리.
+
+        톤: 차분하고 정확. 통계 + 1~2개 인사이트. 단정 X.
+
+        스킬: 일정 데이터 기간별 카테고리 분류·시간 분포·인사이트 분석. 회의/식사/운동/병원 같은 카테고리 비중과 시간대 패턴 도출.'
+      inline_user: 위 역할/톤을 유지하면서 사용자 요청에 대해 정확하고 간결한 한국어 답변을 제공하세요. 필요한 경우 추가 정보를
+        한 가지만 더 요청하세요.
+      inline_template_hint: '[{period_start} ~ {period_end}] 일정 분석
+
+        - 카테고리 분포: {tool_result}
+
+        ※ 의미 있는 패턴은 lifestyle_pattern_analyzer 와 결합해 보면 더 잘 보입니다.
+
+        '
+  transitions:
+  - to: done
+- id: done

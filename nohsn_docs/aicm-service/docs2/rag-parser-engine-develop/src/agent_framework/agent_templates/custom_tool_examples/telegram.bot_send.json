@@ -1,0 +1,69 @@
+{
+  "id": "telegram.bot_send",
+  "name": "telegram.bot_send",
+  "display_name": "Telegram Bot 메시지",
+  "description": "Telegram Bot API 의 sendMessage 를 사용하여 지정된 chat_id (개인/그룹/채널)에 메시지를 발송합니다. BotFather 에서 Bot Token 을 발급받아 사용합니다.",
+  "category": "알림",
+  "vendor": "Telegram",
+  "vendor_url": "https://core.telegram.org/bots/api#sendmessage",
+  "endpoint_url": "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/sendMessage",
+  "method": "POST",
+  "auth_headers": {},
+  "input_schema": {
+    "type": "object",
+    "required": ["chat_id", "text"],
+    "properties": {
+      "chat_id": {
+        "type": "string",
+        "description": "수신자 chat ID (개인: 숫자, 그룹: -숫자, 채널: @채널명)"
+      },
+      "text": {
+        "type": "string",
+        "description": "발송할 메시지 본문 (최대 4096자)",
+        "maxLength": 4096
+      },
+      "parse_mode": {
+        "type": "string",
+        "enum": ["HTML", "Markdown", "MarkdownV2"],
+        "description": "메시지 파싱 모드 (옵션)"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "description": "Telegram API 응답 ({\"ok\": true, \"result\": {...}})"
+  },
+  "risk_metadata": {
+    "side_effect": "write",
+    "scope": "any",
+    "requires_sender_tier": "verified",
+    "requires_confirm": false,
+    "conflict_check": []
+  },
+  "security": {
+    "direction": "outbound",
+    "signature_method": "token_in_url",
+    "verify_header": null,
+    "replay_protection": "none",
+    "tls_required": true,
+    "ip_allowlist_supported": false,
+    "notes": "Bot Token = full API access. 노출 시 BotFather 의 /revoke 로 즉시 회전. 양방향 (사용자 메시지 수신) 은 setWebhook 으로 별도 등록 + X-Telegram-Bot-Api-Secret-Token 헤더 검증 필수 (32 bytes 엔트로피, [A-Za-z0-9_-] 만)."
+  },
+  "operational_notes": {
+    "rate_limit": "단일 chat ~1 msg/sec, group/supergroup 20 msg/min, 글로벌 broadcast ~30 msg/sec",
+    "retry_semantics": "429 시 응답의 retry_after 초 준수, 5xx 지수 백오프",
+    "response_sla_sec": null,
+    "cost_label": "free",
+    "biz_account_required": false
+  },
+  "setup_instructions": [
+    "1. Telegram 에서 @BotFather 에게 /newbot 명령어 전송",
+    "2. 봇 이름(예: LocusBot)과 username(예: locus_notify_bot) 설정",
+    "3. BotFather 가 발급한 API Token 복사 (예: 123456789:ABC...XYZ)",
+    "4. endpoint_url 의 <YOUR_BOT_TOKEN> 을 발급받은 토큰으로 교체",
+    "5. chat_id 확인: 봇에게 메시지 전송 후 https://api.telegram.org/bot<TOKEN>/getUpdates 호출",
+    "6. auth_headers 는 비워두어도 됩니다 — URL 에 토큰 포함",
+    "7. 보안: Bot Token 은 평문 저장 금지 (config_encrypted 컬럼이나 KMS 사용). 노출 의심 시 /revoke 로 즉시 회전. 그룹/채널에서 chat_id 는 음수 또는 -100 prefix 형태 (1:1 DM 의 user_id 와 다름).",
+    "8. 인바운드 webhook 등록 시: setWebhook 의 secret_token 파라미터에 32 bytes 엔트로피 secret 지정 → 수신 측은 X-Telegram-Bot-Api-Secret-Token 헤더를 hmac.compare_digest 로 검증 (페이로드 read 전에 검증)."
+  ]
+}
