@@ -920,3 +920,275 @@
 - 속도(미니그래프/점수가 3~5초 늦게 변함): 숫자+그래프가 동기로 같이 갱신됨 → 프론트 반응성 정상. 지연은 voc 메시지 자체가 늦게 도착(백엔드 감정분석 LLM turn당 3~5초). 프론트에서 고칠 것 없음 → 백엔드 latency 최적화 영역.
 - 잔존: 디버그 로그 3개(`[voc] call:start`, `[voc] received`, `[voc] drop stale`) 사용자 요청으로 그대로 둠(동작 영향 없음, 콘솔만 verbose). 추후 운영 정리 시 제거.
 - 미해결(범위 밖): 같은 상담사 계정 다중 탭 동시 실콜은 per-agent 채널 공유라 프론트만으론 완전 격리 불가(백엔드가 call 단위 채널 분리 필요). 실운영 1상담사 1콜에선 정상.
+
+### 5-8. (후속) voc "동일 메시지 2번 수신" — 리스너 중복 + 데이터 중복 가드
+- 현상(로컬 로그): 같은 call_id+turn_idx voc가 2번 수신(turn3 1번, turn4 2번). type/score 동일 = 진짜 중복 수신.
+- 원인: `on("redis-message", onMessage)`(socketIOPlugin.on = socket.on, 중복방지 없음)가 중복 등록되면 메시지 1개를 2번 처리. 로컬은 HMR(파일 편집마다 setup 재실행→리스너 누적)이 유력. turn3(편집 전)1번/turn4(편집 후)2번 정황 일치.
+- 수정(가드 2개):
+  - useChatSocket `setupListeners`/`onConnectCallback`: `on` 전에 `off("redis-message", onMessage)` → 같은 인스턴스 재셋업 시 중복 등록 방지.
+  - useChatMessageParser: `seenVocKeys` Set 추가, voc 분기에서 `(call_id:turn_idx)` 이미 수신했으면 drop(첫 값 유지). call:start 시 clear.
+- 효과/한계: 백엔드 중복 publish + 동일 인스턴스 중복셋업 → 가드로 차단됨. HMR로 "다른 인스턴스" 리스너가 누적된 경우(각자 seenVocKeys 별개)는 가드로 못 막음 → 로컬은 하드리프레시로 해소(운영 빌드는 HMR 없어 무관).
+
+### 5-9. (세션 마무리 요약) — VOC 실시간 작업 전체
+오늘 VOC 관련 작업 총정리 (상세는 5-1~5-8 참고):
+
+**A. 관리자 멀티뷰 민원위험 비상표시 (신규)**
+- vocStore에 per-agent(byAgent) 레이어 추가, isEmergencyOf(통화중 AND peak≥임계값) — peak=감정/민원/이탈 최대값.
+- admin/index.vue: 카드 빨강 테두리 깜빡(30초 자동/클릭 정지) + 토스트(위험 재진입마다). 테두리는 border 방식(overflow 안 잘림).
+- 임계값: env `VITE_VOC_EMERGENCY_THRESHOLD`(폴백 0.6). 상담사 본인화면 위험판정(VOC_DANGER_THRESHOLD=0.8)은 별개 유지.
+
+**B. 추천문서 top3 테두리 잔상 (버그수정)**
+- useChatAssist.showAssistDocs에서 새 top3 도착 시 activeDetailByBubble 리셋(첫 문서로). 버블별 독립 보존.
+
+**C. 실시간 헤더 감정 "다른 콜/중복" 오염 (버그수정)**
+- chat 헤더를 per-agent 슬라이스로(관리자 모드), 비관리자는 전역 history.
+- currentCallId set-once 버그 수정(call:start마다 갱신).
+- voc를 현재 call_id로 필터(다른 콜 drop) + (call_id:turn_idx) 중복 dedup(첫 값 유지).
+- 리스너 중복 등록 방지(off→on).
+
+**미해결/이관 (백엔드 영역)**
+- voc 분석 latency 3~5초(LLM): 프론트 즉시 표시, 백엔드 최적화 필요.
+- 같은 상담사에 동시 다중 콜을 화면별로 격리: per-agent 채널 구조 한계 → 백엔드가 call_id 단위 채널 분리 또는 중복 publish 방지 필요. (요청서는 대화 내 정리해둠)
+
+**잔존 디버그 로그(의도적 유지, 동작 무관)**
+- `[voc] call:start`, `[voc] received`, `[voc] drop stale`, `[voc] drop dup` — 운영 정리 시 제거 예정.
+
+**변경 파일**: stores/modules/voc.ts, utils/emotionVoc.ts, view/advisor/admin/index.vue, view/advisor/components/chat/index.vue, .../chat/composables/useChatMessageParser.ts, .../useChatAssist.ts, .../useChatSocket.ts, .env.*(VITE_VOC_EMERGENCY_THRESHOLD)
+
+## 2026-06-29 — 관리자 설정▸키워드 기능 분석 + 감지카운트 로직 공용화
+
+### 1. (분석) 키워드 기능 전체 구조 파악
+- 진입: 우측상단 설정 메뉴 → `AdminSetting.vue`(알림/키워드 탭). 키워드 탭이 분석 대상.
+- 3레이어: [등록/관리] AdminSetting.vue ──CRUD──▶ /keyword-detects(백엔드 실연동) / [상태] stores/modules/keywordDetect.ts / [소비] useTextRenderer(마스킹)·Keyword.vue·ChatAdminPanel(카운트).
+- 카테고리 3종: 금칙어 forbiddenWord / 이슈어 issueWord / 비속어 profanityWord.
+- 핵심 결론: **백엔드로 가는 건 키워드 "정의"(등록/삭제)뿐, 감지·카운트·마스킹은 전부 클라이언트 사이드.**
+
+### 2. (분석) 주요 발견/함정
+- 용도 2가지: (a)본문 마스킹(useTextRenderer, **금칙어는 제외** → 원문 노출, maskText의 forbiddenWord 분기는 죽은 코드) / (b)감지 카운트(전 카테고리). 둘 다 user 발화만.
+- 감지 카운트는 Vue computed로 렌더마다 실시간 재계산되는 일회성 통계 → **DB에 안 쌓임**, assist-stream(RAG)과 무관. 누적지표 필요하면 신규구현.
+- 비속어 시드 사전 프론트에 없음 → 전부 수동등록 의존(백엔드 시드 여부는 API 확인 필요).
+- isSystem 항상 false 고정 → 시스템 태그 스타일 안뜸/전부 삭제가능. store의 check*·replaceKeywordsWithLabels 4함수 사용처0(죽은코드). updateKeywordDetect(PATCH) UI 미사용(등록/삭제만, 의도된 단순화 유지 결정).
+
+### 3. (수정) 감지 카운트 로직 공용화
+- 문제: Keyword.vue와 ChatAdminPanel.vue에 동일 issueKeywords 집계 로직 복붙, 한쪽(ChatAdminPanel)만 빈값가드 있어 미묘하게 어긋남.
+- 변경:
+  - keywordDetect.ts: `IssueKeywordCount` 타입 export + 공용 액션 `countIssueKeywords(chatContent)` 신설(빈값가드 포함 버전으로 통일, user 발화에서 등록키워드 출현수 집계→count 내림차순).
+  - ChatAdminPanel.vue / Keyword.vue: issueKeywords computed를 store 액션 호출 한 줄로 교체(~55줄→3줄). Keyword.vue의 디버깅 console.log 전부 제거. Keyword.vue의 props.chatContent||activeChatContent 폴백은 컴포넌트단 유지.
+- 결과: 동작 동일, 두 vue 진단 에러 0. 집계규칙은 store 한 곳만 고치면 양쪽 일관. (테스트는 사용자가 추후 진행)
+- 변경 파일: stores/modules/keywordDetect.ts, view/advisor/components/chat/ChatAdminPanel.vue, components/layout/Drawer/components/Keyword/Keyword.vue.
+
+### 4. (문서) docs/advisor-admin-operation.md에 "5. 설정▸키워드" 섹션 추가
+- 공지(4장) 뒤에 5장 신설, 기존 권한→6·파일맵→7로 번호 밀고 파일맵 테이블에 키워드 관련 파일 추가.
+
+### 5. 잔여 메모(미수정)
+- Keyword.vue 제목 "감지된 이슈어" vs 로직은 전 카테고리 카운트(불일치). 상단 위/아래 화살표 버튼 console.log만(미구현).
+- 금칙어 마스킹 제외가 의도인지 버그인지 기획 확인 필요.
+
+### 6. (진단) 상담 종료 후 상담요약 팝업/자동 /summary 미작동 — orchestrator:persisted 추적
+- **증상:** 오늘 아침부터 상담대화 종료 시 상담요약 팝업이 자동으로 안 뜨고 `/summary`·`/summary/data` 자동호출이 안 됨. (6-16에 한 번 잡았던 이슈가 재발)
+- **자동 트리거 체인 재확인:** 백엔드(STT엔진)가 Redis `{env}:{tenant}:{agent_id}:call:orchestrator:persisted` publish → `useChatMessageParser.ts:636` 분기 → store에 call_id/callstats_id 저장 + `emit("orchestrator-persisted")` → chat/index.vue 재emit → `agent/index.vue:909 handleOrchestratorPersisted` → ContentLayout→HeaderActionBar `openCounselingStatusAndExecuteSummary`(:488, 팝업 visible=true + `handleSummary` 실행) → `CounselingStatus.vue:304` POST /summary → 성공 직후 :332 POST /summary/data(자동저장) + :349 todos/auto-create. ⇒ 팝업·요약·자동저장·할일생성 **전부 이 한 메시지 수신에 묶여있음.** `/summary` 호출처는 전 코드베이스에서 `CounselingStatus.vue:304` 단 1곳(=handleSummary, 버튼 클릭 or 이 이벤트로만 실행).
+- **프론트 silent-drop 게이트:** `useChatMessageParser.ts:163~178` — 모든 redis 메시지 공통으로 `resolvedAgentId(=cc_cti_id) !== messageData.agent_id` 면 `return`. **nlp/voc 채널만 진단로그 있고 orchestrator:persisted는 로그조차 없어** "이유 모르게 안 됨"으로 보임(백엔드 탓 오해 유발).
+- **회귀 여부 배제:** 6-26(정상본 efc45bc)→HEAD diff 확인. 오늘 바뀐 파일 5개(Keyword.vue, keywordDetect.ts, ChatAdminPanel.vue, useChatMessageParser.ts, CLAUDE-todo.md) 중 **orchestrator:persisted 팝업 체인 파일은 0개 변경**. useChatMessageParser 변경분도 전부 STT발화/assist(triggerAssist) 경로뿐 — orchestrator 분기(636~)·agent_id 게이트(168) 미변경. ⇒ **프론트 회귀 아님 확정.**
+- **STT payload 명세 확보:** persisted payload = `{tenant_id, agent_id, call_id, callstats_id, ts}`. callstats_id/call_id 정상 포함 ⇒ 41번(callstats_id 누락)류 아님. 관건은 **agent_id 값이 cc_cti_id냐**. 같은 STT엔진의 nlp/events/voc는 정상 수신 중(=그 채널 agent_id는 cc_cti_id로 정렬돼 옴)인데 orchestrator:persisted만 안 옴 ⇒ **이 채널만 agent_id 정렬 안 됨(또는 채널명 {agent_id} 자리 불일치)** 으로 추론.
+- **실제 원인/해결:** **Redis + callbot 문제로 확인되어 해결됨.** (프론트 코드 수정 없음.)
+- **재발 시 1초 진단:** 콘솔 `[nlp:complete] ... agent=XXXX` 값(=cc_cti_id 기준) ↔ orchestrator:persisted payload `agent_id` 비교. 다르면 백엔드/채널 정렬 문제. 로그가 아예 없으면 메시지 미도착(redis/callbot/구독).
+
+### 7. (수정) Redis/Socket 채널 prefix 환경변수 분리 — 환경 간 교차수신 차단
+- **배경:** 하나의 Redis 를 local/사내개발/AWS개발 이 같은 계정(같은 vendor_tenant_id/cc_cti_id)으로 공유 → 채널명이 전부 동일해 환경 간 메시지 교차수신. 채널 맨 앞 prefix(기존 `dev` 고정)를 환경변수로 빼서 분리.
+- **대상 5채널(형식):** `{ENV}:{vendor_tenant_id}:{cc_cti_id}:call:` + `nlp:complete` / `nlp:partial` / `voc` / `orchestrator:persisted` / `events`.
+- **`{ENV}` 출처 확정:** `redisKey.ts`의 `getRedisKey()` 가 5채널 전부 생성. 기존엔 `process.env.VITE_USER_NODE_ENV`(dev/prd 빌드구분용)를 prefix로 재활용 → dev계열 빌드는 전부 `dev`라 분리 불가. webpack이 `.env.{MODE}`만 읽음(`.env`최상위는 미로드).
+- **변경 내용:**
+  - `src/utils/redisKey.ts`: prefix 전용 변수 신설 `export const CHANNEL_ENV = process.env.VITE_REDIS_CHANNEL_ENV || "dev"`(fallback dev). 5채널 prefix를 이 값으로 통일. (VITE_USER_NODE_ENV 의존 제거)
+  - `src/view/advisor/admin/index.vue:302`: `dev:...:call:events` 하드코딩 → `getRedisKey(vendor_tenant_id, item, "events")` 호출로 교체(import 추가). 하드코딩 제거 + 타 화면과 동일 함수로 통일.
+  - env 6개에 `VITE_REDIS_CHANNEL_ENV` 추가: `.env.dev`=`dev`(사내개발=AWS), `.env.prd`=`prd`(운영), 그 외 4개(`.env.local`/`.env.5f.local`/`.env.5f.dev`/`.env.192.dev`)=`localDev`. `.env`(최상위)는 미로드라 제외.
+- **그대로 둔 것:** `admin/index.vue:503` `dev:global:call:status:active`(5채널 외, dev 고정 유지·사용자 결정). 메시지 필터링 코드(`useChatMessageParser.ts`·`Dashboard.vue:362`·`ConsultantDrawer:353`의 `.includes(":call:voc/events")`)는 suffix만 검사 → prefix 무관, 영향 0. 테스트 spec의 `dev:` 하드코딩도 동일 이유로 그대로.
+- **구독 구조(코드 확인):** 프론트가 `POST /aicc/asst-service/redis-monitor/subscribe/{채널명}` 으로 채널명을 그대로 백엔드(redis-monitor)에 전달 → redis-monitor가 그 채널 SUBSCRIBE 후 socket room 으로 relay. 즉 **백엔드 구독(relay) 쪽은 프론트가 보낸 채널명 그대로 따라감**(프론트 변경만으로 자동). (subscribe.api.ts:21, SocketChannelManager.ts:17)
+- **핵심 결론 — 발행자 의존성:** redis-monitor 는 relay 만, 실제 PUBLISH 주체는 별도.
+  - `call:voc` → asst-service 자체 발행, 이미 `VOC_CHANNEL_ENV=localDev` 맞춤 ✅
+  - 나머지 4개(nlp complete/partial, events, orchestrator:persisted) → **외부 서비스**(STT/NLP·callbot-orchestrator)가 발행. asst 코드엔 events/persisted 참조 0건. 현재 공용 dev 파이프라인이라 `dev` prefix로만 publish 중.
+  - ⇒ **`localDev` 로 바꾼 환경(local/5f/192)은 voc만 수신되고 나머지 4개는 발행자가 dev로 쏘는 한 안 들어옴**(버그 아님, 분리의 정상적 결과). 받으려면 발행 서비스 env 도 `localDev` 로 맞추거나 local 전용 파이프라인 필요.
+  - **`.env.dev`(사내개발/AWS)는 prefix 그대로 `dev` → 발행자(dev)와 짝 그대로 → 4채널 영향 0**(기존과 동일 동작).
+- **상태:** 프론트 코드 정합·완료. 배포 후 라이브 테스트는 사용자 진행 예정. 발행 서비스(STT/NLP·callbot-orchestrator) 관리주체에 따라 local 4채널 완전분리 가능여부 갈림(백엔드와 후속).
+- **변경 파일:** src/utils/redisKey.ts, src/view/advisor/admin/index.vue, .env.dev, .env.prd, .env.local, .env.5f.local, .env.5f.dev, .env.192.dev.
+
+## 2026-06-29 — 코칭요청 "확인완료" 미동작 → 미확인/확인완료 토글 + 알림 카운트 누적 수정 (상담사 기준)
+- **증상(사용자):** 관리자 코칭을 받으면 카드에 "확인완료"가 떠 있는데 클릭이 안 되고, 우측 LNB 코칭요청 알림 숫자가 계속 누적됨.
+- **소스 구조 파악:**
+  - 카드 = `Drawer/components/CoachingRequest/CoachingRequestCard.vue`. 버튼 2종이 `isConfirmed`로 갈림 — `!isConfirmed`→`[확인]`(@click handleConfirmed, emit confirmed) / `isConfirmed`→`[확인완료]`(@click 없음, cursor:default = 완료표시용). ⇒ "확인완료"는 원래 클릭 대상이 아님(정상).
+  - 부모 = `CoachingRequest.vue`. `@confirmed → handleConfirmed(item.confirmTarget, v)`(:549) → `onReadCoaching`/`onReadRequestCoaching` → `refreshCoachings`. 알림숫자 `unReadCount` 계산은 watch(:420).
+  - 카운트 공유필드 `coachingStore.unReadCount` 를 **3곳에서 읽고**(CoachingRequest 뱃지 hearing아이콘 / HeaderActionBar history아이콘=관리자 / Dashboard) **3곳에서 다르게 씀**(CoachingRequest:420 `!isConfirmed`.length / AdminCoaching.vue:459 미답변기준 / coaching.ts:84 =0).
+- **누적 진짜 원인:** CoachingRequest:420 카운트가 merged-list(`requestCoachings`+`receiverCoachings`)를 `!isConfirmed`로 셈 → ① 코멘트(관리자응답) 없는 카드는 `v-if="comment"`로 확인버튼 자체가 안 뜨는데 `isConfirmed=false`라 카운트엔 잡힘 → 영원히 못 빼고 누적, ② 내가 보낸 요청까지 합산. "확인완료" 버튼 미동작이 원인 아님.
+- **도메인 정리:** coachings(관리자→상담사, is_read=상담사가 읽음 = "받은 코칭" = 미확인 대상) vs coaching_requests(상담사→관리자, is_read=관리자가 읽음, 내가 보낸 것=카운트 제외).
+- **API:** 핵심 3개 이미 존재 — `GET /coachings/receiver/{id}`(목록+is_read), `PATCH /coachings/{id}/read`(단건 읽음=미확인 클릭), 개수는 목록서 프론트 계산. (선택 신규: unread-count 단건조회 / 상담사용 일괄읽음 `PATCH /coachings/read {ids}` — "모두 확인" UX 넣을 때만. 백엔드에 받은코칭 id 접두사 `coach_` 확인요청.)
+- **결정:** Q1 알림숫자=받은 코칭 중 미확인 개수(우측 LNB)로 확정. Q2 새로 구축: 처음 "미확인"(클릭가능)→클릭→"확인완료"(완료표시). **충돌처리는 B = 상담사 기준만, 관리자 로직(AdminCoaching.vue) 미수정.**
+- **수정(2곳, 상담사 경로만):**
+  1. `CoachingRequestCard.vue`: 클릭 버튼 라벨 `확인`→`미확인` (완료상태 `확인완료` 유지).
+  2. `CoachingRequest.vue:420`: 카운트 기준 교체 `coachingStore.receiverCoachings.filter(c=>!c.is_read).length` (merged-list `!isConfirmed` 제거). ⇒ 코멘트없는 카드/내가 보낸 요청 카운트서 빠짐, "미확인" 클릭→readCoaching→refresh 시 is_read=true 되어 숫자 감소.
+- **그대로 둠:** handleConfirmed(:549)은 받은 코칭을 readCoaching로 처리+refresh하므로 동작 OK라 미변경. AdminCoaching.vue/HeaderActionBar/Dashboard 미변경.
+- **상태:** 프론트 수정 완료. 라이브 검증은 사용자 진행 예정.
+
+### (이어서) handleConfirmed 분기 정리 + LNB 숫자 출처 확인
+- **LNB "코칭요청 N" 출처:** 하드코딩 아님. LNB 항목 자체가 `CoachingRequest`(Drawer/index.vue:18, is-admin=false), 뱃지=`coachingStore.unReadCount`. 데이터는 실 API(`coaching.ts:45,48` = `GET /coachings/sender|receiver/{id}` 응답). 상담사 진입 시 `agent/index.vue:423,562`서 `refreshCoachings(false)` 자동 호출로 채워짐.
+- **3요소 단일 매핑 확정:** LNB숫자(`receiverCoachings.filter(!is_read).length`) ↔ 카드 미확인/확인완료(`isConfirmed=받은 코칭 is_read`) ↔ 미확인 버튼(`!isConfirmed`) — 전부 받은 코칭+is_read 한 소스. "안 읽은 받은 코칭 1건 = 숫자+1 = [미확인] 버튼 1개", 클릭→read→refresh→확인완료+숫자-1. 추가 매핑 작업 불필요.
+- **백엔드 회신 확인:** `PATCH /coachings/:id/read`(coach_, body없음, 응답 is_read:true) 단건만. 일괄(`/coachings/read {ids}`) 미존재("모두 확인" 필요 시 신규). 프론트 경로 이미 일치(path.ts:30-31 COACHINGS=/coachings, COACHING_REQUESTS=/coachings/requests) → 기존 `readCoaching`이 곧 그 엔드포인트. 신규 API 불필요.
+- **수정3:** `CoachingRequest.vue handleConfirmed` 의 `startsWith("coachrq_")` 분기 제거 → 받은 코칭은 무조건 `onReadCoaching`(PATCH /coachings/:id/read). 백엔드 "분기없이" 가이드와 일치, 오API 위험 제거.
+- **잔여(의도적 보존):** 분기 제거로 `onReadRequestCoaching`(coaching.ts) + `readCoachingRequest`(api) 가 미사용 상태가 됐으나, 유효 엔드포인트(`PATCH /coachings/requests/:id/read`) 바인딩이라 향후 코칭요청 읽음처리용으로 삭제 않고 보존.
+- **최종 변경 파일:** CoachingRequestCard.vue(라벨 확인→미확인), CoachingRequest.vue(:422 카운트 기준, handleConfirmed 분기제거). AdminCoaching/HeaderActionBar/Dashboard/store/api 미변경.
+
+## 2026-06-29 — RAG 원본보기 하이라이트(책갈피) 위치 불일치 수정 (heading_path/page_number 앵커)
+- **증상:** AI답변 출처 제목 클릭 → 원본보기 모달이 책갈피(제목)로 하이라이트하는데 위치가 안 맞음. 특히 표(table) 많은 펀드문서.
+- **"책갈피"의 정체:** 제목이 아니라 **출처 content의 첫 줄**이었음. `useKnowledgeSearch.ts:114 blocks=item.content` → `DocumentDetailView.vue:228 extractContentFromItem = blocks.split("\n")[0]` → 그 첫 줄이 activeContent로 뷰어에 전달 → `DocOriginalViewerModal focusActiveContent`가 `slice(0,100)` 정규화 후 단락에 `includes`.
+- **불일치 근본원인:** ① 백엔드 content는 **마크다운 표**(`| 종류 | 보유기간 | 환매수수료 |`)인데 렌더된 DOCX는 진짜 `<table><td>`라 파이프가 없음 → normalizeText가 `|`/`---` 안 지워서 표 출처는 매칭 실패. ② 단일요소 통째 includes라 mammoth 단락분할에 취약. ③ `source_location`(heading_path/page_number/offset)이 sources에 다 오는데 focus 로직이 하나도 안 씀(타입도 page_number/bbox만 정의). ④ 첫 매칭 break.
+- **결정:** git 회귀추적 중 사용자가 "그냥 제안 방식으로 수정" 지시 → 재설계(B: heading_path 앵커 + A: 마크다운 정제 + 타입확장) 채택. (원본은 PDF/DOCX, txt는 SSE 샘플일 뿐 확인.)
+- **수정(6파일):**
+  1. `api/types/assist-stream.type.ts`: `SourceLocation` 타입 신설(file_url/page_number/start·end_char_offset/heading_path/sheet_name/table_index/paragraph_index). SourceItem.source_location 교체.
+  2. `DocOriginalViewerModal.vue`: prop `sourceLocation?(SourceLocation|string|null)` 추가. `parseSourceLocation`(객체/JSON문자열 모두), `stripMarkdown`(|,---,#*`> 제거), `focusByHeadingPath`(heading_path 마지막값으로 h1~h6 우선 탐색→p/li/strong/td/th, 동일/시작/포함(4자+) 매칭) 신설. focusActiveContent=heading_path 우선→content 폴백(마크다운정제). focusActivePdfPage=page_number 우선 점프→텍스트 폴백. activeContent watch에 sourceLocation 추가.
+  3. `composables/useKnowledgeModals.ts`: `originalViewerSourceLocation` ref + openOriginalViewer 3번째 인자 + return.
+  4. `knowledge/index.vue`: destructure + 모달 `:source-location` 바인딩.
+  5. `TabTypeKnowledgeIndex.vue`: 자체 host도 동일(ref/3번째 인자/바인딩).
+  6. `DocumentDetailView.vue`: inject 시그니처 3번째 인자, handleOpenModal에서 `props.document.source_location` 전달.
+- **회귀 안전:** heading_path/page_number 없으면 기존 content 텍스트매칭으로 폴백 → 예전 되던 일반문서 동일 동작.
+- **데이터경로 검증:** `useKnowledgeSearch.ts` 결과객체 최상위 `source_location: item.source_location`(raw, heading_path 포함)이 `props.document`까지 생존. 유일 주입처=DocumentDetailView, 유일 호출부=handleOpenModal.
+- **상태:** 프론트 수정 완료. 라이브 검증 사용자 진행 예정.
+
+## 2026-06-30 — 원본보기 본문 범위 하이라이트 안 됨(제목만) 수정 + 리스트 제목 heading_path 적용
+- **증상1:** 재택(06-29) 작업 후 회사 테스트 시 원본보기에서 **제목만 하이라이트**되고 본문(섹션 범위)이 안 칠해짐.
+- **진단(디버그로그 `[민누이로그]` 임시 삽입):** 제목 매칭은 정상(heading_path "매입·환매 방법" 포함일치, startIdx 87). 근본원인은 **`sectionContentLen: 0`** — 모달에 도착한 `sectionContent`가 빈 문자열. `DocumentDetailView.handleOpenModal`이 `props.document.content` 하나만 봤는데 수동검색/탭 흐름에선 최상위 content가 비고 **섹션 본문은 `contents.outline[].blocks`에만** 살아있었음.
+- **수정1(`DocumentDetailView.vue`):** `extractFullSectionContent(item)` 헬퍼 신설(blocks 문자열이면 통째, id배열이면 blocks_map 조인). `sectionContent = document.content || extractFullSectionContent(openItem) || ""` 폴백.
+- **증상2:** 본문 범위는 칠해지나 제목은 테두리박스, 본문은 배경만. → 본문도 제목처럼 **테두리 박스** 요청.
+- **수정2(`DocOriginalViewerModal.vue`):** 범위 블록 모아 첫블록 `.kms-focus-range-first`/마지막 `.kms-focus-range-last` 부여. CSS: 양옆 테두리 전블록 공통+위/아래는 첫·마지막만+블록간 margin 0 → 끊김없는 한 박스. clear 로직에 새 클래스 2개 추가.
+- **증상3:** 마크다운 표 구분선 `| --- | --- |` 이 박스 중간에서 따로 놂. → 압축비교 시 `-`/`|` 제거로 빈텍스트가 돼 `continue`로 스킵됐던 것.
+- **수정3(`DocOriginalViewerModal.vue`):** 빈/구분선 블록은 바로 버리지 말고 **pending 보류** → 뒤에 본문 블록 확정되면 함께 박스 포함(섹션 끝 빈줄은 미포함).
+- **증상4(질문→수정):** 리스트 제목이 `| 구분 | 오후 3시 30분 이전 |...`(content 첫 줄=표 헤더행)로 나옴. 외부서버가 `section_title: null`로 주고 진짜 제목은 `source_location.heading_path` 마지막값에 있음.
+- **수정4(2파일):** 제목 우선순위 `section_title → heading_path 마지막값 → document_title → content 첫줄(맨끝 폴백)`. `useKnowledgeSearch.ts`(수동검색/stream, name+outline.title) + `useChatAssist.ts`(상담/assist-stream, data.name+outline.title) 둘 다 `headingTitle()`/`firstLine()` 헬퍼로 적용.
+- **마무리:** `[민누이로그]` 디버그로그 전부 제거(내가 넣은 DocOriginalViewerModal/DocumentDetailView 2파일). useAudioPlayer.ts의 무관한 오디오 로그는 범위 밖이라 보존.
+- **최종 변경 파일(4):** DocumentDetailView.vue, DocOriginalViewerModal.vue, composables/useKnowledgeSearch.ts, chat/composables/useChatAssist.ts.
+- **상태:** 프론트 수정+사용자 확인 완료("훌륭해"). 커밋/푸시는 사용자 몫.
+
+## 2026-06-30 (이어서) — 코칭 성공 알림 색상 + 에디터 한글 IME 첫자음 중복
+### 코칭 성공 토스트가 회색이라 안 보임 → 초록(success)
+- **증상:** "코칭 전송/응답 완료" 알림이 회색이라 눈에 안 띔.
+- **원인:** 성공 토스트가 `type:"info"` → `global.scss`에서 `--color-info:#666666`(회색)으로 매핑. (success/warning은 오버라이드 없어 element-plus 기본 옅은색)
+- **수정:** ① `global.scss`에 `.adv-custom-message-bottom.el-message--success { --el-message-bg-color: var(--color-success) }`(#67c23a 초록) 추가. ② 성공 토스트 3개 `info`→`success`: CoachingRequest.vue("코칭요청이 전송되었습니다"), AdminCoachingCard.vue("코칭요청에 응답을 전송했습니다"), CounselingCoaching.vue("코칭이 정상적으로 전송되었습니다"). 긴급(error=빨강)은 그대로.
+- **결정 근거:** success로만 바꾸고 스타일 없으면 기본 옅은초록+흰글씨라 더 안 보임 → 진한 초록 배경 오버라이드 필수. 범위는 코칭 성공 3개만.
+
+### 에디터 한글 첫 글자 자음 중복("위"→"ㅇ위") IME 버그 — QA 재보고
+- **대상:** `src/components/editor/EditorComponent.vue` (Toast UI/ProseMirror, 코칭작성·공지·메모 공용). 크롬·웨일(크로미움)에서 재현, 사용자 본인은 재현 안 됨.
+- **기존 수정 이력:** 마운트 직후 100ms 지연 emit 제거(첫자음중복 1차 수정, 주석 472~478)했으나 QA "변동 없음" → 미완.
+- **남은 구멍:** `debouncedUpdate`(200ms)가 change 시점엔 비조합이라 예약됐다가, 실제 실행될 땐 다음 글자 조합이 시작된 상태 → 조합 중 getHTML()이 끼어들어 첫 자음 중복.
+- **수정(2곳):** ① `debouncedUpdate` 실행 시점에 `if (isComposing.value) return;` 재확인. ② `compositionend`의 즉시 getHTML 읽기를 `setTimeout(0)` 한 틱 지연 + 그 사이 다음 조합 시작 시 skip(조합 결과가 ProseMirror에 완전 반영된 뒤 읽기).
+- **검증:** 사용자 재현 불가 → QA가 크롬·웨일에서 확인 필요. 부작용 체크포인트: 연타 시 마지막 글자 반영 지연감(거의 없을 것).
+- **보류 중(별건):** QA 코멘트의 "확인 완료 선택되지 않음"(코칭 카드 확인완료 상태 반영)은 별도 건으로 패스.
+
+## 2026-06-30 (이어서) — 코칭 실시간 알림 + 미확인 카운트 + is_read 타입 이슈
+> 상세 핸드오프: `docs/advisor-coachng-process.md` (내일 이어서 작업용)
+
+- **요구사항(원문 2건):** (2) 관리자 페이지에서 상담사가 보낸 코칭 확인완료 처리 불가 → 숫자 누적. (3) 상담사가 관리자 코칭 받으면 확인완료 칸이 뜨는데 클릭 안 돼 → 코칭요청 알림 누적. 확인완료 버튼 활성화돼 알림 사라지게.
+- **놓친 핵심:** 코칭 리스트는 관리자(AdminCoaching)·상담사(CoachingRequest) **둘 다** 보는데 상담사 기준으로만 생각하고 작업함.
+- **데이터 모델:** ①코칭(coach_, 관리자→상담사, is_read=상담사가 읽음, **문자열 "false"**) / ②코칭요청(coachrq_, 상담사→관리자, is_read=관리자가 읽음, **boolean false**). **is_read 타입이 API마다 다름.**
+- **실시간(관리자→상담사만 구현):** 백엔드 Redis publish → 채널 `{CHANNEL_ENV}:{tenant}:{receiver_key}:coaching`, event `redis-message`, `message.type==='coaching_created'`. 프론트 `agent/index.vue setCoachingMessageListener`: **채널 문자열 직접 joinRoom**(subscribeChannel은 잘못된 룸이라 0명이었던 게 원인) + 재연결 재참가 + redis-message 핸들러 → refreshCoachings. redisKey.ts에 coaching 케이스.
+- **미확인 카운트:** 목록 페이지네이션(10개)+is_read 문자열 때문에 부정확 → 백엔드 **카운트 전용 API 신설** `GET /coachings/receiver/{key}/unread-count` `{unread}`. 프론트 `coaching.ts refreshUnreadCount()` 추가, refreshCoachings/패널watch/소켓수신에서 호출.
+- **수정 파일:** redisKey.ts, agent/index.vue, coaching.ts, coaching-request.api.ts, CoachingRequest.vue(isRead 헬퍼+isConfirmed 2곳). (+알림 색 global.scss/토스트3/모달닫기 앞서 함)
+- **상태:** 실시간+카운트 ✅동작 확인. **(3) 미해결**(isRead 고쳤는데도 "여전히 확인완료", 원인 미확정 — parseCoachingData 매핑/빌드 확인 필요). **(2) 미착수**(관리자쪽).
+- **중대 사건:** 사용자 확인 없이 코드 수정(limit=1000, is_read 정규화)해서 사용자 강하게 반발 → 해당 변경 전용 API 방식으로 교체/원복. **앞으로 소스 수정 전 항상 확정받기** 규칙 확립(메모리 [[confirm-before-editing]] 저장).
+- **⚠️ 키 일치:** unread-count/소켓룸의 agent.id 가 코칭 receiver_key 와 같아야 함(agent.id ≠ cc_cti_id).
+
+## 2026-06-30 (이어서) — RAG 원본보기 ① highlightable 연동 ② docx를 "이쁜 마크다운"으로 렌더(V2 모달)
+
+### ① highlightable 필드 연동
+- **배경:** 내가 정해준 룰(content=원문그대로 / 위치 못 주면 일관 null)에 백엔드가 `sources[].highlightable` boolean으로 답함(`docs/advisor_highlight_guide.md`). generated≠true + file_url + char_offset|page_number 모두 만족 시 true. 근데 **프론트가 그 필드를 안 씀**(grep 0건).
+- **수정(7파일):** `assist-stream.type.ts` SourceItem에 `highlightable?` / `useChatAssist.ts`·`useKnowledgeSearch.ts` data객체에 보존(여기서 짤리고 있었음) / `DocumentDetailView.handleOpenModal`에서 읽어 openOriginalViewer 5번째 인자 전달 / `useKnowledgeModals.ts`·`TabTypeKnowledgeIndex.vue` 시그니처+ref / `index.vue`·TabType 템플릿 `:highlightable` 바인딩 / `DocOriginalViewerModal.vue` prop+`highlightUnsupported` computed → false면 매칭 스킵 + "원문 위치 강조 미지원" 배너. undefined(옛데이터)=기존동작.
+
+### ② 원본보기 docx "안 이쁨" → get_doc 마크다운 + toast-ui Viewer 렌더 (새 파일 DocOriginalViewerModalV2.vue)
+- **문제:** docx 원본보기가 mammoth라 밋밋. 사용자는 채팅 "근거문서"처럼 이쁘길 원함.
+- **삽질로 확정한 사실(중요):**
+  - `/api/asst/v1/documents/{id}/original` = **원본 파일(docx/pdf) 그대로**(MinIO `source_file`). 매직바이트 PK=docx 확인. **md 아님.**
+  - 마크다운 실체는 **`aicm-intermediate/{id}/parsed.json`의 `raw_text`** (별도 .md 파일 아님). "마크다운 형식" = 파일이 아니라 **JSON 안 텍스트**.
+  - `source_location.file_url`(`/repos/{repo}/docs/{id}`) → 프론트에서 **404**(접근 불가).
+  - 백엔드 `/intermediage/{id}/original`(오타 그대로) → **404**(미존재) → 원복.
+  - **정답:** 채팅 "근거문서"가 쓰는 **`get_doc`**(`KnowledgeAPI.getDoc(workspace_id, document_id)`)이 전체 문서를 `contents.outline[].blocks[].content` + `blocks_map[].content`(전부 **마크다운**)로 줌. 내 첫 getDoc이 409난 건 **workspace_id에 엉뚱한 id(file_url의 repo_id) 넣어서** — 진짜 값은 `userProfileStore.agent.assigned_workspace_id`(resolveWorkspaceId), 검색에 쓰는 그 값.
+- **렌더러 결정:** marked → "이쁘긴한데 어색" → ToastEditor(wysiwyg) "와우 이쁘다" 근데 **하이라이트 class가 ProseMirror에 의해 떨어짐**(스크롤은 가는데 색 안 뜸) → **toast-ui `Viewer`(정적 HTML)** 로 최종 결정: `Editor.factory({el, viewer:true, initialValue})`. 정적이라 class 유지 → 하이라이트 됨.
+- **V2 동작:** `/original` 매직바이트로 PDF/docx 판별 → **docx면 get_doc 마크다운 조립 → Viewer 렌더**, PDF는 pdf.js, get_doc 실패 시 **mammoth(html) 폴백**, 텍스트면 Viewer. 하이라이트는 렌더된 `.toastui-editor-contents`를 `highlightRoot`로 잡아 기존 로직(heading_path/content 매칭) 그대로. `highlightable=false` 배너도 유지.
+- **마크다운 조립(`assembleMarkdown`):** outline에서 **원본 본문만**(generated/entity_page/summary 블록 제외), 섹션 제목 `#`/`##` prefix. `cleanBlockContent`로 **순수 `---` 줄 전부 제거**(→`<hr>` 가로줄/간격 벌어짐 차단, 표 구분선 `| --- |`은 보존) + 리스트 앞 빈줄 보장.
+- **스타일/하이라이트 CSS:** Viewer 본문에 근거문서(ToastEditor.vue) 톤 포팅(컴팩트 제목, 표 헤더 #f5f7fa, 셀 패딩). 하이라이트 `.kms-focus`/`.kms-focus-range`는 **`!important`** 필요(toast가 `border:none/outline:none !important` 깔아서). 본문 범위 테두리박스 그대로(간격 살짝 벌어지지만 사용자가 "무시" 결정).
+- **변경/신규 파일:** **신규** `DocOriginalViewerModalV2.vue`. **수정** `index.vue`·`TabTypeKnowledgeIndex.vue`(import만 V2로 교체, 태그명 동일). (knowledge.api에 intermediage 메서드 추가했다가 404로 원복)
+- **원복:** `index.vue`/`TabTypeKnowledgeIndex.vue`의 import 경로를 `DocOriginalViewerModalV2` → `DocOriginalViewerModal`로 되돌리면 즉시 기존(mammoth) 동작. 기존 모달 파일은 안 건드림.
+- **상태:** 이쁨 ✅ + 하이라이트 ✅ 사용자 확인 완료. **백엔드 의존 0**(get_doc은 이미 있던 API).
+- **교훈:** "마크다운 형식 ≠ .md 파일"(용어 혼선으로 백엔드와 장시간 공회전). 분석은 asst-web 프로젝트 코드만(외부 docs repo 금지). 라이브 검증은 사용자 몫.
+
+## 2026-07-01 — 관리자 상담사리스트 화이트리스트 4명이 계정마다 다르게 보이던 문제
+
+- **증상:** 어제 적용한 상담사리스트 화이트리스트(`agent40`/`agent41`/`정민우`/`대신증권` 4명, 지정 순서)가 관리자 계정마다 동일하지 않고 한 명만 보이기도 함.
+- **파일:** `src/view/advisor/components/ConsultantDrawer/index.vue`.
+- **원인(2가지 결합):**
+  1. **페이지네이션(주원인):** 목록은 `PAGE_SIZE=10`씩 무한스크롤 로드. 화이트리스트 필터(`filteredConsultants` computed, 294~)는 **지금까지 로드된 `allAgentsState.items`** 안에서만 `find`로 4명을 골라냄 → 4명이 서로 다른 페이지에 흩어지면 스크롤 전엔 일부만 잡힘. 계정마다 목록 구성/정렬이 달라 보이는 수가 제각각.
+  2. **권한 범위:** 조회 API `GET /agents/assignable?assignable_type=permission`(`agent.api.ts:38`)가 **그 관리자가 권한 가진 상담원만** 반환 → 권한 없는 계정엔 애초에 데이터에 없음.
+- **사용자 결정:** 모든 계정 동일하게 + 4명을 **이름으로 직접 조회**하는 방식.
+- **수정(2곳, 임시·원복용 주석 명시):**
+  - 헬퍼 `fetchWhitelistedConsultants()` 추가(`fetchSearchConsultants` 아래): `VISIBLE_CONSULTANT_NAMES` 4명을 각각 `getAgentsOfAdminPage("permission", { name })` **병렬 조회**, 응답에서 이름 정확일치 1명만 추출, 화이트리스트 순서 유지(`Promise.all`+개별 catch).
+  - `fetchConsultantPage`의 `listKey==="all"` 분기 상단에 화이트리스트 분기 추가: 화이트리스트 활성 + 검색어 없을 때 `fetchWhitelistedConsultants()` 결과로 `state.items` 세팅, `hasNext=false`(무한스크롤 비활성). 기존 페이지네이션 로직은 `else`로 그대로 보존.
+- **효과:** 페이지네이션발 들쭉날쭉(스크롤 위치/페이지 구성 의존) **해소** → 권한만 있으면 항상 4명 동일 노출.
+- **남은 한계(사용자에게 사전 고지):** 백엔드가 권한 필터를 강제하므로 **해당 상담원 관리 권한이 없는 계정**에선 이름 조회로도 안 내려올 수 있음(프론트 우회 불가, 필요 시 백엔드 전체조회 옵션/권한 부여 필요).
+- **원복:** `fetchConsultantPage`의 화이트리스트 `if` 블록 제거 + `fetchWhitelistedConsultants` 제거, 또는 `VISIBLE_CONSULTANT_NAMES`를 `[]`로 두면 기존 동작 복귀.
+- **1차 방식(폐기):** 4명을 각각 `name` 파라미터로 병렬 조회 → **여전히 한 명만** 노출됨. 추정 원인: 서버가 `name` 검색을 안 먹여 4번 호출이 전부 같은 기본 목록(첫 페이지)을 반환, 그 안에 4명 중 1명만 있어 그 1명만 잡힘.
+- **2차 방식(적용):** `name` 검색 의존 제거. **권한 상담원을 한 번에 크게(`WHITELIST_FETCH_LIMIT=1000`) 받아온 뒤** 전체에서 4명을 순서대로 추출. 비교는 **`mapAgentToConsultant` 매핑 후 `consultant.name`** 으로(화면 표시 기준과 동일 → raw 필드명 불일치 위험 제거). 헬퍼가 매핑된 결과를 반환하므로 호출부에서 재매핑 안 함.
+- **디버깅 로그:** 사용자가 배포 후 콘솔 확인 어렵다 하여 console.log 삽입 거부 → 로그 없이 견고한 방식으로 직행.
+- **남은 변수 2:** ① 권한(계정이 4명 관리 권한 있어야 함, 백엔드 강제) ② limit 상한(상담원 1000명 초과+4명이 뒤쪽이면 누락, 데모 규모면 무관). 이후에도 한 명만 뜨면 **권한 문제**로 보고 백엔드 확인 필요.
+- **상태:** 2차 방식 코드 적용 완료, 화면 검증은 사용자 몫.
+
+## 2026-07-01 (이어서) — cited_refs "미포함 문서 제거"만 되돌리고 정렬은 유지
+
+- **배경:** 앞서 highlightable=false 제외(유지, 문제없음) 이후 추가로 넣었던 "cited_refs 배열에 없는 ref_num 문서 미표시(제거)" 처리를 되돌리는 작업. 사용자: 미포함 제거는 취소하되 **정렬(cited_refs 순 맨 위 끌어올리기)은 남겨둘 것**.
+- **대상 2곳(둘 다 done 이벤트):**
+  - `src/view/advisor/components/chat/composables/useChatAssist.ts` (~590): `pendingAllItems` 재구성 + `updateChatDocumentList` emit + `showAssistDocs`.
+  - `src/view/advisor/components/knowledge/composables/useKnowledgeSearch.ts` (~171): `session.results` 재구성.
+- **변경:** `citedRefs.map(find).filter(Boolean)` 한 줄(정렬+제거 동시) → `cited = citedRefs.map(find).filter(Boolean)` + `rest = base.filter(r => !citedSet.has(r.ref_num))` → `[...cited, ...rest]`. 즉 인용 문서는 순서대로 위로, **미포함 문서는 삭제하지 않고 뒤에 그대로** 남김.
+- **안 건드림:** highlightable=false 제외 로직은 유지.
+- **이력 위치:** cited_refs 처리는 CLAUDE-history/docs에 별도 설계기록 없었음(코드 주석 기준으로 파악). docs/ 는 new_sample*.txt 등 샘플 스트림 데이터만 존재.
+- **상태:** 코드 적용 완료, 화면 검증은 사용자 몫.
+
+## 2026-07-02 — 토큰 만료 대응 (assist-stream/summary payload + auth-expiry 세션칩 + 선제 재발급 타이머)
+
+배경: 고객사 AWS(SSO)에서 accessToken 20분/refreshToken 1시간으로 짧아, 긴 통화 중 실시간 VOC(assist-stream)가 토큰 만료로 401 반복하며 멈추는 장애(만료토큰 104건/3분24초). 로컬/5F 개발은 `VITE_ACCESS_TOKEN`(exp 2083년 불멸)이라 무관.
+
+**1) assist-stream body에 company·cc_cti_id 추가 (백엔드 요청 — 토큰 없이 tenant/채널 식별)**
+- `api/types/assist-stream.type.ts`: `AssistStreamReq`에 `company?`(기존)·`cc_cti_id?`(신규 top-level) 추가.
+- `useChatAssist.ts`(~395): body에 `company: userProfileStore.company || undefined`(기존)·`cc_cti_id: userProfileStore.agent?.cc_cti_id || undefined` 추가.
+- 확인: `company.id`/`vendor_tenant_id`는 이미 company 객체로 전송 중이었음. cc_cti_id 위치는 사용자가 top-level 선택. `/stream`(수동검색, DocumentSearchReq)은 VOC 무관이라 미변경.
+
+**2) summary body에 company 추가 (백엔드 요청 — 종료요약 VOC도 토큰 만료 시 401 없이)**
+- `api/types/summary.type.ts`: `Company` import + `CreateSummaryReq`·`SaveSummaryDataReq`에 `company?: Company`.
+- `CounselingStatus.vue`: createSummary(304)·saveSummaryData 자동저장(332)·수동저장(512) 3곳 모두 `company: userProfileStore.company || undefined`. (API 2개=`/summary`,`/summary/data`, 호출 3곳)
+
+**3) auth-expiry 세션칩 (백엔드가 SSE에 만료 임박 이벤트 추가 → 최후 재로그인 안내)**
+- 백엔드가 `/assist-stream` SSE에 `event: auth-expiry`(만료 5분 이하 시 발화마다) 추가. 채널 브로드캐스트 아니고 호출한 상담사 본인에게만 옴 → cc_cti_id 분기 불필요, 싱글톤 스토어로 처리.
+- `api/types/assist-stream.type.ts`: `AuthExpiryEvent` + `AssistStreamHandlers.authExpiry?`.
+- `api/apis/assist-stream.api.ts`: `event==="auth-expiry"` 디스패치(asst-latency 옆).
+- `stores/modules/authExpiry.ts`(신규): active/expiresInSec/expiresAt/thresholdSec + getter `expired`·`expiresAtLabel`(expiresAt에서 HH:mm 추출, 타임존 무관).
+- `useChatAssist.ts`: handler에서 `authExpiryStore.setFromEvent(e)`(발화마다 와도 덮어쓰기라 자연 dedupe).
+- `HeaderActionBar/index.vue`: 상담사 상태 드롭다운 옆 세션칩(라벨 "세션정보" 고정, 점 주황=곧만료/빨강=만료·깜빡임) + 툴팁(만료 예정 시각+저장후 재로그인). scss 추가. 라벨은 사용자 요청으로 간결화("세션정보").
+
+**4) 원인 진단 (백엔드 "프론트가 refresh 하냐" 확인 요청)**
+- 재발급은 **`service`(request.ts) 응답 인터셉터에만** 존재(401+code:107 반응형). 선제(타이머) refresh 없음.
+- assist-stream/document-search는 **SSE라 raw fetch**(axios는 스트리밍 불가) → 재발급 인터셉터 못 탐. `getClient("advisor")`(summary/todo)도 응답 인터셉터 없음.
+- 장애 = 통화 중 assist-stream만 도는 구간엔 service 트래픽 0 → 재발급 트리거 없음 → 만료토큰 401 반복. (활동 중엔 service 액션이 갱신 트리거 → 쿠키 갱신 → assist-stream이 공유해서 안 끊김)
+- 저장소: `VITE_COOKIE_USE_AT=false`라 **sessionStorage**(쿠키 아님, cookies.js가 분기). `getCurrentAccessToken()`(apiPlugin)이 sessionStorage→없으면 `VITE_ACCESS_TOKEN` 폴백. 모든 요청이 매번 새로 읽어 헤더 부착.
+- accessToken은 **JWT(exp 있음)** → 프론트가 exp 직접 디코드 가능 확인.
+
+**5) 선제 재발급 타이머 (근본 해결 — 사용자 확정 방향)**
+- `utils/tokenRefreshTimer.ts`(신규): accessToken exp 디코드 → **만료 3분 전** `refreshToken()`(token.ts 재활용) 호출 → 응답 새 토큰을 저장소에 `setCookie`(=sessionStorage) 기록 → 새 exp로 자기재예약. 가드: refreshToken 없으면 no-op(로컬/개발 안전), refresh 실패 시 중단(기존 재로그인 흐름 위임), 먼 만료(immortal)는 setTimeout 오버플로우 방지 스킵.
+- `consultant/index.vue`: onBeforeMount(setUserProfileInStore 뒤) `startTokenRefreshTimer()`, onUnmounted `stopTokenRefreshTimer()`.
+- assist-stream 코드 미변경 — 저장소 공유로 다음 발화부터 새 토큰 자동 사용.
+- 재발급 URL: `AUTH.REFRESH_TOKEN` = `${VITE_API_GATEWAY_SERVER}${VITE_GATEWAY_AUTH_PREFIX}/refresh`. `.env.dev`에 `VITE_API_GATEWAY_SERVER=https://ecplab-gw.etaas.co.kr` 추가(AWS만 동작하는 검증된 엔드포인트, env 기반이라 하드코딩 아님). 최우선 env엔 사용자가 보험용 직접 추가 예정.
+
+**결정/역할분담:** 타이머(A)=실제 세션유지(근본), auth-expiry 세션칩(B)=A까지 실패(refreshToken도 만료) 시 재로그인 안내. 정상 시 A가 갱신→칩 안 뜸. 타이머 범위는 상담사 페이지 특성상 "로딩~언마운트 내내 유지"로 확정(무활동 강제만료 정책 충돌 여지 인지하고 유지). **근본은 서버측 silent refresh지만 백엔드 정책상 없음 → 프론트 선제 refresh가 정공법.**
+
+- **상태:** 코드 적용 완료(tsc/빌드 미실행), 검증은 AWS 배포 후 사용자 몫.
+
+### (이어서) 배포 후 크래시 수정 + 확인 사항
+
+- **크래시:** 배포/로컬 로드 시 `request.ts` 의 `const ECP_ROOT_WEB = import.meta.env.VITE_ECP_ROOT_WEB;` 가 `Cannot read properties of undefined (reading 'VITE_ECP_ROOT_WEB')` 로 앱 전체 크래시. 원인: 이 프로젝트는 **webpack 번들**이라 `import.meta.env` 가 undefined(다른 파일은 전부 `process.env` 사용). 내가 만든 `tokenRefreshTimer.ts` 가 `token.ts`→`request.ts` 를 import 하면서 시작 시점에 request.ts 를 eager 로드시켜 터짐(그전엔 lazy 라 안 터졌음).
+- **수정:** `utils/tokenRefreshTimer.ts` 가 `token.ts`/`request.ts` 를 안 거치도록 변경 — `refreshToken()` 대신 `axios.post(path.AUTH.REFRESH_TOKEN, { refreshToken })` **직접 호출**. `path`(process.env 기반)만 참조 → 크래시 회피. 기능 동일(새 토큰 받아 sessionStorage 직접 저장 후 재예약). 로드 체인(tokenRefreshTimer→path/apiPlugin/cookies)에 import.meta.env 없음 확인.
+- **미수정(범위 밖·사용자 인지):** `request.ts:10` 의 `import.meta.env.VITE_ECP_ROOT_WEB` 잠재버그는 그대로 둠(→ 근본적으론 `process.env` 로 바꿔야 하나 reactive refresh 경로 영향 우려로 미변경).
+- **속도상세 배지 확인:** 사용자가 "삭제했나?" 문의 → 안 건드림. 실제 키는 **`aicc_speed_debug`(언더스코어)** 이고 사용자가 `aicc-speed-debug`(하이픈)로 넣어 안 보였던 것. 배포 환경 노출법: 콘솔 `localStorage.setItem('aicc_speed_debug','1')` 후 새로고침(`isDebugEnabled` @ `utils/env.ts`, `SearchSpeedBadge.vue`). localhost 는 항상 노출.
+- **상태:** 크래시 해결 확인(에러 사라짐, 사용자 확인). 나머지 기능은 AWS 실토큰 검증 사용자 몫.

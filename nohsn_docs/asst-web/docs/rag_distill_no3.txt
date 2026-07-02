@@ -1,0 +1,102 @@
+event: intent
+data: {"search": true, "reason": "펀드 상품의 원금 손실 가능성 확인", "latency_ms": 198, "skipped": false}
+
+event: query_analysis
+data: {"original_query": "원금 손실 가능해요", "rewritten_query": "하나코리아증권자투자신탁_주식 원금 손실 가능성", "keywords": ["하나", "코리아", "증권", "투자신탁", "주식", "원금", "손실", "가능성"], "decomposed": {"is_complex": false, "category_names": [], "nature_filter": [], "time_filter": null, "entity_filter": null, "domain_hint": null}}
+
+event: sources
+data: {"sources": [{"ref_num": 1, "document_id": "be0ddf95-5d7d-4d84-9167-153372666694", "chunk_id": "a0f4b6e1-8038-4f2c-b8f4-ac237b310102", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "하나코리아증권자투자신탁[주식]은 국내 상장주식 투자를 통해 자본소득을 추구하는 2등급(높은 위험)의 개방형 주식형 펀드입니다. KOSPI를 비교지수로 하며, 체계적인 리스크 관리를 통해 수익성을 추구하지만 원금 손실 가능성이 있는 실적배당상품입니다. 투자자는 클래스별(A, C1, C-E)로 상이한 보수 체계와 주식 및 이자율 변동에 따른 투자 위험을 유의해야 합니다.", "score": 0.731, "token_count": 51, "page_info": null, "source_location": {"file_path": null, "file_url": null, "page_number": null, "page_range": null, "start_char_offset": null, "end_char_offset": null, "bbox": null, "heading_path": ["15. 집합투자기구 공시 정보 안내"], "sheet_name": null, "table_index": null, "paragraph_index": null}}, {"ref_num": 2, "document_id": "be0ddf95-5d7d-4d84-9167-153372666694", "chunk_id": "a873a7f4-4354-4ef3-b014-e52e27ae61be", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "| 구분 | 투자위험의 주요 내용 |\n| --- | --- |\n| 투자원본 손실위험 | 이 투자신탁은 투자원리금 전액이 보장·보호되지 않음. 투자원본의 전부 또는 일부에 대한 손실위험이 존재하며, 투자결정 및 손실 위험은 전적으로 투자자가 부담함. 집합투자업자·판매회사 등 어떠한 당사자도 책임지지 않음. 또한 예금자보호법 적용을 받는 은행예금과 달리 은행 등에서 매입한 경우에도 예금자 보호를 받지 못함. |\n| 시장위험 및 개별위험 | 집합투자재산을 상장주식 등에 투자함으로써 투자증권의 가격변동, 이자율 변동 등 기타 거시경제지표 변화에 따른 위험에 노출됨. 또한 신탁재산 가치는 투자대상종목 발행회사의 영업환경·재무상황·신용상태 악화에 따라 급격히 변동될 수 있음. |\n| 주식가격 변동위험 | 집합투자재산을 국내 상장주식 등에 주로 투자함으로써 주식가격 하락 시 손실이 발생하는 등의 위험이 있음. |\n| 이자율 변동위험 | 일반적으로 채무증권 가격은 이자율 변동에 따라 변동됨. 이자율 하락 시 채무증권 가격 상승에 의한 자본이득이 발생하나, 이자율 상승 시 자본손실이 발생함. 따라서 만기 전 중도 매도 시 시장 상황에 따라 손실 또는 이득이 발생할 수 있음. |\n| 신용위험 및 부도위험 | 발행사의 신용평가 등급 하락 또는 부도 등 신용사건(Credit Event) 발생 시 채무증권 가격 하락 또는 환금성 제약 등의 위험이 있음. |\n| 파생상품 투자위험 | 파생상품(선물·옵션 투자)은 작은 증거금으로 거액 결제가 가능한 지렛대 효과(레버리지 효과)로 인해 기초자산 직접 투자 대비 높은 위험에 노출됨. 또한 옵션매도에 따른 이론적 손실범위는 무한대이므로 기초자산 투자나 옵션매수 대비 높은 위험에 노출될 수 있음. |\n기타 다른 투자위험은 투자설명서 참조. ---", "score": 0.7298, "token_count": 221, "page_info": "p.1", "source_location": {"file_path": "/tmp/aicm_8ld2o5fn.docx", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/be0ddf95-5d7d-4d84-9167-153372666694", "page_number": 1, "page_range": null, "start_char_offset": 4151, "end_char_offset": 5034, "bbox": null, "heading_path": ["7. 주요 투자위험"], "sheet_name": null, "table_index": null, "paragraph_index": 9}}, {"ref_num": 3, "document_id": "be0ddf95-5d7d-4d84-9167-153372666694", "chunk_id": "82010732-c7ed-42f6-9af8-bc6c289b4327", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "이 투자신탁의 위험등급: 2등급 [높은 위험]\n하나자산운용(주)는 이 투자신탁의 실제 수익률 변동성(일간 수익률의 최대손실예상액)을 감안하여 2등급으로 분류함.\n위험등급 척도 (1=가장 높음 ~ 6=가장 낮음):\n| 등급 | 1 | 2 | 3 | 4 | 5 | 6 |\n| --- | --- | --- | --- | --- | --- | --- |\n| 위험도 | 매우 높은 위험 | 높은 위험 | 다소 높은 위험 | 보통 위험 | 낮은 위험 | 매우 낮은 위험 |\n본 투자신탁은 2등급(높은 위험).\n핵심 유의:\n집합투자증권은 「예금자보호법」에 따라 보호되지 않는 실적배당상품으로 투자원금 손실이 발생할 수 있음.\n집합투자재산을 상장주식 등에 투자함으로써 투자증권의 가격변동, 이자율 변동 등 기타 거시경제지표 변화에 따른 위험에 노출됨. ---", "score": 0.7296, "token_count": 104, "page_info": "p.1", "source_location": {"file_path": "/tmp/aicm_8ld2o5fn.docx", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/be0ddf95-5d7d-4d84-9167-153372666694", "page_number": 1, "page_range": null, "start_char_offset": 282, "end_char_offset": 694, "bbox": null, "heading_path": ["1. 투자위험등급"], "sheet_name": null, "table_index": null, "paragraph_index": 9}}, {"ref_num": 4, "document_id": "be0ddf95-5d7d-4d84-9167-153372666694", "chunk_id": "2514a220-6ced-4e4f-9651-c57b4a880f67", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "집합투자증권은 「예금자보호법」에 따라 보호되지 않는 실적배당상품으로 투자원금 손실이 발생할 수 있으므로 투자에 신중을 기해야 함.\n금융위원회가 투자설명서 기재사항의 진실·정확성을 인정하거나 그 증권의 가치를 보증·승인하지 않음을 유의해야 함.\n간이투자설명서는 증권신고서 효력발생일까지 기재사항 일부가 변경될 수 있으며, 개방형 집합투자증권의 경우 효력발생일 이후에도 변경될 수 있음.\n증권신고서·투자설명서상 투자전략에 따른 투자목적·성과목표가 반드시 실현된다는 보장은 없으며, 과거 투자실적이 미래에도 실현된다는 보장은 없음.\n원본손실위험 등 투자위험은 증권신고서·투자설명서·간이투자설명서 본문의 투자위험 부분 참고.\n추가 유의사항은 투자설명서 '투자결정시 유의사항 안내' 참고. ---", "score": 0.7278, "token_count": 96, "page_info": "p.1", "source_location": {"file_path": "/tmp/aicm_8ld2o5fn.docx", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/be0ddf95-5d7d-4d84-9167-153372666694", "page_number": 1, "page_range": null, "start_char_offset": 3751, "end_char_offset": 4131, "bbox": null, "heading_path": ["6. 투자자 유의사항"], "sheet_name": null, "table_index": null, "paragraph_index": 24}}, {"ref_num": 5, "document_id": "be0ddf95-5d7d-4d84-9167-153372666694", "chunk_id": "a64f5aa5-4cbb-4fd2-8b1e-792b3757e321", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "이 투자신탁은 국내 주식에 주로 투자하는 모투자신탁의 수익증권을 법 시행령 제94조제2항제4호에서 규정하는 주된 투자대상자산으로 하여 주식시장 상승에 따른 자본소득을 추구하는 한편, 잔여 신탁재산으로 채권 및 유동성자산에 투자하여 안정적인 이자수익을 추구하는 상품입니다. 다만 투자목적 달성이 보장되지 않으며, 어떠한 당사자도 투자원금 보장 또는 투자목적 달성을 보장하지 않습니다.\n모투자신탁\n| 항목 | 내용 |\n| --- | --- |\n| 모투자신탁 명칭 | 하나FirstClass연금증권모투자신탁(제1호)[주식] |\n| 모투자신탁 투자목적 | 국내주식을 법 시행령 제94조제2항제4호에서 규정하는 주된 투자대상자산으로 하여 주식시장 상승에 따른 자본소득을 추구하는 한편, 잔여 신탁재산으로 채권 및 유동성자산에 투자하여 안정적인 이자수익을 추구함. |\n비교지수(Benchmark): KOSPI 100%\n(주1) 이 집합투자기구는 국내주식시장 상장주식에 자산 대부분을 투자하므로 KOSPI 수익률 × 100%를 비교지수로 함. 이 지수는 변경될 수 있으며, 변경 시 집합투자업자 인터넷 홈페이지에 공시됨.\n위험관리\n조직적 리스크관리로 펀드 손실 가능성 최소화 추구\n리서치팀과의 연계 강화로 매니저 독자판단에 따른 오류 가능성 최소화\nRisk Control팀, 컴플라이언스팀 등 전담조직에 의한 체계적 펀드 위험 관리 ---", "score": 0.7253, "token_count": 171, "page_info": "p.1", "source_location": {"file_path": "/tmp/aicm_8ld2o5fn.docx", "file_url": "/repos/2f3981d0-6a2c-4893-918e-5554f4e5b99e/docs/be0ddf95-5d7d-4d84-9167-153372666694", "page_number": 1, "page_range": null, "start_char_offset": 716, "end_char_offset": 1398, "bbox": null, "heading_path": ["2. 투자목적 및 전략"], "sheet_name": null, "table_index": null, "paragraph_index": 9}}], "confidence": 0.731, "search_latency_ms": 677, "total_candidates": 5}
+
+event: token
+data: {"text": "네"}
+
+event: token
+data: {"text": ", 원금 손실"}
+
+event: token
+data: {"text": "이"}
+
+event: token
+data: {"text": " 발생할 수 있습니다."}
+
+event: token
+data: {"text": "\n\n하나코리아증"}
+
+event: token
+data: {"text": "권자투자신탁"}
+
+event: token
+data: {"text": "[주식]은"}
+
+event: token
+data: {"text": " 투자"}
+
+event: token
+data: {"text": "원리금 전액"}
+
+event: token
+data: {"text": "이 보장·"}
+
+event: token
+data: {"text": "보호되지 않는"}
+
+event: token
+data: {"text": " 실"}
+
+event: token
+data: {"text": "적배당상품으로"}
+
+event: token
+data: {"text": ", 투자원본"}
+
+event: token
+data: {"text": "의 전부 또는 일부에"}
+
+event: token
+data: {"text": " 대한 손실위"}
+
+event: token
+data: {"text": "험이 존재합니다"}
+
+event: token
+data: {"text": " [2"}
+
+event: token
+data: {"text": "], [3]."}
+
+event: token
+data: {"text": " 또한"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": " 상품"}
+
+event: token
+data: {"text": "은 「"}
+
+event: token
+data: {"text": "예금자보호"}
+
+event: token
+data: {"text": "법」에 따라 보호"}
+
+event: token
+data: {"text": "되지 않습니다"}
+
+event: token
+data: {"text": " ["}
+
+event: token
+data: {"text": "2"}
+
+event: token
+data: {"text": "], [3], ["}
+
+event: token
+data: {"text": "4]."}
+
+event: done
+data: {"model_used": "gemma-4-31B-it", "confidence": 0.731, "token_usage": {"context_tokens": 751, "prompt_tokens": 1066, "completion_tokens": 43, "total_tokens": 1109}, "latency_ms": 1059, "stages": {"intent": 198, "search": 677, "distill": 0, "generate": 377}}
+

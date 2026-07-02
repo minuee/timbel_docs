@@ -945,3 +945,165 @@ docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configServic
   - **0.85의 진짜 정체**: type이 **angry**. remap/프론트 아니라 **CE가 실제 angry 판정**. 원인=해당 call_id 버퍼에 부정발화 누적("어쩌라고/왜 손실이 커요" 등 40턴, 전부 customer·2배중복). 누적분 전체를 CE로 보내(buildConversation) angry 나옴.
   - **★★ 핵심 버그(프론트 해결)**: publish 채널이 **상담사(cc_cti_id) 단위**(`dev:{vendor_tenant_id}:{cc_cti_id}:call:voc`)라 call_id 없음. 4개 화면(로컬/개발/양산/관리자)을 같은 계정으로 열어 각각 call_id 생성→4콜이 같은 채널로 publish→모든 화면이 8메시지(4콜×2턴) 다 수신, 남의 콜(화난 콜)까지 표시. **payload엔 call_id 있음** → 프론트가 `payload.call_id===내call_id` 필터로 해결(채널 cc_cti_id 단위 유지). 백엔드 무수정.
 - **남은 개선(미적용, todo)**: 실시간 VOC 버퍼 누적→슬라이딩 윈도우(최근 6~10발화, agent발화 포함, 중복제거, 통화종료 clear). `CLAUDE.todo.md` 등록됨. 커밋은 사용자가 직접.
+
+### 74. VOC 실시간 중복 publish 근본 해결 — 메모리+Redis 2단 dedupe (2026-06-26)
+- **증상**: 같은 (call_id, turn_idx)에 대해 VOC 결과가 프론트에 여러 번 노출. 값이 **다른** 중복(emotion 0.65/0.6 등)이라 = 각각 별도로 CE API를 호출한 결과.
+- **원인 (2겹)**:
+  1. **같은 서버 내 중복**: `handleUtterance`(assist-stream POST)가 turnKey 없이 누적 → 4화면이 같은 call_id+turn_idx로 4번 호출하면 4번 다 분석/publish. (`handleNlpComplete`는 turnKey 있었으나 `turn_idx:speaker:내용길이`라 누적길이 변하면 매번 통과 = 느슨)
+  2. **서버 간 중복(진짜 근본)**: **개발/양산 2대 서버가 같은 Redis 공유**. 각 서버는 자기 메모리(`states` Map)로만 dedupe → 서로의 처리를 모름 → 같은 (call_id, turn_idx)를 2대가 각각 분석+publish → 같은 voc 채널이라 프론트가 다 받음. 메모리 가드는 1프로세스 한정이라 원천적으로 못 막음.
+- **해결 (2단 가드, `voc-realtime.service.ts`)**:
+  1. **메모리 가드**: 두 경로(`handleUtterance`/`handleNlpComplete`) 중복키를 **`call_id:turn_idx`로 통일** → 같은 `state.processedKeys` 공유해 한 경로가 처리하면 다른 경로도 스킵. `accumulate`가 duplicate면 **CE 호출 전에 return**(분석/publish 모두 차단, 비용 절약).
+  2. **Redis 가드(분산)**: `acquireVocLock(callId, turnIdx)` 신설 — 분석 직전 `SET voc:dedupe:{call_id}:{turn_idx} NX EX 60`. 여러 서버가 같은 Redis에 원자적으로 1대만 통과. 실패 시 `분산 중복 스킵(Redis)` 로그 후 return. Redis 장애 시 통과(가용성 우선). `redisService.getClient()`(node-redis v4) 사용.
+- **전제**: dedupe 키가 call_id+turn_idx라 **같은 통화=같은 call_id**여야 작동. (call_id가 화면마다 다르면 다른 통화로 인식 → 그건 call_id 발급 쪽 문제, Redis로 못 막음.)
+- **검증**: 개발/양산 2대 + 동일 Redis에서 **1건만** publish 확인 ✅. 두 서버 다 재시작 필요.
+- **별개 잔존(참고)**: 값이 **완전 동일한** 중복이 뜬다면 그건 서버 중복이 아니라 **소켓 2개 연결**(voc 룸 2명) = 프론트 소켓 문제. 프론트 call_id 필터(이미 적용)는 "남의 콜"만 막고 같은 콜 중복수신은 못 막음.
+- **남은 개선(todo)**: 버퍼 누적→슬라이딩 윈도우(긴 통화 누적 시 화남 편향). 커밋은 사용자가 직접.
+
+### 75. Redis 한 대 공유 → 채널 env prefix(dev/localDev) 분리 + VOC 락 키 환경분리 (2026-06-29)
+- **배경/근본원인**: Redis **1대**를 local/사내개발(5f)/AWS개발 **3환경이 같은 계정**으로 공유. 채널명이 `{env}:{vendor_tenant_id}:{cc_cti_id}:call:{...}` 인데 env=`dev` 고정 + 같은 계정이라 **3환경 채널이 완전히 동일** → 교차 수신/중복. Redis Pub/Sub은 DB index와 무관(전역)이라 `REDIS_DB`로도 격리 안 됨. Redis 인스턴스 분리가 안 되니 **채널 prefix로 논리 분리**(차선).
+- **5개 채널 발행자별 제어권**:
+  - **voc** → **asst가 발행**(`publishVoc`, voc-realtime.service.ts:~668) → `VOC_CHANNEL_ENV ?? 'dev'`. 우리가 제어. 실시간 프로덕션 경로 `publishVocToChannel`은 nlp 채널명에서 prefix **자동 상속**(설계상 정석).
+  - **nlp:complete/partial, events** → **STT 서버 발행**. STT가 **`dev` 고정 배포만 가능**(변경 불가). → 그대로 `dev` 공유. asst는 **중계(relay)만** 하고 처리 안 함(`registerMessageObserver` 정의만 있고 **호출 0건**, `handleNlpComplete` 미사용) → dev 공유돼도 **무해**(읽기 전용).
+  - **orchestrator:persisted** → **callbot 발행** → localDev로 전환 완료.
+  - **4개 채널은 백엔드 코드 변경 없음**: redis-monitor 구독은 프론트가 채널명 통째로 넘김(`@Param('channel')`) → asst는 prefix를 **만드는 게 아니라 따라감**. prefix 결정자 = 프론트(구독) + 외부 발행자.
+- **최종 채널 정책(혼용)**: STT발(nlp/events)=`dev`, asst/callbot발(voc/persisted)=`localDev`. 프론트가 채널별 prefix 섞어서 구독. 한 콜이 두 prefix에 걸치지만 의도된 절충(STT가 dev 고정이라).
+- **★ 핵심 버그 — VOC 분산 락 키에 env 없음** (`acquireVocLock`, voc-realtime.service.ts:~418): 키가 `voc:dedupe:{callId}:{turnIdx}`라 **3환경이 같은 락 경쟁** → 턴마다 **먼저 잡은 1환경만** voc 계산·발행하고 나머진 스킵. AWS가 대부분 턴 선점→`dev:voc` 발행→local(localDev 구독)은 못 봄 → **"5턴 넘는데 localDev 1건만 옴"** 증상. (이 락은 원래 *같은 환경 멀티 pod* 중복방지용 #74인데, 한 Redis에 3환경 붙으니 환경 간에도 과 dedupe)
+  - **수정**: 키에 env prefix 추가 → `const env = process.env.VOC_CHANNEL_ENV ?? 'dev'; key = voc:dedupe:${env}:${callId}:${turnIdx}`. 환경별 락 독립 → 각 환경이 게이트 턴마다 자기 prefix로 독립 발행(채널 prefix와 락 scope 일치). 검증: `localDev:...:call:voc` 게이트 턴마다 정상 발행 ✅. **락 키 바뀌어 서버 완전 재시작 필요.**
+- **env 값 현황**: `VOC_CHANNEL_ENV` — `.env`/`.env.development`(AWS) 없음→기본 dev, `.env.local`/`.env.5f.development` `localDev`. `??`라 미설정만 폴백(빈문자열은 미폴백, 필요시 `|| 'dev'`로 강화 가능).
+- **VOC 게이트(참고, 버그 아님)**: `shouldRun` = `totalTurns>=2 && (totalTurns-2)%interval===0`. `REALTIME_VOC_INTERVAL=3`(현재) → 턴 2,5,8,11. 매 턴 원하면 `=1`(턴 2,3,4…; 턴1은 `>=2`라 불가, 코드수정 필요). 카운트 기준=asst 누적 발화수(assist-stream 호출 시작 시점부터).
+- **미적용(보류)**: coaching_agent_*/agent-status/notices는 env prefix 없어 여전히 공유되나 **영향 작아 보류**(같은 계정 본인 중복 정도, payload 필터됨). 거슬리면 동일 방식으로 prefix 적용 가능(asst publish+subscribe 둘 다 제어 → 외부 의존 없음). 커밋은 사용자가 직접.
+
+### 76. 상담코칭 실시간 알림 — 코칭 생성 이벤트를 프론트 표준 채널 포맷(redis-message + env prefix)으로 발행 (2026-06-30)
+- **요청(프론트 클로)**: 관리자가 코칭 전송 → DB 저장 API(`createCoaching`)가 asst로 옴 → 받는 상담사 소켓 채널로 "코칭 생성" 이벤트 publish 요청. **목적은 단순 — 프론트의 "실시간 미확인 코칭 카운트" 갱신 트리거**(이벤트 받으면 목록만 재조회, 화면 리로드 X). 백엔드는 **트리거만 쏘고 카운트 값은 안 실음**(프론트 재조회).
+- **기존 인프라 이미 존재(로직 동작, 포맷만 불일치)**: `createCoaching`(`coaching.service.ts:123`) → `publishCoaching`(Redis `coaching:message`) → `CoachingSocketHandler.handleCoachingMessage`(구독) → Socket.IO emit. `coaching_request`(코칭 요청)는 별개 경로(무수정).
+- **receiver_key 정체 확정(프론트 회신)**: `receiver_key = agent.id`(내부 user_key)이며, 소켓 전역필터에 쓰는 **`cc_cti_id`(CTI id)와 다른 별도 필드**. 매핑은 **프론트가** 담당(프론트가 agent 객체에 id·cc_cti_id 다 보유 → 자기 `agent.id`로 코칭 채널 구독). 백엔드는 **receiver_key 기준 room으로 발행만**.
+- **포맷 불일치 2건 → 프론트 표준 패턴(`redis-message`)으로 교체**:
+  - **채널(room)**: 기존 `coaching_{receiver_key}` → **`${env}:${tenantId}:${receiver_key}:coaching`** (프론트 `getRedisKey(tenantId, agent.id, 'coaching')`와 동일, getRedisKey가 내부에서 env prepend).
+  - **이벤트명/payload**: 기존 이벤트명 `coaching`+raw payload → **이벤트명 `redis-message`** + 래퍼 `{ channel, message, timestamp }`, **`message.type='coaching_created'`**로 식별(`broadcastToRedisMonitorRoom`(socket.gateway.ts:561)이 쓰는 바로 그 패턴). message에 receiver_key/sender_key/coaching_id/call_id/coaching_request_id/is_important/priority_type/created_at 포함.
+- **★ env prefix 함정(핵심, 프론트 클로가 먼저 지적 → 검증됨)**: 처음엔 prefix 없이 `{tenantId}:{agent.id}:coaching`으로 만들었으나, **이 시스템 채널은 전부 `{env}:` prefix로 시작**(VOC=`dev:{tenantId}:{ccCtiId}:call:voc`, voc-realtime.service.ts:597). prefix 빠지면 프론트 구독채널과 안 맞아 **수신 0**. → 코칭도 **VOC와 동일 소스 `process.env.VOC_CHANNEL_ENV ?? 'dev'`** 사용하도록 수정(모든 채널 prefix 일치, NODE_ENV 의존 금지). #75에서 "보류"했던 coaching env prefix를 이번에 적용한 셈.
+- **★ env 값(프론트 공유용, #75 기록 재확인)**: `VOC_CHANNEL_ENV` — **AWS개발(`.env`/`.env.development`)=미설정→기본 `dev`**, **로컬/사내개발(`.env.local`/`.env.5f.development`)=`localDev`**. 즉 코칭 채널 prefix도 환경에 따라 `dev`/`localDev`로 갈림 → 프론트도 환경별로 동일하게 맞춰야 함.
+- **tenant_id 확보**: `DynamicDatabaseService.getTenantId(token?)` 신설(내부 `tenantConfigService.getTenantConfig` 재사용; **DB_DIRECT_CON=1(로컬)·조회실패 시 undefined**, throw 안 함 → 코칭 생성 안 깨짐). `createCoaching`이 호출해 `publishCoaching(coaching, tenantId)`로 전달, `CoachingMessage.tenant_id` 필드로 핸들러까지 운반. tenant 없으면 핸들러가 tenant 세그먼트만 생략(env prefix는 유지).
+- **수정 파일 6개**: `coaching.constants.ts`(상수), `dynamic-database.service.ts`(getTenantId), `coaching.types.ts`(tenant_id 필드), `coaching-redis.service.ts`(tenantId 인자), `coaching.service.ts`(getTenantId 호출·전달), `coaching-socket.handler.ts`(handleCoachingMessage 채널/이벤트 교체). tsc+eslint 통과.
+- **미검증(프론트 최종확인 권장)**: 프론트 `getRedisKey` **실제 출력 채널 문자열 1개**로 100% 검증 — ① env prefix 값(환경별 `dev`/`localDev`, VOC_CHANNEL_ENV 따름) ② 구분자 `:`·마지막 세그먼트 `coaching` ③ `tenantId`/`agent.id` 순서. 일치하면 그대로 배포. 배포 `develop`, 커밋은 사용자가 직접.
+- **※ 정정**: 이 #76은 tenant 세그먼트로 `tenant_id`(company UUID)를 썼으나, 실배포 테스트에서 채널 불일치로 **틀린 것으로 판명** → #77에서 `vendor_tenant_id`로 정정함.
+
+### 77. 코칭 실시간 알림 실배포 디버깅 + 미확인 코칭 카운트 전용 API 신설 (2026-06-30)
+배포(개발실서버 `ecpad.etaas.co.kr`) 후 "상담사쪽 코칭 알림 안 옴 / 미확인 카운트 0" 증상을 단계별로 추적해 근본 2건을 잡고, 미확인 카운트 전용 API를 신설.
+
+- **① 채널 tenant 세그먼트 = `vendor_tenant_id`여야 함 (★#76 정정)**:
+  - #76은 채널을 `${env}:${tenant_id}:${receiver_key}:coaching`로 만들었는데, 실로그상 `tenant_id=company_71900448_1b8a_4ab1_96b3_9f2c1de46740`(company UUID)였음.
+  - **프론트가 실제 구독하는 채널은 `dev:4609686:agent_...:coaching`** — tenant 자리가 **`4609686`(vendor_tenant_id)**. VOC 채널(`dev:{vendor_tenant_id}:{cc_cti_id}:call:voc`)도 동일 식별자. 즉 모든 실시간 채널은 tenant_id가 아니라 **vendor_tenant_id**를 씀.
+  - `TenantConfigResponseDto`엔 vendor_tenant_id가 **없음**(tenant_id만). vendor_tenant_id는 **`UserInfoService.getCurrentUser(token).company.vendor_tenant_id`**에서만 얻어짐(VOC가 쓰는 방식, voc-realtime.service.ts:653).
+  - **수정**: `getTenantId` 경로 폐기 → `CoachingService`에 `UserInfoService` 주입(같은 advisor.module provider라 DI OK), `createCoaching`에서 `getCurrentUser(token).company.vendor_tenant_id` 조회(try/catch, 실패 시 undefined·코칭 생성 무영향). `CoachingMessage.tenant_id`→`vendor_tenant_id` 필드 rename, `publishCoaching(coaching, vendorTenantId)`, 핸들러 채널 `${env}:${vendor_tenant_id}:${receiver_key}:coaching`. vendor_tenant_id는 회사 단위라 sender(관리자)·receiver(상담사) 동일.
+  - **검증 로그**: `📡 [코칭] 전송: channel=dev:4609686:agent_0c814a0e_...:coaching, event=redis-message, type=coaching_created (1명 연결)` → `✅ 전송 완료 → 1명`. **백엔드 실시간 emit 정상 동작 확인.** (`getTenantId`는 dead code로 남음, 무해.)
+- **② 미확인 카운트 0의 진짜 원인 = 키 불일치(데이터)**: 백엔드 조회 로직은 정상이었음. 
+  - `GET /coachings/receiver/{key}`(`findCoachingsByReceiver`): `where {receiver_key, ...buildFilter}` + `findAndCount` → `{data,total,...}`. is_read 파싱도 정상(QueryCoaching(Request)Dto `@Transform` 'true'/'false'→boolean). favorite 2개(`favorite-coaching/user`, `favorite-coaching-requests/user`)는 즐겨찾기(북마크)라 미확인 무관. requests/sender는 발신자 관점이라 무관. **미확인 소스는 `coachings/receiver` 하나뿐.**
+  - **실제 증상**: 프론트는 `receiver/agent_349727fe_...`로 조회 → `total:0`. 그런데 코칭 48건은 전부 `receiver_key=agent_0c814a0e_...`로 저장됨(개발실 DB GET 결과로 확인). → **코칭 받은 키(0c814a0e) ≠ 프론트 조회 agent.id(349727fe)**. 실시간도 같은 이유(채널이 0c814a0e라 349727fe 상담사 화면은 미수신).
+  - **미해결(내일)**: 이 두 키가 같은 상담사인지 확인 → 같으면 "관리자 코칭 전송 시 넣는 receiver_key" vs "상담사 화면 agent.id"를 일치시켜야(키 정렬). 백엔드 코드 버그 아님(양쪽 다 프론트가 보낸 값 그대로 저장/조회).
+- **③ 미확인 코칭 카운트 전용 API 신설** (사용자 핵심 요구 — 처음부터 없던 것):
+  - `GET /coachings/receiver/:receiverKey/unread-count` → `{ receiver_key, unread }`. 컨트롤러에서 `receiver/:receiverKey`보다 **위에 등록**(라우트 가로채기 방지). `getUnreadCountByReceiver` 서비스 메서드(QueryBuilder `getCount`).
+  - **is_read 타입 함정 대응**: 개발실 응답에서 `is_read`가 **boolean이 아닌 문자열 `"false"`** 로 내려옴(엔티티는 `@Column boolean`인데 실 DB 컬럼이 varchar로 생성된 정황). 카운트가 타입/표현에 안 흔들리도록 **`LOWER(c.is_read::text) IN ('false','f')`** 로 비교(boolean false→'false', varchar 'false'/'f', 대문자 'FALSE' 모두 미확인 카운트). 사용자 요청대로 "boolean과 'false' 모두 포함".
+  - 검증: `0c814a0e` 키로 `unread-count` → 정상 동작 확인(사용자 "잘되네"). tsc+eslint 통과.
+- **미해결/후속(내일 이어서)**:
+  1. **키 매칭**(0c814a0e vs 349727fe) — 같은 상담사인지 + 관리자 전송 receiver_key ↔ 상담사 agent.id 정렬.
+  2. **is_read 컬럼 타입** — 실 DB가 varchar 의심. 정규화(boolean 마이그레이션) 또는 엔티티 transformer로 응답 boolean화 검토. (현재 unread-count는 ::text로 우회 중이나, 목록 API의 `?is_read=false` 필터는 varchar 컬럼이면 깨질 수 있음 → 점검 필요.)
+  3. **coaching created_at 타임존**(별개, 보류): `timestamp`(no tz)+서버 TZ=UTC라 KST 벽시계가 `...Z`(UTC)로 라벨링돼 나감 → 프론트 표시 어긋남. 해결책 A(백엔드 `+09:00` 직렬화) / B(프론트 Z 무시) 중 택. started_at 선례와 동일 패턴.
+  - 상세 프로세스/구조는 `docs/advisor-coaching-process.md`에 정리(내일 작업 기준 문서). 커밋은 사용자가 직접.
+
+### 78. 코칭요청(관리자 수신) 대칭화 — 미확인 카운트 API 신설 + 실시간 발행 표준 통일 (2026-06-30)
+#76·#77에서 **코칭(상담사 수신)** 쪽만 신표준으로 작업됐고 **코칭요청(coaching_request, 관리자 수신)** 쪽은 옛 패턴 그대로 + 미확인 카운트 API 없음 → **비대칭** 상태였음. 관리자 상단 메뉴의 미확인 코칭요청 배지 실시간 갱신을 위해 코칭요청 쪽을 코칭과 **완전 대칭**으로 맞춤. (프론트 요구: ①관리자/상담사 미확인 카운트 실시간 노출 ②코칭요청 토스트+API적립 ③관리자쪽 무리로드 갱신 미구축 ④상담사/관리자별 카운트 API 정합성.)
+
+- **분석 — 두 흐름 비대칭 확정**: 코칭(`coachings`, 상담사) = `redis-message`+`${env}:${vendor_tenant_id}:${receiver_key}:coaching`+unread-count API ✅ / 코칭요청(`coaching_requests`, 관리자) = 옛 room `coaching_{receiver_key}`+이벤트 `coaching_request`+raw payload, vendor_tenant_id 없음, unread-count 없음 ❌. `handleCoachingRequestMessage`가 #76 작업 전 옛 코드 그대로였음.
+- **작업 1 — 코칭요청 미확인 카운트 API 신설**: `GET /coachings/requests/receiver/:receiverKey/unread-count` → `{receiver_key, unread}`. 서비스 `getUnreadCountRequestByReceiver`(코칭쪽 `getUnreadCountByReceiver` 복제, 테이블만 `CoachingRequest`). is_read 타입 함정 동일 대응 `LOWER(c.is_read::text) IN ('false','f')`. 컨트롤러에서 `requests/receiver/:receiverKey`(목록)보다 **위에 등록**(라우트 가로채기 방지).
+- **작업 2 — 코칭요청 실시간 발행 표준 통일(코칭과 대칭)**:
+  - 채널: 옛 `coaching_{receiver_key}` → **`${env}:${vendor_tenant_id}:${receiver_key}:coaching_request`** (접미사만 `coaching_request`로 코칭과 분리 — 사용자 확정: 접미사 분리안).
+  - 이벤트: 옛 `coaching_request`+raw payload → **`redis-message`** + 래퍼 `{channel, message, timestamp}`, **`message.type='coaching_request_created'`**. message에 receiver_key/sender_key/**coaching_request_id**/call_id/is_important/priority_type/created_at.
+  - 발행부: `createCoachingRequest`에서 `UserInfoService.getCurrentUser(token).company.vendor_tenant_id` 조회(try/catch 무시, 실패 시 코칭요청 생성 무영향 — 코칭과 동일 패턴) → `publishCoachingRequest(savedRequest, vendorTenantId)`.
+- **수정 파일 6개**: `coaching.constants.ts`(`COACHING_REQUEST_CHANNEL_TYPE='coaching_request'`/`COACHING_REQUEST_CREATED_MESSAGE_TYPE='coaching_request_created'`), `coaching.types.ts`(`CoachingRequestMessage.vendor_tenant_id?`), `coaching-redis.service.ts`(`publishCoachingRequest` vendorTenantId 인자), `coaching.service.ts`(createCoachingRequest vendor_tenant_id 조회·전달 + getUnreadCountRequestByReceiver), `coaching.controller.ts`(unread-count 라우트), `coaching-socket.handler.ts`(handleCoachingRequestMessage 채널/이벤트 교체, import에서 SOCKET_COACHING_EVENTS 제거·REQUEST 상수 추가). tsc+eslint 통과.
+- **읽음처리는 신규 작업 없음(기존 API 그대로)**: 관리자=코칭요청 읽음처리 = **기존 `PATCH /coachings/requests/:id/read`**(`markCoachingRequestAsRead`, `coaching_requests` 테이블). 단건만 지원(일괄은 요청 시 추가). 읽음 후 unread-count 재조회로 배지 갱신.
+- **프론트 전달 정리(대칭표)**: 상담사=코칭(`coachings`,우측 LNB,`:coaching`,`coaching_created`,`/coachings/receiver/{id}/unread-count`,`PATCH /coachings/{id}/read`) ↔ 관리자=코칭요청(`coaching_requests`,상단 메뉴,`:coaching_request`,`coaching_request_created`,`/coachings/requests/receiver/{id}/unread-count`,`PATCH /coachings/requests/{id}/read`). 백엔드는 트리거만 발행(카운트 값 미포함→프론트 재조회). 생성 API만 호출하면 실시간 자동 발행.
+- **백엔드 작업 완료 — 남은 건 프론트 + 조건부 백엔드**:
+  1. **키 매칭(공통, #77 ②와 동일)**: `receiver_key` ↔ 화면 `agent.id` 일치해야 unread/실시간 둘 다 동작(불일치 시 `unread:0`+미수신). 결과 따라 백엔드 키 정규화 추가 가능성.
+  2. **vendor_tenant_id 출처**: 프론트 user 정보 `company.vendor_tenant_id`(예 4609686), 채널 일치 필수.
+  3. **배포 반영**: 재배포(이미지 재빌드+롤아웃) 전엔 신규 API/채널 미노출. 커밋·배포는 사용자가 직접.
+
+### 79. VOC 감정 — 불만/화남 과다 노출 완화 (score>=0.6에만 -0.15 감점) (2026-06-30)
+"실시간 VOC에서 불만/화남이 너무 빈번하게 노출된다"는 요청. 분석 결과 노출 빈도는 전적으로 CE가 보내는 emotionType에 의해 결정됨(우리 서비스는 그대로 신뢰해 위험 단조 score로 재배치만 함). 부정쪽만 보수적으로 완화하도록 remap 출력 score에 감점 적용.
+
+- **구조 파악**: CE `emotionType`(thanks/satisfied/normal/dissatisfied/angry)+`emotionScore` → `remapEmotionScore`(summary.service.ts)가 **타입을 신뢰**해 위험 단조 구간으로 재배치(thanks 0~0.19 / satisfied 0.2~0.39 / **normal 0.4~0.59 / dissatisfied 0.6~0.79 / angry 0.8~1.0**). 프론트는 이 score를 0.6(불만)·0.8(화남) 컷으로 버킷팅(사용자 "0.5 normal, 0.6↑ 불만"과 일치).
+- **핵심 진단**: normal 타입은 0.59에서 clamp돼 절대 0.6을 못 넘음 → 불만/화남 표시 = CE가 dissatisfied/angry로 분류한 것. 밴드 숫자만 넓히면 프론트 컷(0.6 고정)과 type-score 정합 깨짐 → **유일한 백엔드 레버 = 부정 score 감점(약한 건 normal로 강등)**.
+- **빼기는 CE raw가 아니라 최종 remap된 출력 score에 적용해야 효과**: CE raw에 빼면 remap이 타입으로 재버킷팅해 효과 미미. (사용자에게 이 전제 설명·합의.)
+- **결정(사용자)**: A안=「score>=0.6일 때만 감점」(normal/긍정 무손상) + 감점폭 **0.15**. (초기 제안 0.1 → 사용자가 0.15로 상향. "둘 다"(post-call+실시간) 적용.)
+- **구현**: `remapEmotionScore` 최종 score 산출 직후 — `if (score >= 0.6) score -= 0.15`, 이후 `deriveEmotionTypeFromScore(score)`로 **type 재산출**(경계 넘으면 type도 강등, type-score 정합 유지). 상수 `NEGATIVE_EMOTION_PENALTY_THRESHOLD=0.6`/`NEGATIVE_EMOTION_PENALTY=0.15` 신설. `remapEmotionScore`는 post-call 요약·실시간 VOC 공용이라 둘 다 자동 반영. DB 저장값(sentiment_type/score)도 감점 정합값.
+- **실효 효과**: 불만 0.60~0.74→normal, 0.75~0.79→불만 유지 / 화남 0.80~0.94→불만, 0.95~1.0→화남 유지. **불만 컷 0.6→0.75, 화남 컷 0.8→0.95.** normal·긍정(<0.6) 원본 그대로.
+- **수정 파일 1개**: `src/advisor/summary/services/summary.service.ts`. tsc+eslint 통과.
+- **남은 것**: 재배포 후 사용자 실측 테스트(감점폭 0.15 적정성 확인 — 과하면 0.1로, 부족하면 상향 등 상수만 조정). 커밋·배포는 사용자가 직접.
+
+### 80. 실시간 VOC 누적 끌어올림 완화 — 분석 입력을 최근 4개 발화로 제한 (2026-06-30)
+#79(emotion -0.15 감점) 배포 후에도 "emotion 점수가 계속 높다"는 후속. 원인 추적 중 두 가지 규명 + 사용자 직감(누적대화) 채택해 입력 윈도우 도입.
+
+- **진단① VOC_ANALYZER 경로 분기**: `.env.5f.development`에 `VOC_ANALYZER=llm` → 5층은 **LLM 경로(analyzeVocViaOrchestrator)** 를 타는데 이건 `remapEmotionScore`(=#79 감점)를 **안 거침**. AWS 개발기(.env.development)는 미설정→기본 `ce`→감점 적용. **5층에서 테스트했으면 #79가 0% 적용**된 것. (로그로 판별: `VOC 분석 완료(CE)` = ce경로/감점됨 vs `VOC 분석 LLM 응답` = llm경로/미적용.)
+- **진단② 누적 끌어올림(사용자 직감, 채택)**: 실시간 VOC는 매 분석 턴마다 `buildConversation(state.messages)`로 **누적 버퍼 전체(최대 MAX_BUFFER=40)** 를 LLM/CE에 통째로 넘김 → 초반 화난 발화 1건이 이후 모든 턴 점수를 계속 끌어올림(후반 진정돼도 안 내려감).
+- **결정(사용자)**: assist-stream(`toRagHistory`: 화자별 최근 3턴)처럼 분석 입력을 단기 윈도우로 제한. 크기=**최근 4개 단순컷(slice(-4), 화자 구분 없음)**, **상수 고정**(env 미사용).
+- **구현**: 상수 `MAX_ANALYSIS_MESSAGES=4` 신설. 분석 입력 생성 2곳(nlp:complete 경로 ~223, handleUtterance 경로 ~340) 모두 `buildConversation(state.messages.slice(-4))`로 변경. 메모리 버퍼(MAX_BUFFER=40)·accumulate·post-call 요약(summarizeCall, 전체 대화 유지)은 **무수정**. 진단 로그를 `lines=4/12(누적)`로 보강(실입력/누적 가시화).
+- **효과/범위**: 초반 화난 발화가 윈도우 밖으로 밀리면 점수에서 빠짐 → 누적 끌어올림 해소. **CE·LLM 경로 무관 적용**(5층 llm에서도 동작) → #79 감점(CE 전용)과 독립적으로 보완. emotion뿐 아니라 민원·이탈도 같은 입력이라 3축 다 "최근 기준"으로 단기화(실시간 조기경보엔 자연스러움).
+- **수정 파일 1개**: `src/advisor/assist-stream/services/voc-realtime.service.ts`. tsc+eslint 통과.
+- **남은 것/내일**: 재배포 후 실측 — ① 어느 환경/경로(ce·llm)에서 보는지 로그로 먼저 확정 ② 윈도우 4개로 점수 추세 개선되는지 ③ 부족하면 윈도우 크기(상수)·#79 감점폭 같이 조정. 5층에서 #79까지 먹이려면 `VOC_ANALYZER=ce` 전환 또는 LLM 경로에도 감점 추가 필요. 커밋·배포는 사용자가 직접.
+
+### 81. 코칭 시간 표시 어긋남 — created_at/updated_at KST→UTC(...Z) 보정 (2026-07-01)
+관리자/상담사 코칭 모달의 코칭 리스트 시간이 어긋나던 문제. 실측: 작업 시각 10:18(KST)인데 API가 `created_at:"2026-07-01T10:18:25.333Z"`로 응답 → 프론트 `new Date().toLocaleString('ko-KR')`가 +9 더해 어긋남.
+- **원인**: `coachings/coaching_requests`의 `created_at`은 `@CreateDateColumn`을 **DB `now()`**(세션 TZ=KST)가 채워 `timestamp`(no tz) 컬럼에 **KST 벽시계**로 저장됨. 앱(node-postgres, 프로세스 TZ=UTC)이 이를 그대로 UTC로 읽어 `...Z`로 **잘못 라벨링**. DTO엔 created_at 없고 전역 ValidationPipe(whitelist)라 클라 주입 불가 → 값 출처는 DB뿐. `started_at`(raw_call) 선례와 **완전 동일 케이스**.
+- **수정(코칭 전용, 다른 도메인 무수정)**: `CoachingService`에 `toUtcIso`(call-stats/advisor.service 선례 복제: KST 벽시계를 `+09:00`으로 해석 → `toISOString`) + `normalizeDates`(created_at/updated_at in-place 보정) 추가. 모든 코칭 출력 지점에 적용 — 생성 2곳(**Redis 발행 직전**에 보정해 실시간 토스트도 동일 교정), findByCallId, 목록 4개, update/mark 4개.
+- **효과**: `10:18Z`(오출력) → `01:18Z`(진짜 UTC) → 프론트 +9 → 07-01 10:18(KST) 정확. 수정 파일 1개 `coaching.service.ts`, tsc+eslint 통과.
+- **별개 발견(사용자: A안 미사용 결정으로 보류)**: `src/tz-init.ts`(`process.env.TZ='UTC'`)가 **어디서도 import 안 됨**(main.ts엔 주석만). 현재 컨테이너 기본 UTC라 마스킹 중이나, 컨테이너 TZ가 KST면 콜목록 started_at이 +9 어긋날 잠재버그. 커밋·배포는 사용자가 직접.
+
+### 82. 실시간 VOC 토큰 만료 무력화 — 유저 토큰 의존 제거(payload 우선/토큰 폴백) + db_config 연결문자열 캐시 (2026-07-02)
+전날(07-01 14:19:38 KST) 상담원 access 토큰(20분) 만료 후 **실시간 VOC 감정변화 미표시 + 통화종료 후 summary 401** 사고. 대화(STT)는 토큰무관이라 정상, VOC/summary만 무증상 정지(try-catch 격리 부작용). 분석문서 `docs/IIWAKE.md` 기반으로 근본 대응. (SSO refresh API는 정책상 미구현 → 우리 쪽은 "토큰 만료와 무관하게 동작"만 목표.)
+
+- **인증 구조 코드 확정(블랙홀 해소)**: `AuthMiddleware`는 **토큰 검증 안 함**(라우팅 재료로만 사용, "토큰 검증 생략"). 토큰 목적지는 **오직 `USER_HOST`**(`get_configs?filters=db_config`=`TenantConfigService`, `get_user`=`UserInfoService`). 코드 전체에 **SSO/OIDC/keycloak/auth-service 참조 0개**. → 어제 401은 asst가 아니라 **user-service(USER_HOST)가 만료토큰 거부**한 것. SSO(발급자)와 user-service(소비자·401 주체)는 **다른 시스템**. user-service의 토큰 검증 방식(자체 JWKS vs IdP introspect)은 우리 레포로는 확인 불가(=블랙홀 경계).
+- **어제 사고 지점 = `/assist-stream`→`handleUtterance`의 토큰 의존 3다리(전부 만료 시 사망)**: ①LLM `analyzeEmotion`→`getCompanyIdFromToken`→`getCurrentUser(token)` ②publish `publishVoc`→`getCurrentUser(token)`(vendor_tenant_id+cc_cti_id) ③DB `persistVoc`→`getRepository(token)`→`getTenantConfig(token)`. **화면 멈춤 직접 원인은 ②**(getCurrentUser 401→publish 스킵). (`/assist-stream`은 AuthMiddleware exclude라 미들웨어發 401은 없음.)
+- **해결 원칙(합의)**: VOC는 유저 신원 불필요·테넌트 정보만 필요 → **payload 값 있으면 토큰 안 씀 / 없으면 기존 토큰 경로 폴백**(하위호환·전부 예외격리).
+- **프론트 협조(완료)**: `POST /assist-stream` body에 `company.id`/`company.vendor_tenant_id`(기존 전송중) + **`cc_cti_id` top-level 신규 추가**(company 밖, 값 없으면 필드 생략). company.id는 실시간 화면 진입 시 get_user로 store 채워 통화중 항상 존재.
+- **구현(수정 4파일, tsc+eslint 통과)**:
+  - `assist-stream-request.dto.ts`: `cc_cti_id?: string` top-level 옵셔널 추가.
+  - `voc-realtime.service.ts`: **①** `dto.company.id` 있으면 `analyzeVocByTenant(conv, company.id, 'realtime', token)`(토큰 0), 없으면 `analyzeEmotion` 폴백. **②** `publishVoc`가 `dto.company.vendor_tenant_id`+`dto.cc_cti_id` 우선, 둘 중 하나라도 없을 때만 `getCurrentUser(token)` 폴백. **③** `persistVoc(...,vendorTenantId)` 추가 + 신설 `resolveVocRepository`(토큰 유효→토큰경로 / throw·부재→`getConnectionByVendor(vendor)` 캐시 재접속 / 최종 로컬 정적연결). `handleUtterance` 첫부에 **prime**: `cacheConnString(token, vendor_tenant_id)` fire-and-forget. nlp 경로도 `msg.tenant_id` 전달(현재 미사용이나 정합).
+  - `dynamic-database.service.ts`: `vendorMeta: Map<vendor_tenant_id,{tenantId,connString}>` 신설. `cacheConnString`(토큰 유효 시 db_config 1회 캐시, 로컬/중복/토큰없음 self-guard, best-effort) + `getConnectionByVendor`(살아있는 커넥션 재사용→없으면 캐시 연결문자열로 토큰없이 재생성+runSchemaMigrations). 엔티티 배열 **`DYNAMIC_ENTITIES` 상수 추출**(getConnection+재접속 경로 공유, 옵션빌더 `buildDynamicDataSource`로 통합해 중복 제거). **핵심: db_config(연결문자열)는 만료 안 됨** → 토큰 유효할 때 캐시하면 만료 후 재접속 가능. 키를 vendor_tenant_id로 두는 이유=connections Map 키(tenant_id)는 payload에 없음(두 API 출처 상이).
+  - `assist-stream-new.controller.ts`/`.service.ts`: **미사용(NOT IN USE)** 상단 주석(프론트 미호출, 실트래픽은 `/assist-stream`, 인증 이슈 검토 제외).
+- **결과**: ①②③ 전부 토큰 만료 무관 → 어제 사고 구조적 재발 불가. **로컬/배포 전 서버 풀재시작 필요**(dynamic-database 캐시 DataSource 갱신).
+- **남은 것**: ① `hasCompany`/`vendor_tenant_id` 로그로 payload 항상 오는지 실측(false여도 토큰 폴백으로 안전동작하나 그 통화는 만료 취약) ② `voc-test`로 토큰없이 저장/publish 검증 ③ summary 등 **유저 권한판정 필요 엔드포인트는 별개**(refresh/BFF 논의 대상, 이번 범위 아님). 커밋·배포는 사용자가 직접.
+
+### 83. 통화 종료 후 summary/summary-data 토큰 만료 무력화 — payload company 우선/토큰 폴백 (2026-07-02)
+#82(실시간 VOC)에 이어, **통화 종료 시 프론트가 보내는 `/summary`(createSummary)·`/summary/data`(saveSummaryData)도 VOC/DB 때문에 토큰에 동일 의존** — 프론트가 먼저 이 상황을 확인 요청. 어제 사고의 "통화종료 후 summary 401"이 바로 이 경로였고, #82에선 "유저 권한판정 필요"라며 범위 밖으로 뒀으나 재검토 결과 summary는 실제 권한판정 안 함(테넌트ID+DB커넥션만 필요) → 실시간과 동일하게 payload 우회 가능.
+- **진단(토큰 3의존)**: `summarizeCall`(summary.service.ts) — ① raw_call 읽기 `getRepository(CallstatCall/Turn, token)` ② tenantId `getCompanyIdFromToken(token)`→`getCurrentUser`(=어제 401 지점) ③ `analyzeVoc`(②의 tenantId) ④ `saveEmotion(...,token)` DB쓰기. `createOrUpdateSummary`(/summary/data) — VOC 없음, `getRepository` x3(Summary/CallCategory/CallKeyword) DB커넥션만.
+- **프론트 계약(완료·동시배포)**: 두 엔드포인트 body에 `company:{ id, company_id, vendor_tenant_id, name }` 추가. 실시간 `AssistStreamCompanyDto`와 동일(`company.id`=회사UUID=X-Tenant-Id, `vendor_tenant_id`=DB연결 캐시키). 값 없으면 필드 생략→토큰 폴백.
+- **⚠️ 400 함정**: 전역 ValidationPipe `forbidNonWhitelisted:true`라 DTO에 `company` 없으면 프론트가 보내는 순간 summary 전면 400 → **프론트·백 동시배포 필수**(사용자가 둘 다 배포하므로 OK).
+- **DB 우회 원리**: `vendor_tenant_id→연결문자열(vendorMeta)` 캐시는 **통화 중 실시간 VOC(#82 cacheConnString)가 이미 채워둠** → 통화 끝나고 만료토큰 summary 와도 `getConnectionByVendor(vendor)`로 토큰 없이 재접속. 실시간 미경유 통화는 짧아 그 시점 토큰 유효→토큰 경로 동작.
+- **구현(수정 6파일, tsc+eslint+build 통과)**:
+  - `summary-company.dto.ts`(신규): `SummaryCompanyDto{ id, vendor_tenant_id, company_id?, name? }` — 실시간 DTO 복제.
+  - `summary-request.dto.ts`/`summary-create.dto.ts`: `company?: SummaryCompanyDto` 옵셔널 추가(@ValidateNested/@Type).
+  - `advisor.service.ts`: **`getRepositoryResilient(entity, token, vendorTenantId?)` 신설** — #82 `resolveVocRepository` 패턴 공용화(토큰 유효→토큰경로 / 만료·throw→`getConnectionByVendor` / 로컬 `getConnectionWithoutToken` / 최종 기존에러 재현). voc-realtime의 중복 로직을 AdvisorService로 승격.
+  - `summary.service.ts`: `summarizeCall` — tenantId=`company?.id ?? getCompanyIdFromToken(token)`, raw_call repo 2개 resilient화, `saveEmotion`에 vendor 전달. `createOrUpdateSummary` — repo 3개 resilient화. 로그에 `hasCompany`/`vendor` 보강.
+  - `emotion.service.ts`: `saveEmotion`/`persistEmotion`에 `vendorTenantId?` 추가, repo를 `getRepositoryResilient`로(VOC 실제 저장 보장).
+- **원칙**: payload 있으면 토큰 안 씀 / 없으면 기존 토큰 폴백(전부 하위호환). **배포 후 서버 풀재시작 필요**(#82와 동일, 캐시 DataSource 갱신).
+- **연계 산출물(대신증권 소명)**: 관련부서 요청으로 어제 감정분석 장애 소명문서 작성 → `docs/대신증권_감정분석_장애_소명.md`(IIWAKE.md 기반, 인프라 비판 제거·존댓말 소명체, 원인→영향→조치①②완료/③협의제안→재발방지 + 비개발자용 [간단 요약]). #82=실시간 감정미표시, #83=요약401에 각각 1:1 대응해 "조치 완료"로 묶음.
+- **남은 것**: ① 실측 — 긴 통화(토큰 만료) 후 summary에서 VOC 3축 응답·emotions 저장·/summary/data 저장 정상인지, 로그 `hasCompany`/`vendor`로 payload 도착 확인 ② 소명문서 ①·② "조치 완료" 표기는 실배포 상태 맞춰 사용자가 확정(미배포면 "배포 예정"으로) ③ 유저 권한판정 진짜 필요한 엔드포인트의 refresh/BFF는 여전히 별개 논의. 커밋·배포는 사용자가 직접.
+
+### 84. 세션 만료 사전 알림 — assist-stream SSE `event: auth-expiry` (2026-07-02)
+사용자 아이디어: access 토큰 20분으로 짧으니 만료 전에 프론트에 미리 알리자. #82/#83이 "감정·요약은 토큰 없어도 됨"(면역)이라면, 이건 "상담원이 만료를 인지"하게 하는 보완(세션 자체 연장은 refresh/BFF 영역이라 별개).
+- **정책 확정(사용자)**: 현재 **silent refresh 없음(정책상 미구현)** → **알림 전용**(자동갱신 아님, 프론트가 재로그인/저장 안내). 신호는 **남은시간+플래그 같이**. 임계값 **5분(300초)**. 전송 방식은 **"5분 이하면 발화마다 계속"**(사용자가 "한 번만"보다 선호) — 근거: stateless(서버가 callId별 '이미 보냄' 상태 안 들어도 됨=누수無), 유실 이벤트 자가복구, 중복표시는 프론트 dedupe(결합도↓).
+- **주입 지점**: `assist-stream.service.ts` `stream()`의 `flushHeaders()` 직후(기존 `event: asst-latency` 커스텀 이벤트 옆). `res`는 그 요청 1건의 응답스트림이라 **broadcast 아님 — 요청 보낸 그 상담원한테만 1:1**(token도 그 요청 헤더에서 뽑은 본인 것 → exp도 본인 것). VOC publish(Redis→소켓 1:N)와 명확히 구분됨(사용자 질문으로 확인).
+- **구현(수정 2파일, tsc+eslint+build 통과)**:
+  - `src/common/utils/jwt.utils.ts`(신규): `getTokenExpiry(token)` — **서명검증 없이 payload.exp만 base64url 디코드**(안내용 힌트, 인증판정 사용금지 명시). README에만 있고 실파일 없던 jwt.utils 신설.
+  - `assist-stream.service.ts`: 상수 `AUTH_EXPIRY_WARN_SEC=300` + `writeAuthExpiryEvent(res, token)` — exp 읽어 `expiresInSec=exp-now`, **>300이면 미전송**, ≤300이면 `event: auth-expiry\ndata:{ expiresInSec, expiresAt(KST+09:00), warn:true, thresholdSec:300 }` 전송. 이미 만료면 expiresInSec 음수(프론트가 만료 구분). 전부 try/catch 격리(알림 실패가 스트림 무영향).
+- **프론트 전달(규격만 만들어 사용자가 전달)**: `event: auth-expiry` 구독 → warn/expiresInSec로 상담원 안내(배너/토스트), 배너 중복은 프론트 dedupe. 미대응이어도 무해(모르는 이벤트 무시). **배포 순서 무관**(백엔드 먼저 배포해도 프론트 미붙음=무해). 백엔드 배포는 사용자 몫(Claude는 프론트팀 연락 채널 없음—규격만 산출).
+- **남은 것**: ① 배포 후 실측 — 만료 5분 전 통화에서 `event: auth-expiry` 수신 + 로그 `[AUTH-EXPIRY]` 확인 ② 프론트 리스너 배선(사용자 전달) ③ 근본(1h20m 상한 넘기기)은 여전히 refresh/BFF. 커밋·배포는 사용자가 직접.
+
+### 85. 대신증권 토큰만료 장애 소명문서 + refresh 발견으로 근본해결 확정 (2026-07-02)
+#82~84(어제 07-01 14:19:38 KST 상담원 토큰만료로 실시간 감정분석·통화후 요약 먹통) 건을 **대신증권(고객)에 소명**하라는 요청. 소명문서 작성 → 진단 심화 → **프론트가 refresh API 발견·근본해결까지** 하루에 마무리. 문서 `docs/대신증권_감정분석_장애_소명.md`.
+- **소명문서 톤(핵심)**: 내부 분석문서 `docs/IIWAKE.md`와 달리 **고객용 존댓말 소명체, 인프라 비판 제거**. 비개발자 대상. 구조=1.개요 2.원인 3.영향 4.조치 5.재발방지 + 부록(로그근거) + [간단요약](사용자 직접 편집 영역). **6장(향후 협의)은 "보안정책 충돌 확인 요청"이 괜히 부스럼이라 사용자가 삭제**.
+- **로그 근거자료(부록) — `docs/error-log-20260701.md`(60184줄, UTC 타임스탬프) 분석**: agent41(sub=1232) 토큰 exp **14:19:38 KST**(=IIWAKE 사건시각 일치) 디코드 확인 + 만료 후 **14:23:02까지 204초·104건** 만료토큰 계속 전송(전부 401). 만료 직후 로그: `VocRealtimeService 실시간 VOC 처리 실패(무시): Failed to get current user: Unauthorized` / `TenantConfigService·DynamicDatabaseService 401` / 인증서버 원문 `토큰 인증 실패: 401: token 만료`. **로그가 인과사슬 전부 증명**. 토큰값·IP 마스킹, UTC→KST 환산 표기. (14:24:38 등장 새 토큰은 refresh 아니라 **테스트 재로그인**이라 근거서 제외 — 사용자 정정.)
+- **원인 진화(3단계)**: ⓐ초기 "재발급 없음(정책)" → ⓑ"통화중 화면전환 없어 갱신 미트리거(추정)" → ⓒ**프론트 확정**: 재발급이 **axios 응답 인터셉터(401+code:107)에만 반응형**으로 존재, **assist-stream은 SSE라 raw fetch 필수 → 인터셉터 못 탐** → 통화중 발화만 도는 구간엔 갱신계기 0 → 만료. (SSE 통신구조가 자동갱신 흐름과 분리된 **기술적 특성** — 소명문서/메일은 "누락"이 아닌 이 톤으로 프레이밍해 책임감 완화.)
+- **refresh API 발견(판 뒤집힘)**: 사용자가 `POST https://ecplab-gw.etaas.co.kr/auth/refresh {refreshToken}` 발견. 응답 디코드로 **완전 롤링 확인** — 호출 시 accessToken(+20분)·refreshToken(+65분)·displaySessionExpiredAt(+60분) 전부 리셋, 새 refresh exp가 옛것보다 뒤로 밀림. **활동 중 무한 연장 가능**. 담당자 회신 "수정한 것 없음"=**어제도 있었음**(신규 아님). → "silent refresh 없다"는 #84 전제가 깨짐. **asst-service 코드 변경 0**(토큰관리는 프론트+게이트웨이 소관).
+- **프론트 최종 구현(2축, 확정)**: **A. 선제 타이머** — sessionStorage(VITE_COOKIE_USE_AT=false) 토큰 읽어 **만료 ~3분 전 주기 refresh**(모든 요청이 매번 저장소서 토큰 재읽기라 저장소만 갱신되면 다음 발화부터 새 토큰 자동적용, assist-stream 코드 무수정). **B. auth-expiry 세션칩** — 우리 #84 이벤트 구독해 헤더에 "세션정보" 칩(주황/빨강+툴팁) 표시(안전망). → **우리 #84가 버려진 게 아니라 "2차 안전망"으로 실역할 부여됨**. 백엔드 #84 필드(`auth-expiry`/`expiresInSec`/`expiresAt`/`thresholdSec`)가 프론트 `AuthExpiryEvent`와 **계약 일치 확인 → 백엔드 무변경**.
+- **배포**: 백엔드 배포 완료(#82~84), 프론트 배포 중. 소명문서 ①②③ 전부 **조치 완료**로 확정. 커버 이메일도 작성(발송 완료).
+- **교훈/메모**: ① 고객 소명문서엔 dev 특수케이스(로컬 dev토큰 exp 2083 불멸) 제외 — AWS 실환경 기준만. ② "적용예정 vs 조치완료" 등 상태표기는 실배포 맞춰 사용자가 확정. ③ 문서에 "세부기술 요청시 제공" 같은 상투구도 고객이 부스럼 느낄 수 있음(단 무해). ④ **외부 curl(/auth/refresh 등)은 사용자가 직접 실행**, Claude는 오프라인 디코드·명령작성만.

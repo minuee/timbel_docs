@@ -422,6 +422,212 @@ sources 이벤트의 문서가 질문과 맞나?
 
 > **요약:** `cited_refs` 튜닝/버그(유령 ref, 빈 배열)나 "엉뚱한 답의 생성 측 원인"은 **AICM이 아니라 KMS `rag_assist.py`에서** 손봐야 합니다. AICM에서 손댈 수 있는 건 검색 입력(§8.1~8.2)뿐입니다.
 
+### 8.4 LLM 프롬프트 적용 + 출처 하이라이트 분석 (진행 중 — 내일 이어서)
+
+> **작성 배경:** 실사용자(관리자)의 최대 관심사 = **"AI 요약이 참고한 문서/섹션을 화면에서 하이라이트"** 가 정확히 안 됨.
+> `highlightable`·`source_location`·`cited_refs` 필드는 **모두 방금(어제~어젯밤) 급조된 신규 코드**임 → 아키텍처 한계가 아니라 갓 만든 위치매핑이 안 여문 상태.
+
+#### (1) LLM 프롬프트가 실제로 조립·적용되는 흐름 (assist-stream, KMS)
+
+| 단계 | 코드 | 내용 |
+|------|------|------|
+| 컨텍스트 조립 | `rag.py:260-264` `_assemble_rag_context` | `source_tag = f"[{rank}] {doc_title}"` + ` > {section_title}` → 본문이 **`[1] 문서제목 > 섹션제목\n청크내용`** 형태. `[n]` 번호가 여기서 텍스트에 박힘 |
+| system_prompt | `rag_assist.py:620-645` | 인용 규칙("`[1],[2]`로 근거 표시"), grounding("참고자료에 없는 건 생성 금지"), 어조 규칙 |
+| user_prompt | `rag_assist.py:677` | `## 참고자료\n{effective_context}{history_block}\n{question_block}` (effective_context=컨텍스트+distill요약, question=리라이팅된 질문) |
+| LLM 호출 | `rag_assist.py:689-694` | `LLMRequest(prompt, system_prompt, max_tokens=ASSIST_MAX_ANSWER_TOKENS, temperature=0.2)` → `llm_router` 또는 assist 전용 vLLM(`ASSIST_VLLM_URL`, 예: `gemma-4-31b`) 스트리밍 |
+
+→ **프롬프트는 전부 KMS에 있음. AICM 관여 없음.** 프롬프트 수정 지점 = `rag_assist.py:620~`.
+
+#### (2) 출처 하이라이트 데이터 사슬
+
+```
+cited_refs [n]  ─→  sources[ref_num=n] (rag_assist.py:511-522) ─→ {
+    document_id, chunk_id,         # 어느 문서
+    section_title,                 # 어느 섹션(제목)
+    source_location: { page_number/page_range, start_char_offset, file_url },  # 위치
+    highlightable                  # 소스마다 개별 판정
+}
+```
+`highlightable` 판정 (`rag_assist.py:502-510`):
+```python
+_highlightable = (not generated) and bool(file_url) and (start_char_offset is not None or page_number is not None)
+```
+
+#### (3) 담당자 주장 vs 코드 — "다중 출처라서 하이라이트 불가"는 사실 아님
+
+- 담당자 설명: *"AI 요약문은 여러 문서/섹션을 종합해 만들어서, 2·3순위 출처 하이라이트가 안 된다."*
+- **코드 반박:**
+  - `cited_refs`는 **리스트**(답변이 인용한 모든 `[n]`). 단일 매핑용이 아님.
+  - `sources`의 **모든** 항목이 각자 `highlightable`·`source_location`을 가짐 → 2·3순위도 하이라이트 데이터 있음.
+  - system_prompt가 **다중 인용을 지시**함. "종합적이라서 안 된다"가 아니라 "종합적이니 여러 `[n]`을 달게" 한 설계.
+- 결론: 요구사항(주출처 1개 + 차순위도 하이라이트)은 **데이터 모델상 이미 지원됨**. 미구현이라면 **프론트엔드가 `cited_refs`를 순회하지 않고 1개만 그리는** 쪽일 가능성 (백엔드에 cited_refs를 1개로 자르는 후처리 없음 — 확인됨).
+
+#### (4) 사용자가 확인해준 실제 동작 (중요)
+
+- **`ref_num`(1,2,3)은 관련도 순위가 아님.** `enumerate(hits,1)` 순번일 뿐(`rag_assist.py:486`). 하이브리드 융합+rerank 후 순서라 "1번=최상위 관련"이 아님.
+- **`score`도 rank 개념 아님.** → 담당자의 "1순위를 주출처로 단일 매핑"은 **애초에 불안정**.
+- **`cited_refs`에 1번이 항상 포함되지 않음 = 정상.** LLM이 순위가 아니라 **실제 인용한 청크**만 `[n]` 표기 → `[1]` 안 쓰면 빠짐.
+- → 올바른 방향은 **`cited_refs` 전체를 하이라이트**하는 것(어젯밤 작업 방향은 맞음).
+
+#### (5) 최대 문제 = "하이라이트 위치가 안 맞음". 유력 원인(가설)
+
+1. **좌표계 불일치(1순위 가설)** — `source_location.start_char_offset`은 **ingestion 때 파서가 추출한 텍스트 스트림 기준 오프셋**(`markdown_parser.py:91`, `pdf_parser.py:492/507` 등). 하이라이트를 그리는 화면은 **렌더된 문서**(PDF 뷰어/HTML)라 좌표계가 다르면 밀림. PDF는 문자오프셋이 아니라 **bbox(페이지좌표, `enrichers/bbox_mapper.py`)** 가 있어야 정확.
+2. **enrichment 변형** — 청킹 후 heading 전파·compression(`_compress_chunk`)·Knowledge Compiler가 내용/순서 변경 → 잡아둔 오프셋과 최종 저장 내용 desync.
+3. **청크 단위 범위** — 문장 단위가 아니라 청크 전체라 범위가 거침.
+4. **AICM 블록 편집**(`replace_blocks`/`update_block`)으로 원본과 오프셋 desync.
+5. **generated=True 블록(QNA·요약)** — 원본 위치 없음 → `highlightable=False` (해당 소스만 하이라이트 불가).
+
+#### (6) 내일 이어서 — 답 받을 질문 2개
+
+- **Q1. "안 맞는다"의 구체적 모습?** (a)완전 엉뚱한 위치 / (b)근처인데 범위 밀림 / (c)아예 안 잡힘 / (d)문서는 맞는데 섹션 틀림 → 각각 원인·수정지점이 다름(위 가설 1~5 중 분기).
+- **Q2. 어떤 문서 유형에서 심한가?** PDF / 에디터 직접입력(outline→md) / QNA / 전반적.
+- **다음 조사 후보:** ⓐ `frontend/`가 `cited_refs`를 순회해 다중 하이라이트를 그리는지(1개만 쓰는지) 확인, ⓑ ingestion 파서별 `start_char_offset`/`file_url`/bbox가 채워지는 좌표계 추적, ⓒ 실제 `sources` 이벤트 캡처해 문제 문서의 `highlightable`/`source_location`/`generated` 값 확인.
+
+> **핵심 결론(현재까지):** 하이라이트는 **아키텍처 한계가 아니라 신규 위치매핑(좌표계·enrichment desync)의 정밀도 문제**로 보임. "다중 출처라 불가"는 코드와 불일치. 수정 지점은 대부분 **KMS(ingestion 파서/bbox) + 프론트(cited_refs 소비)** 이고, AICM은 무관.
+
+### 8.5 advisor 전용 엔드포인트 분리 가능성 분석 (`for-advisor` 포크)
+
+> **작성 배경:** 현재 asst-service가 AICM/RAG에서 쓰는 엔드포인트는 `rag_assist` **딱 하나**.
+> advisor 전용으로 `rag_assist_for_advisor`(AICM) + `assist-stream-advisor`(KMS)를 **새로 포크**해
+> 검색 손잡이·프롬프트·토큰상한 등을 자유롭게 실험하되, **기존 `assist-stream`은 무영향**으로 두는 게 목표.
+> (지금은 소스 수정 없이 **분석만**. 아래는 "완전 분리가 되는가"의 코드 근거.)
+
+#### 쌍둥이 엔드포인트 구조
+
+```
+asst-service
+   │  POST /api/aicm/v1/search/rag_assist_for_advisor   ← AICM 신규 (껍데기)
+   ▼
+AICM (aicm-service)   순수 패스스루, 로직 0 — KMS 호출 URL만 새 걸로
+   │  POST /api/v1/rag/assist-stream-advisor            ← KMS 신규 (실제 실험처)
+   ▼
+Locus-KMS (rag-parser-engine)   여기서 advisor 파이프라인을 실제로 튜닝
+```
+
+#### AICM 쪽 — 3파일 복사, 로직 0
+
+| 파일 | 작업 |
+|------|------|
+| `api/schemas/search_schemas.py:15` | `RagAssistForAdvisorRequest` 추가 (또는 `RagAssistRequest` 재사용) |
+| `clients/rag_service_client.py:423` | `assist_stream()` 복사 → `assist_stream_for_advisor()`, URL만 `/assist-stream-advisor`로 |
+| `api/endpoints/documents/search_endpoints.py:223` | `@router.post("/rag_assist_for_advisor")` — 기존 `rag_assist` 복사, client 메서드만 교체 |
+
+AICM은 바이트 패스스루라 여기선 실질 로직 변경 0. URL 갈아끼우는 수준.
+
+#### KMS 쪽 — `rag_assist.py`에 함수 포크 (실제 작업)
+
+| 파일 | 작업 |
+|------|------|
+| `src/api/schemas/rag.py:324` | `AssistStreamRequest` 복사 → advisor용 |
+| `src/api/routers/rag_assist.py:134` | `@router.post("/assist-stream-advisor")` + `event_generator` 포크 |
+| `src/api/main_kms.py:250` | 라우터 이미 mount(`prefix=/api/v1/rag`) → **같은 파일에 추가하면 수정 불필요** |
+
+> 기존 `assist-stream`은 docstring(`rag_assist.py:136`)대로 **"외부 웹프론트 전용 잠금형"**(top_k=5·hybrid·intent_gate·rerank 하드코딩, 일관 품질 보장)이라, CLAUDE.md의 **"기존 백엔드 재작성 X"** 규칙과 맞물려 **별도 엔드포인트 포크가 정석**.
+
+#### 격리 분석 — "완전 분리 가능한가" (코드 근거)
+
+**자유롭게 포크 가능 (함수 지역 → 기존 무영향):**
+- **system_prompt** — `rag_assist.py:620`에 **인라인**. 복사해 advisor용으로 자유 수정
+- **검색 손잡이** — top_k=5·hybrid·rerank·HyDE·table-slot (`:225~279`) 전부 함수 안 지역변수
+- **intent gate**(`:285~353`)·**distill 분기**·**생성 호출부**(`:691`) — 모두 advisor 함수 안에 복제되어 물리 분리
+
+**공유면 3개 — 여기만 "복사/신설"로 우회하면 완전 격리:**
+
+| # | 공유 대상 | 위치 | 격리 방법 |
+|:-:|-----------|------|-----------|
+| **1** | `settings.ASSIST_*` 10개 (max_tokens·temperature·vllm_model·timeouts) | `:180~703` | env로 바꾸면 **양쪽 다 바뀜**. advisor는 `ADVISOR_*` 신설해 읽기 (**제일 중요**) |
+| **2** | `_assemble_rag_context`·`_distill_context` (컨텍스트/정제 조립) | `rag.py`에서 import | **재사용은 안전(읽기)**. 조립을 바꾸려면 rag.py 수정 말고 advisor용 **복사** |
+| **3** | `_TENANT_SEMAPHORES` / 검색 `profile="assist"` | `:74` / `factory.py:42` | 재사용하면 동시성 한도·B200 검색설정 공유. 완전 분리하려면 전용 세마포어 맵 + `profile="advisor"` |
+
+#### 결론 — 완전 분리 가능
+
+**가능하다.** 단 "저절로"가 아니라 **규칙 하나로 보장됨: 공유 전역을 "수정"하지 말고 "복사/신설"만 할 것.** 이 규칙만 지키면 —
+
+- 라우트가 다르고 (`/assist-stream` vs `/assist-stream-advisor`)
+- 파이프라인 로직이 각자 함수 안에 물리 복제돼 있고
+- 설정·프롬프트·세마포어까지 별도 네임스페이스면
+
+→ 기존 `assist-stream`은 **바이트 하나 안 바뀌고**, advisor는 옆에서 자유 실험 가능. 두 엔드포인트는 **읽기로만 공유**(검색 인프라·DB·벡터스토어)하고 **쓰기/변형이 0**이라 서로 오염될 경로가 없다. 이 방식은 CLAUDE.md **"기존 백엔드 재작성 X"** 규칙과도 정확히 일치 — 오히려 이 레포의 권장 패턴.
+
+### 8.6 KMS `rag_assist.py` 코드 감사 — 912줄 단일 파이프라인 실측
+
+> **대상:** `docs2/rag-parser-engine-develop/src/api/routers/rag_assist.py` (912줄). assist-stream 파이프라인 전체가 이 한 파일·한 함수(`event_generator`, 201~902)에 중첩돼 있음.
+> **목적:** advisor 포크 전, 이 파일의 구조·설계·**실제 결함**을 라인 단위로 확보. (분석만, 수정 X)
+
+#### 구조 지도
+
+| 라인 | 블록 | 역할 |
+|------|------|------|
+| 45-57 | `_needs_table_slot()` | hit에 table 블록 0개면 True (table-slot 보강 트리거) |
+| 65-67 | `_sse()` | SSE 프레임 1개 직렬화 |
+| 74-86 | `_TENANT_SEMAPHORES` + `_get_tenant_semaphore()` | 테넌트별 동시성 제한 (**프로세스 로컬**) |
+| 94-126 | `_truncate_history()` | 최근 6메시지(3턴) + 메시지당 1000자 cap |
+| 134-182 | 엔드포인트 진입 | 동시성 게이트(429) → `sem.acquire()` |
+| 191-199 | slug 선조회 | 병렬 task의 AsyncSession 충돌 회피용 raw SQL |
+| 201-902 | **`event_generator()`** | 700줄 단일 async generator — 파이프라인 전체 |
+| 904-912 | `StreamingResponse` | SSE 헤더(no-cache, `X-Accel-Buffering:no`) |
+
+→ 실질 로직 전부가 `event_generator` 하나에 있음. **포크 = 이 함수 통째 복사.**
+
+#### 파이프라인 실행 순서 (event_generator)
+
+```
+[병렬 dispatch] search_task = _do_search()  (283) ─── 동시 실행 ───┐
+1. intent gate (285-367): reformulate(297) → classify_intent(320) │
+   → has_specific_target=false면 검색 강제 skip(332) → yield intent │
+2. intent=false → search_task.cancel() + 종료 (370)               │
+3. search_task 수확 (414) ◀────────────────────────────────────────┘
+   → yield query_analysis(422) → sources_payload(485-523) → yield sources
+4. hits=0 → 종료 (533)
+5. _assemble_rag_context (571, rag.py 헬퍼)
+6. distill (591): enable_distill AND context≥800토큰일 때만 → yield distilled
+7. LLM 스트리밍 (620-800): system_prompt 인라인(620) → ASSIST_VLLM_URL 있으면
+   전용 B200(AsyncOpenAI 707), 없으면 llm_router → 토큰마다 yield token
+8. cited_refs 정규식 회수 (846) → yield done
+finally: search_task cancel + sem.release (886-902)
+```
+
+#### 잘 설계된 부분
+
+1. **intent∥search 병렬 dispatch** (283) — intent="검색함"이면 이미 돌던 결과 즉시 수확, "일상대화"면 cancel(373). TTFS 단축.
+2. **slug 선조회** (191-199) — 병렬 task가 같은 `AsyncSession` 동시 사용 시 SQLAlchemy 크래시(`:190` 경고 주석)를 피하려 search_task는 db 대신 `_preresolved_slug` closure만 참조. **격리의 핵심.**
+3. **distill 빈 선택 폴백** (651-657) — distill이 `selected_refs` 없이 "정보 없음"만 뱉으면 요약 무시하고 raw context 사용 → 원본에 답 있는데 "없다"로 유도되는 것 방지.
+4. **다층 타임아웃** — intent(322)/search(416)/distill(595)/TTFT(696)/total(697) 각각.
+5. **finally 안전망** (886-902) — cancel/에러/정상 모든 경로에서 세마포어·search_task 정리.
+
+#### 실제 결함·취약점 (영향도 순)
+
+| # | 결함 | 위치 | 내용 |
+|:-:|------|------|------|
+| **1** | **`cited_refs` 범위검증 없음 → 유령 ref** | 846-851 | `len(sources)`와 대조 안 함. `[2024]년`·`제[3]항`·`[500]만원`이 전부 인용번호로 오인. 룩비하인드 `(?<![A-Za-z])`는 영문자만 막아 한글/공백 뒤 대괄호는 통과 → sources 2개인데 `cited_refs=[3,2024]` 유령 발생. **1~len(sources) 필터 한 줄로 해결.** §8.4 지적의 코드 확정 |
+| **2** | **reformulate 이중 실행** | 239 / 297-304 | search_task 내부(`enable_llm_rewrite=True`)와 intent용으로 각각 reformulate → **LLM 호출 2회**. 병렬이라 벽시계 손해는 작지만 비용·부하 2배 |
+| **3** | **하드코딩 응답 문자열** | 379 / 534 | `"일상 대화입니다."`, `"참고자료를 찾지 못했습니다."` — CLAUDE.md "정해진 답변 문자열 금지" 제1원칙과 충돌 |
+| **4** | **`query_analysis["rewritten_query"]` 직접 키 접근** | 424 vs 668 | 424는 `["..."]`(KeyError 위험), 668은 `.get`(안전) — 불일치. 키 없으면 KeyError→465 generic except가 **"search_error"로 오분류**(검색 성공인데 실패 표기) |
+| **5** | **세마포어 프로세스 로컬** | 74 | 멀티워커면 실효 한도 = `ASSIST_MAX_CONCURRENT_PER_TENANT` × 워커수. "테넌트당 제한"이 배포구성에 따라 헐거워짐. dict도 evict 없어 미세 누수 |
+| **6** | **전용 vLLM 매 요청 클라이언트 생성** | 707 | `_assist_stream()` 안에서 매번 `AsyncOpenAI(...)` 인스턴스화 → 커넥션 풀 재사용 X, `timeout=120.0` 하드코딩 |
+| **7** | **table-slot ranking 주석 불일치** | 252-275 | "reranker가 ranking 결정" 주석과 달리 table hit을 뒤에 append(275) → ref_num 꼴찌, rerank 재적용 안 함 |
+| **8** | **`history_turns=len(history)//2`** | 394 등 | user/assistant 짝 가정. 홀수면 로그 턴수 부정확(로깅 한정, 경미) |
+
+#### 잠금 파라미터 (함수 지역 하드코딩 → advisor 튜닝 후보)
+
+| 값 | 위치 | 현재 | 값 | 위치 | 현재 |
+|----|------|------|----|------|------|
+| top_k | 231 | **5** | temperature | 693 | **0.2** |
+| search_mode | 232 | hybrid | max_tokens | 692 | `ASSIST_MAX_ANSWER_TOKENS`(env) |
+| rerank | 233 | True | max_context_tokens | 573 | 6000 |
+| use_hyde | 244 | **False** | distill auto-skip | 584 | 800토큰 |
+| table-slot top_k | 259 | 2 | history truncate | 109 | 6메시지/1000자 |
+
+→ 전부 `event_generator` 안 지역값. advisor 함수에 복사하면 독립 튜닝 (§8.5 "함수 지역=자유 포크"의 실체).
+
+#### advisor 포크 시 즉시 이득 (결함 → 개선)
+
+- **#1 유령 ref 필터** — `[n for n in _cited if 1 <= n <= len(sources_payload)]`
+- **#2 reformulate 1회로 통합** — search와 intent가 결과 공유
+- **#4 `.get`으로 통일** — search_error 오분류 제거
+
+> **결론:** 파일은 단일 함수 700줄 monolith라 가독성은 낮지만 파이프라인 설계(병렬 dispatch·다층 타임아웃·distill 폴백)는 견고. 결함은 대부분 **경계 검증 부재(#1,#4)와 중복 작업(#2)** 이고, advisor 포크는 이걸 고칠 자연스러운 기회. 공유면(설정·세마포어·rag.py 헬퍼)만 복사/신설하면 기존 무영향(§8.5).
+
 ---
 
 ## 9. 권한 제어 — PermissionEnforcer

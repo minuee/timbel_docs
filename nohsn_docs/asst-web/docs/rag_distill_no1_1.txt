@@ -1,0 +1,423 @@
+event: intent
+data: {"search": true, "reason": "펀드 환매 수수료 관련 사실 확인 질의", "latency_ms": 905, "skipped": false}
+
+event: query_analysis
+data: {"original_query": "하나코리아 펀드 환매하면 수수료 있어요", "rewritten_query": "하나코리아 펀드 환매 수수료 안내", "keywords": ["하나", "코리아", "펀드", "환매", "수수료", "안내"], "decomposed": {"is_complex": false, "category_names": [], "nature_filter": [], "time_filter": null, "entity_filter": null, "domain_hint": null}}
+
+event: sources
+data: {"sources": [{"ref_num": 1, "document_id": "39914980-4dd5-4ac2-af67-f280373f0b07", "chunk_id": "50adf21a-ed14-4148-af33-627e01345aff", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "| 종류 | 보유기간 | 환매수수료 |\n| --- | --- | --- |\n| 종류 A, AG | 30 일 미만 | 이익금의 70% |\n| 종류 A, AG | 30 일 이상 90 일 미만 | 이익금의 30% |\n| 종류 C1~C5, C-E, C-F, CG, S | 90 일 미만 | 이익금의 70% | ---", "score": 0.7212, "token_count": 43, "page_info": "p.4", "source_location": {"file_path": "/tmp/aicm_g1tztlzp.docx", "file_url": "/repos/9a199778-4a62-4922-bba9-cddddc740b7f/docs/39914980-4dd5-4ac2-af67-f280373f0b07", "page_number": 4, "page_range": null, "start_char_offset": 5320, "end_char_offset": 5488, "bbox": [54.1, 73.78576377952811, 65.199, 84.78576377952811], "heading_path": ["9. 환매수수료"], "sheet_name": null, "table_index": null, "paragraph_index": null}}, {"ref_num": 2, "document_id": "39914980-4dd5-4ac2-af67-f280373f0b07", "chunk_id": "d082245a-e7b6-4d22-97e7-3801f9087905", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "이 집합투자기구는 종류형으로, 종류는 판매수수료 부과방식 → 판매경로 → 기타 펀드특성 3 단계로 \n구분됩니다.\n| 구분 | 종류 | 집합투자기구의 특징 |\n| --- | --- | --- |\n| 판매수수료 | 수수료 선취(A) | 매입시점에 판매수수료가 일시 징구되는 반면 판매보수가 미징구형(C)\n보다 낮게 책정되어, 총비용이 C 와 일치하는 시점은 약 2 년. 2 년 이전 환매 시 C 보다 높은 총비용을 \n지불함. |\n| 판매수수료 | 수수료 미징구(C) | 매입·환매시점 일시 판매수수료는 없으나 판매보수가 선취형(A)·\n후취형(B)·선후취형(AB)보다 높게 책정되어, 총비용이 A 와 일치하는 시점은 약 2 년. 2 년 이전 환매 시 \nA 보다 낮은 총비용을 지불할 수 있음. |\n| 판매경로 | 온라인(E) | 온라인전용 판매로 오프라인 대비 판매수수료·판매보수가 저렴함. 다만 별도의 \n투자권유·상담서비스는 제공되지 않음. |\n| 판매경로 | 오프라인 | 오프라인전용(판매회사 창구) 판매로 온라인 대비 판매수수료·판매보수가 높음. \n다만 별도의 투자권유·상담서비스가 제공됨. |\n| 판매경로 | 온라인슈퍼(S) | 공동판매채널 역할 수행을 위해 모든 공모 종류 S 수익증권(S-T, S-P 포함)\n을 취급하고, 객관적 지표 기준으로 상품을 노출·배열하는 온라인판매시스템을 통해 판매됨. 다른 종류\n[가입자격 제한 종류 제외]보다 판매보수가 낮고 후취판매수수료가 부과됨. 별도의 투자권유·\n상담서비스는 제공되지 않음. |\n| 기타 | 보수체감(CDSC) | 판매수수료미징구형(C)이며 이연판매보수(CDSC) 프로그램에 따라 \n판매보수를 적용하므로, 별도 전환 청구 없이 보유기간 경과에 따라 판매보수가 낮은 종류로 자동 전환됨. \n|\n| 기타 | 무권유 저비용(G) | 별도의 투자권유 없이 매수하는 경우 일반 창구 판매수수료·판매보수보다 \n낮은 수수료·보수가 적용됨. |\n| 기타 | 기관(F) | 기관 및 법인 전용 집합투자기구. | ---", "score": 0.719, "token_count": 246, "page_info": "p.5", "source_location": {"file_path": "/tmp/aicm_g1tztlzp.docx", "file_url": "/repos/9a199778-4a62-4922-bba9-cddddc740b7f/docs/39914980-4dd5-4ac2-af67-f280373f0b07", "page_number": 5, "page_range": null, "start_char_offset": 6497, "end_char_offset": 7477, "bbox": [54.1, 163.38576377952802, 65.199, 174.38576377952802], "heading_path": ["14. 집합투자기구의 종류 (종류형)"], "sheet_name": null, "table_index": null, "paragraph_index": null}}, {"ref_num": 3, "document_id": "39914980-4dd5-4ac2-af67-f280373f0b07", "chunk_id": "0bc6aa84-6e7d-4a02-a7f6-dda7fa6a5be8", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "수수료·총보수·비용 단위: 연간 % / 총비용 예시 단위: 천원 (1,000 만원 투자 기준)\n| 클래스 종류 | 판매수수료 | 총보수(%) | 총보수-판매보수(%) | 동종유형 총보수(%) | 총보수·비용(%) | \n1 년(천원) | 2 년 | 3 년 | 5 년 | 10 년 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| 수수료선취-오프라인(A) | 납입금액의 1.0% 이내 | 1.1054 | 0.5274 | 1.43 | 1.1077 | 212 | 330 \n| 454 | 721 | 1,513 |\n| 수수료미징구-오프라인-보수체감(C1) | 없음 | 1.8280 | 1.2500 | 1.59 | 1.8280 | 187 | 371 | \n549 | 887 | 1,847 |\n| 수수료미징구-온라인(C-E) | 없음 | 1.0780 | 0.5000 | 1.19 | 1.0780 | 110 | 226 | 348 | 610 | \n1,390 |\n주석\n상기 종류를 제외한 나머지 종류 및 구체적 투자비용은 투자설명서(제 2 부 13. 보수 및 수수료에 관한 \n사항) 참고.\n도표의 총보수·비용은 '합성 총보수·비용' 비율을 의미함. 이는 본 투자신탁의 총보수·비용과 \n모투자신탁에서 발생한 보수·기타비용을 모투자신탁 투자비율에 따라 안분한 값의 합을 순자산 \n연평균잔액(보수·비용 차감 전 기준)으로 나누어 산출하며, 실제 비용은 상이·변동될 수 있음.\n종류 C1 가입자는 1 년 경과 시마다 C2→C3→C4→C5 로 자동 전환되며 판매보수가 체감 적용됨.\n본 집합투자기구는 오프라인 클래스 대비 일반적으로 저렴한 온라인 클래스(A-E)가 설정되지 않음.\n총비용 예시 가정: 이익금 전액 재투자, 연간 투자수익률 5%, 판매수수료율 및 총보수·비용비율 일정.\nA 형과 C 형의 총비용이 일치하는 시점은 약 2 년(추가납입·보수 등 변경에 따라 달라질 수 있음).\n동종유형 총보수는 한국금융투자협회 공시 기준 동종유형 집합투자기구 전체의 평균 총보수비용을 의미함. ---", "score": 0.636, "token_count": 257, "page_info": "p.2", "source_location": {"file_path": "/tmp/aicm_g1tztlzp.docx", "file_url": "/repos/9a199778-4a62-4922-bba9-cddddc740b7f/docs/39914980-4dd5-4ac2-af67-f280373f0b07", "page_number": 2, "page_range": null, "start_char_offset": 1462, "end_char_offset": 2489, "bbox": [54.1, 99.38576377952802, 65.199, 110.38576377952802], "heading_path": ["3. 투자비용 (2025.08.31 기준)"], "sheet_name": null, "table_index": null, "paragraph_index": null}}, {"ref_num": 4, "document_id": "39914980-4dd5-4ac2-af67-f280373f0b07", "chunk_id": "a5cc1975-4254-4f82-8293-0fcffec1085f", "document_title": "하나코리아증권자투자신탁_주식_종류A_간이투자설명서.docx", "section_title": null, "content": "| 구분 | 15:30 이전 | 15:30 경과 후 |\n| --- | --- | --- |\n| 매입 | 제 2 영업일 기준가 매입 | 제 3 영업일 기준가 매입 |\n| 환매 | 제 2 영업일 기준가, 제 4 영업일 지급 | 제 3 영업일 기준가, 제 4 영업일 지급 | ---", "score": 0.6004, "token_count": 38, "page_info": "p.4", "source_location": {"file_path": "/tmp/aicm_g1tztlzp.docx", "file_url": "/repos/9a199778-4a62-4922-bba9-cddddc740b7f/docs/39914980-4dd5-4ac2-af67-f280373f0b07", "page_number": 4, "page_range": null, "start_char_offset": 5152, "end_char_offset": 5302, "bbox": [54.1, 73.78576377952811, 65.199, 84.78576377952811], "heading_path": ["8. 매입·환매 방법"], "sheet_name": null, "table_index": null, "paragraph_index": null}}, {"ref_num": 5, "document_id": "288c1e41-71a6-4f84-8bb8-080164081bcb", "chunk_id": "923f5294-6302-4a8b-a208-213e90baed12", "document_title": "한국투자테크증권자투자신탁1호_주식_간이투자설명서.docx", "section_title": null, "content": "| 구분 | 오후 3시 30분 이전 | 오후 3시 30분 경과 후 |\n| --- | --- | --- |\n| 매입방법 | 자금을 납입한 영업일로부터 2영업일(D+1)에 공고되는 기준가격을 적용하여 매입 | 자금을 납입한 영업일로부터 3영업일(D+2)에 공고되는 기준가격을 적용하여 매입 |\n| 환매방법 | 환매청구일로부터 2영업일(D+1)에 공고되는 기준가격을 적용. 4영업일(D+3)에 관련 세금 등을 공제한 후 환매대금을 지급 | 환매청구일로부터 3영업일(D+2)에 공고되는 기준가격을 적용. 4영업일(D+3)에 관련 세금 등을 공제한 후 환매대금을 지급 |\n환매수수료: 없음 --- ### 기준가격", "score": 0.5594, "token_count": 84, "page_info": "p.1", "source_location": {"file_path": "/tmp/aicm_gamytjt4.docx", "file_url": "/repos/9a199778-4a62-4922-bba9-cddddc740b7f/docs/288c1e41-71a6-4f84-8bb8-080164081bcb", "page_number": 1, "page_range": null, "start_char_offset": 6170, "end_char_offset": 6494, "bbox": null, "heading_path": ["매입·환매 방법"], "sheet_name": null, "table_index": null, "paragraph_index": 9}}], "confidence": 0.7212, "search_latency_ms": 726, "total_candidates": 5}
+
+event: token
+data: {"text": "하나"}
+
+event: token
+data: {"text": "코"}
+
+event: token
+data: {"text": "리아"}
+
+event: token
+data: {"text": "증"}
+
+event: token
+data: {"text": "권"}
+
+event: token
+data: {"text": "자"}
+
+event: token
+data: {"text": "투자"}
+
+event: token
+data: {"text": "신"}
+
+event: token
+data: {"text": "탁"}
+
+event: token
+data: {"text": "_"}
+
+event: token
+data: {"text": "주"}
+
+event: token
+data: {"text": "식"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " 환"}
+
+event: token
+data: {"text": "매"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "수"}
+
+event: token
+data: {"text": "료"}
+
+event: token
+data: {"text": "는"}
+
+event: token
+data: {"text": " 가"}
+
+event: token
+data: {"text": "입"}
+
+event: token
+data: {"text": "하신"}
+
+event: token
+data: {"text": " 종류"}
+
+event: token
+data: {"text": "와"}
+
+event: token
+data: {"text": " 보유"}
+
+event: token
+data: {"text": "기간"}
+
+event: token
+data: {"text": "에"}
+
+event: token
+data: {"text": " 따라"}
+
+event: token
+data: {"text": " 다"}
+
+event: token
+data: {"text": "르게"}
+
+event: token
+data: {"text": " 적용"}
+
+event: token
+data: {"text": "됩니다"}
+
+event: token
+data: {"text": " ["}
+
+event: token
+data: {"text": "1"}
+
+event: token
+data: {"text": "]."}
+
+event: token
+data: {"text": "\n\n"}
+
+event: token
+data: {"text": "*"}
+
+event: token
+data: {"text": "   "}
+
+event: token
+data: {"text": "**"}
+
+event: token
+data: {"text": "종"}
+
+event: token
+data: {"text": "류"}
+
+event: token
+data: {"text": " A"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " AG"}
+
+event: token
+data: {"text": "**:"}
+
+event: token
+data: {"text": " 보유"}
+
+event: token
+data: {"text": "기간"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "3"}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "일"}
+
+event: token
+data: {"text": " 미"}
+
+event: token
+data: {"text": "만"}
+
+event: token
+data: {"text": " 시"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": "익"}
+
+event: token
+data: {"text": "금"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "7"}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "%,"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "3"}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "일"}
+
+event: token
+data: {"text": " 이상"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "9"}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "일"}
+
+event: token
+data: {"text": " 미"}
+
+event: token
+data: {"text": "만"}
+
+event: token
+data: {"text": " 시"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": "익"}
+
+event: token
+data: {"text": "금"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "3"}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "%"}
+
+event: token
+data: {"text": "가"}
+
+event: token
+data: {"text": " 부"}
+
+event: token
+data: {"text": "과"}
+
+event: token
+data: {"text": "됩니다"}
+
+event: token
+data: {"text": " ["}
+
+event: token
+data: {"text": "1"}
+
+event: token
+data: {"text": "]."}
+
+event: token
+data: {"text": "\n"}
+
+event: token
+data: {"text": "*"}
+
+event: token
+data: {"text": "   "}
+
+event: token
+data: {"text": "**"}
+
+event: token
+data: {"text": "종"}
+
+event: token
+data: {"text": "류"}
+
+event: token
+data: {"text": " C"}
+
+event: token
+data: {"text": "1"}
+
+event: token
+data: {"text": "~"}
+
+event: token
+data: {"text": "C"}
+
+event: token
+data: {"text": "5"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " C"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "E"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " C"}
+
+event: token
+data: {"text": "-"}
+
+event: token
+data: {"text": "F"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " CG"}
+
+event: token
+data: {"text": ","}
+
+event: token
+data: {"text": " S"}
+
+event: token
+data: {"text": "**:"}
+
+event: token
+data: {"text": " 보유"}
+
+event: token
+data: {"text": "기간"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "9"}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "일"}
+
+event: token
+data: {"text": " 미"}
+
+event: token
+data: {"text": "만"}
+
+event: token
+data: {"text": " 시"}
+
+event: token
+data: {"text": " 이"}
+
+event: token
+data: {"text": "익"}
+
+event: token
+data: {"text": "금"}
+
+event: token
+data: {"text": "의"}
+
+event: token
+data: {"text": " "}
+
+event: token
+data: {"text": "7"}
+
+event: token
+data: {"text": "0"}
+
+event: token
+data: {"text": "%"}
+
+event: token
+data: {"text": "가"}
+
+event: token
+data: {"text": " 부"}
+
+event: token
+data: {"text": "과"}
+
+event: token
+data: {"text": "됩니다"}
+
+event: token
+data: {"text": " ["}
+
+event: token
+data: {"text": "1"}
+
+event: token
+data: {"text": "]."}
+
+event: done
+data: {"model_used": "gemma-4-31B-it", "confidence": 0.7212, "token_usage": {"context_tokens": 762, "prompt_tokens": 1018, "completion_tokens": 54, "total_tokens": 1072}, "latency_ms": 2555, "stages": {"intent": 905, "search": 726, "distill": 0, "generate": 1630}}
+
