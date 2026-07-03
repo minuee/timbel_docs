@@ -599,14 +599,14 @@ finally: search_task cancel + sem.release (886-902)
 
 | # | 결함 | 위치 | 내용 |
 |:-:|------|------|------|
-| **1** | **`cited_refs` 범위검증 없음 → 유령 ref** | 846-851 | `len(sources)`와 대조 안 함. `[2024]년`·`제[3]항`·`[500]만원`이 전부 인용번호로 오인. 룩비하인드 `(?<![A-Za-z])`는 영문자만 막아 한글/공백 뒤 대괄호는 통과 → sources 2개인데 `cited_refs=[3,2024]` 유령 발생. **1~len(sources) 필터 한 줄로 해결.** §8.4 지적의 코드 확정 |
-| **2** | **reformulate 이중 실행** | 239 / 297-304 | search_task 내부(`enable_llm_rewrite=True`)와 intent용으로 각각 reformulate → **LLM 호출 2회**. 병렬이라 벽시계 손해는 작지만 비용·부하 2배 |
-| **3** | **하드코딩 응답 문자열** | 379 / 534 | `"일상 대화입니다."`, `"참고자료를 찾지 못했습니다."` — CLAUDE.md "정해진 답변 문자열 금지" 제1원칙과 충돌 |
-| **4** | **`query_analysis["rewritten_query"]` 직접 키 접근** | 424 vs 668 | 424는 `["..."]`(KeyError 위험), 668은 `.get`(안전) — 불일치. 키 없으면 KeyError→465 generic except가 **"search_error"로 오분류**(검색 성공인데 실패 표기) |
-| **5** | **세마포어 프로세스 로컬** | 74 | 멀티워커면 실효 한도 = `ASSIST_MAX_CONCURRENT_PER_TENANT` × 워커수. "테넌트당 제한"이 배포구성에 따라 헐거워짐. dict도 evict 없어 미세 누수 |
-| **6** | **전용 vLLM 매 요청 클라이언트 생성** | 707 | `_assist_stream()` 안에서 매번 `AsyncOpenAI(...)` 인스턴스화 → 커넥션 풀 재사용 X, `timeout=120.0` 하드코딩 |
-| **7** | **table-slot ranking 주석 불일치** | 252-275 | "reranker가 ranking 결정" 주석과 달리 table hit을 뒤에 append(275) → ref_num 꼴찌, rerank 재적용 안 함 |
-| **8** | **`history_turns=len(history)//2`** | 394 등 | user/assistant 짝 가정. 홀수면 로그 턴수 부정확(로깅 한정, 경미) |
+| **1** | **reformulate 이중 실행** | 239 / 297-304 | search_task 내부(`enable_llm_rewrite=True`)와 intent용으로 각각 reformulate → **LLM 호출 2회**. 병렬이라 벽시계 손해는 작지만 비용·부하 2배 |
+| **2** | **하드코딩 응답 문자열** | 379 / 534 | `"일상 대화입니다."`, `"참고자료를 찾지 못했습니다."` — CLAUDE.md "정해진 답변 문자열 금지" 제1원칙과 충돌 |
+| **3** | **`query_analysis["rewritten_query"]` 직접 키 접근** | 424 vs 668 | 424는 `["..."]`(KeyError 위험), 668은 `.get`(안전) — 불일치. 키 없으면 KeyError→465 generic except가 **"search_error"로 오분류**(검색 성공인데 실패 표기) |
+| **4** | **세마포어 프로세스 로컬** | 74 | 멀티워커면 실효 한도 = `ASSIST_MAX_CONCURRENT_PER_TENANT` × 워커수. "테넌트당 제한"이 배포구성에 따라 헐거워짐. dict도 evict 없어 미세 누수 |
+| **5** | **전용 vLLM 매 요청 클라이언트 생성** | 707 | `_assist_stream()` 안에서 매번 `AsyncOpenAI(...)` 인스턴스화 → 커넥션 풀 재사용 X, `timeout=120.0` 하드코딩 |
+| **6** | **table-slot ranking 주석 불일치** | 252-275 | "reranker가 ranking 결정" 주석과 달리 table hit을 뒤에 append(275) → ref_num 꼴찌, rerank 재적용 안 함 |
+| **7** | **`history_turns=len(history)//2`** | 394 등 | user/assistant 짝 가정. 홀수면 로그 턴수 부정확(로깅 한정, 경미) |
+| **8**(저위험) | **`cited_refs` 범위검증 없음** | 846-851 | `_cited`는 답변 본문(`full_answer`)의 `[n]`을 정규식 회수하고 `len(sources)`와 대조 안 함. 이론상 `[2024]년` 등 비인용 대괄호숫자나 출처개수 초과 번호(`[3]`인데 sources 2개)가 유령 ref로 샘. **단 실전 빈도 낮음** — system_prompt가 `[n]`=인용으로 길들여 LLM이 연도·금액에 대괄호를 잘 안 씌움. `[n for n in _cited if 1 <= n <= len(sources_payload)]` 한 줄이면 방어되나 **치명적 버그 아닌 경계 방어(insurance) 수준.** ⚠️ 담당자 오해 주의: cited_refs는 **구조화 필드가 아니라 본문 정규식**에서 옴(KMS 전체에서 생성지는 이 한 곳뿐 — grep 확정). 번호가 *가리키는 대상*은 지정 출처(`ref_num`)가 맞지만 *추출·검증*은 없음 |
 
 #### 잠금 파라미터 (함수 지역 하드코딩 → advisor 튜닝 후보)
 
@@ -622,11 +622,11 @@ finally: search_task cancel + sem.release (886-902)
 
 #### advisor 포크 시 즉시 이득 (결함 → 개선)
 
-- **#1 유령 ref 필터** — `[n for n in _cited if 1 <= n <= len(sources_payload)]`
-- **#2 reformulate 1회로 통합** — search와 intent가 결과 공유
-- **#4 `.get`으로 통일** — search_error 오분류 제거
+- **#1 reformulate 1회로 통합** — search와 intent가 결과 공유
+- **#3 `.get`으로 통일** — search_error 오분류 제거
+- **#8 유령 ref 필터** — `[n for n in _cited if 1 <= n <= len(sources_payload)]` (저비용 방어, 급하지 않음)
 
-> **결론:** 파일은 단일 함수 700줄 monolith라 가독성은 낮지만 파이프라인 설계(병렬 dispatch·다층 타임아웃·distill 폴백)는 견고. 결함은 대부분 **경계 검증 부재(#1,#4)와 중복 작업(#2)** 이고, advisor 포크는 이걸 고칠 자연스러운 기회. 공유면(설정·세마포어·rag.py 헬퍼)만 복사/신설하면 기존 무영향(§8.5).
+> **결론:** 파일은 단일 함수 700줄 monolith라 가독성은 낮지만 파이프라인 설계(병렬 dispatch·다층 타임아웃·distill 폴백)는 견고. 실질 결함은 **중복 작업(#1)과 경계 검증 부재(#3)** 정도이고, `cited_refs`(#8)는 실전 빈도 낮은 저위험 방어 항목. advisor 포크는 이걸 고칠 자연스러운 기회. 공유면(설정·세마포어·rag.py 헬퍼)만 복사/신설하면 기존 무영향(§8.5).
 
 ---
 

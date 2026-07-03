@@ -90,3 +90,47 @@
 **UX 결정:** 답변처리된 항목 표시(예: 버튼 `답변처리`→`답변완료(비활성)`, 미답변 탭에서만 제거하고 전체콜 탭엔 유지).
 
 **관련 파일:** `AdminCoaching.vue`(processCoachingData/handleConfirmed/탭), `AdminCoachingCard.vue`(버튼/핸들러), `coaching.ts`(store 액션), `coaching-request.api.ts`(API).
+
+## 2026-07-02 등록
+
+### 7. 세션 만료 칩 클릭 → 수동 토큰 재발급 [구현·실서버 검증 완료 후 원복, 재활용 대기]
+**상태:** 실서버에서 **동작·검증 100% 성공** 확인 후 원복함(임시 테스트였기 때문). 아깝다는 판단으로 재활용 위해 기록. → 필요 시 아래 diff 그대로 다시 적용하면 됨. **(주의: 이 repo는 git 명령 사용 금지 — 원복/재적용 모두 파일 직접 편집으로 처리)**
+
+**배경 — 현재 토큰 갱신 2경로(둘 다 유지, 이건 건드리지 않음):**
+- **경로① 선제 재발급 타이머** `src/utils/tokenRefreshTimer.ts` — 어드바이저 접속 시 `startTokenRefreshTimer()` 1회. accessToken JWT `exp` 디코드 → 만료 3분 전(`LEAD_MS`) **setTimeout 1회 예약**(폴링 아님) → `auth/refresh` 직접 호출 → 새 토큰 sessionStorage 저장 → 새 토큰 기준 재예약. refreshToken 없으면(로컬) no-op. **발동 시 현재 토큰 exp 재검증 없이 무조건 refresh**.
+- **경로② SSE `auth-expiry` 칩** — 서버가 만료 5분(`thresholdSec:300`) 이하 시 발화마다 이벤트 → `authExpiry.ts` store → `HeaderActionBar` 칩 노출. **안내 전용(클릭·자동 refresh 없음)**.
+
+**추가했던 기능(=재활용 대상):** 세션 칩을 **클릭하면 경로①과 동일 경로로 즉시 수동 재발급**. 성공 시 칩 제거 + 토스트.
+
+**정확한 diff (재적용용):**
+1. `src/utils/tokenRefreshTimer.ts`
+   - `doRefreshAndReschedule`를 `Promise<boolean>`로 변경: 성공 끝에 `return true`, 각 실패(`!rt`/`!newAccess`/`catch`)에 `return false`.
+   - `stopTokenRefreshTimer` 위에 export 추가:
+     ```ts
+     /** 수동 토큰 재발급 트리거(세션 칩 클릭용). 성공 true / 실패 false. */
+     export function refreshTokenNow(): Promise<boolean> {
+       return doRefreshAndReschedule();
+     }
+     ```
+2. `src/components/layout/HeaderActionBar/index.vue`
+   - import 추가: `import { refreshTokenNow } from "@/utils/tokenRefreshTimer";` + `import { ElMessage } from "element-plus";` (ElMessage는 element-plus에서 명시적 import 필요)
+   - `sessionExpiryTooltip` computed 아래에 핸들러 추가:
+     ```ts
+     const handleSessionChipClick = async () => {
+       const ok = await refreshTokenNow();
+       if (ok) { authExpiryStore.clear(); ElMessage.success("세션이 갱신되었습니다."); }
+       else { ElMessage.error("세션 갱신에 실패했습니다. 저장 후 재로그인 해주세요."); }
+     };
+     ```
+   - 칩 div에 `@click="handleSessionChipClick"` 추가
+   - `.session-expiry-chip` 스타일 `cursor: default` → `cursor: pointer`
+   - (테스트 편의) 칩 강제노출: `v-if="authExpiryStore.active"` → `v-if="true"`. **정식 적용 시엔 이건 하지 말 것**(active일 때만 뜨는 게 맞음). 강제노출은 SSE 없이 테스트하려던 임시조치였음.
+
+**실서버 검증 결과(2026-07-02 밤):**
+- 재발급마다 JWT `exp` 정상적으로 뒤로 밀림(예: 20:56:13 → 21:04:05 → 21:07:11).
+- sessionStorage accessToken == assist-stream/VOC API 요청헤더 `Authorization: Bearer` **100% 일치** → 저장→요청반영 정상.
+- **VOC 탐지 API 정상 동작**.
+- ⚠️ 토큰 payload `ad` 값이 재발급마다 바뀜(549596→189144→436188…). `sub/acc/cId/cd/role`은 고정. **VOC엔 영향 없음 확인**(무해한 세션/발급 식별자로 추정).
+- (무관) `asst-service/summary`에서 뜬 `503 "LLM Orchestrator 서비스에 연결할 수 없습니다"`는 **토큰과 무관한 백엔드 이슈**(401 아님=인증 통과). 별건.
+
+**정식화 시 고민:** 이 수동 버튼은 경로①(자동)이 실패했거나 refreshToken 만료 직전 백업 용도로 유용. 칩은 `active`일 때만 뜨게 유지하고, 성공 후 `authExpiryStore.clear()`로 칩 제거되는 UX가 자연스러움(경로① 성공 후에도 칩이 안 사라지는 기존 미세버그 함께 해소됨).

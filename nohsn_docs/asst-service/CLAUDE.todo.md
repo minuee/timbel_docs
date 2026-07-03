@@ -1,6 +1,13 @@
 # CLAUDE.todo.md — 나중에 실제 적용할 작업
 
-## ☐ 상담 사후처리 4개 서비스를 기존(LLM오케스트레이터) → CE 서비스로 교체
+## ☑ 상담 사후처리 4개 서비스를 기존(LLM오케스트레이터) → CE 서비스로 교체 — **[2026-07-02] 운영 교체 완료**
+
+> ✅ **완료(2026-07-02)**: 오케스트레이터(`aicc/llm-orchestrator`)가 인프라팀에 의해 내려가 `POST /summary`가 503 → 아래 계획대로 운영 흐름을 CE 직접호출로 전환.
+> - 신규 공용 CE 클라이언트 `src/common/services/ce-llm-client.service.ts`(토큰 비의존, `advisor.module.ts` 등록).
+> - ①②③④ 모두 CE 호출 + 파이프 파싱 + **fail-soft**(실패해도 throw 안 하고 빈값 → `/summary`가 503으로 안 죽음).
+> - 롤백: `POSTCALL_ANALYZER=orchestrator`(기본 `ce`). 옛 메서드는 `*ViaOrchestrator`로 보존.
+> - `tsc`/eslint 통과. **테스트·배포는 사용자 직접 진행.** ④ 상담유형은 CE 엔드포인트 재배포 완료 여부만 확인하면 됨(미완이면 그 축만 `[]`).
+> - 이력: `CLAUDE-history.md` 2026-07-02 #4 참고.
 
 > 배경: 현재 4개 서비스는 LLM 오케스트레이터(또는 코드 하드코딩 프롬프트)로 호출 중.
 > 이번에 같은 4개를 CE service(`/ai-apps/advisor-*/runs`) 직접 호출 버전으로 **테스트 엔드포인트(`PostCall-LLM` 그룹, `src/advisor/postcall/`)** 로 미리 만들어 둠.
@@ -86,3 +93,4 @@
 - [2026-06-26] 테스트 엔드포인트 4개(`PostCall-LLM`) 신설 완료, ①②③ 스웨거 테스트 정상. ④는 CE 재배포 대기 중.
 - emotion(VOC)도 CE path가 `/ai-apps/advisor-emotion/runs`로 변경됨(이미 운영 흐름 반영).
 - [2026-06-26] 실시간 VOC conversation 누적 방식 개선안(슬라이딩 윈도우) todo 등록 — 아직 미적용, 의견 단계.
+- [2026-07-02] ①②③④ 운영 흐름 CE 전환 완료(오케스트레이터 다운 대응). 공용 `CeLlmClientService` 신설, 전 축 fail-soft, `POSTCALL_ANALYZER` 롤백 스위치. 테스트·배포는 사용자.
