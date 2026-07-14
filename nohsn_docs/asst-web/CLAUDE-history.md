@@ -1192,3 +1192,1028 @@
 - **미수정(범위 밖·사용자 인지):** `request.ts:10` 의 `import.meta.env.VITE_ECP_ROOT_WEB` 잠재버그는 그대로 둠(→ 근본적으론 `process.env` 로 바꿔야 하나 reactive refresh 경로 영향 우려로 미변경).
 - **속도상세 배지 확인:** 사용자가 "삭제했나?" 문의 → 안 건드림. 실제 키는 **`aicc_speed_debug`(언더스코어)** 이고 사용자가 `aicc-speed-debug`(하이픈)로 넣어 안 보였던 것. 배포 환경 노출법: 콘솔 `localStorage.setItem('aicc_speed_debug','1')` 후 새로고침(`isDebugEnabled` @ `utils/env.ts`, `SearchSpeedBadge.vue`). localhost 는 항상 노출.
 - **상태:** 크래시 해결 확인(에러 사라짐, 사용자 확인). 나머지 기능은 AWS 실토큰 검증 사용자 몫.
+
+---
+
+## 2026-07-06 상담 "이전대화 불러오기" 기능 (실시간 대화 유실 복원)
+
+**배경:** 실시간 상담 중 뒤로가기/페이지이동 후 복귀하면 STT 대화(인메모리 `chatContent` ref)가 유실됨. 상담사가 이전 대화를 못 봄 → 저장된 과거 발화를 버튼으로 복원.
+
+**설계 (사용자 2안 채택):** 화면 대화가 최초(turn_idx=0)부터가 아니면 "이전대화 불러오기" 버튼 노출 → 클릭 시 저장된 과거 turn 을 대화 앞에 prepend. (1안 "상담중 뒤로가기 차단"은 증상만 막고 부작용 커서 폐기)
+
+**백엔드 API (신설, 사용자↔백엔드 협의):**
+- `GET /aicc/asst-service/callstat/calls/realtime-by-callid/{callId}/turns`
+- 응답: `{ call_id, turns: [{ callstats_id, turn_idx(0-based), role(customer/agent/system), utterance, masked_utterance, created_at }] }`, turn_idx ASC(오래된순).
+- 소스 테이블 `raw_call.callstats_turn`(callstats_id=callstats_call.id FK). 기존 `/by-call-id/{callId}/stt`(getCallStt) 재활용 가능했으나 **전용 신설** — 실시간 격리/의도명확/백엔드 에러핸들링 이유.
+
+**구현 (파일 3):**
+- `api/types/callstat.type.ts`: `RealtimeCallTurn`(turn_idx 외 전부 optional — 필드 변형 대비).
+- `api/apis/callstat.api.ts`: `getRealtimeTurnsByCallId()`.
+- `chat/index.vue`:
+  - `minVisibleTurnIdx`(computed, O(1) — 앞에서 첫 유효 turnIdx만. chatContent 오름차순 전제), `hasPreviousTurns`(`>0`, 0-based).
+  - `loadPreviousTurns`: callId(`callSummaryInfoStore.callId||props.callId`) → API → `turn_idx<beforeIdx` 필터 + 재정렬 → role→sender·utterance→content·created_at→time 매핑 → prepend + **스크롤 앵커 유지**(expandChatWindow 패턴 재활용). 전 과정 try/catch 격리(실패시 console.warn만).
+  - 버튼: `v-if="hasPreviousTurns && !isAdmin && !isViewer"` (상담사 실시간 화면에서만).
+
+**핵심 함정/해결:**
+- ⭐ **0-based**: 초기 `>1`(사용자가 "1부터"라 해서 1-based 가정) → 실제 API turn_idx 0부터 → `>0`으로 수정. 안 그러면 "0번만 사라진 경우" 버튼 안 떠서 영구 유실. 실시간 소켓도 0-based 확정 — `useChatMessageParser.ts` 가공없이 그대로 매핑 + 119행 주석 "통화 바뀌면 turn_idx 0부터 재사용"이 증거(실통화 없이 코드로 확정).
+- **flex-center 없음**: common.scss엔 `flx-center`만 → `flex justify-center`로 교체(CLAUDE.md 기존 함정과 동일계열).
+- **응답 래핑**: `{turns:[]}` 형태 → `Array.isArray(raw)?raw:raw.turns` 방어 파싱.
+
+**실시간 무영향 4중 점검(통과):** ①렌더안전(SpeechBubble `content||""` 방어+기존 props.callId watch 동일 최소필드 패턴) ②prepend중 새발화(최신배열 spread/turnIdx 겹침없음) ③노출범위(관리자·뷰어 차단) ④격리(try/catch).
+
+**상태:** 코드 완료. lint 내 추가분 에러0(파일 전체 기존 prettier 이슈만 잔존). 실통화 화면검증은 사용자 몫(선택, 백엔드 이미 배포).
+
+## 2026-07-06 (이어서) — 어드바이저 리뉴얼: 모달→페이지화 스캐폴드 착수 (advisor-renual)
+
+**배경/방식 확정:** CLAUDE-renual-todo.md 브레인스토밍 기반. 모달/팝레이어 기능을 독립 페이지로. 이번 단계는 **껍데기(뷰)+주석만**, 로직은 확정 후 기존 코어(store/api) 재사용(복제금지). 뷰만 `src/view/advisor-renual/`로 분리(안전), 코어는 기존 것 import 방침.
+
+**주석 3블록 형식(공지사항 샘플로 확정):** ①참고소스(모달 경로+코어 store/api/types 위치) ②리뉴얼 타겟 UI(배포 목업 URL+구성) ③구성가능성 %분석(갭 지점 ★표시). 배포 UI는 MCP(Playwright)로 분석해 주석에 기록.
+
+**공지사항 샘플 완료:** `src/view/advisor-renual/notice/index.vue`. 분석결과=코어가 useNoticeStore/NoticeAPI에 잘 분리→**약 85% 재사용가능**, 유일 갭=배포UI 유형4종(긴급/일반/정책/점검) vs 기존모델 2종(urgent/general) → API확장 or 프론트매핑 확정필요.
+
+**허브 방식(A) 확정 — GNB 4뎁스 제약 회피:** `makeMenuOfTree`가 3뎁스까지만 지원 → gnb_menu.png "94리뉴얼>3그룹>항목"(4뎁스) 불가. 대신 **허브 페이지가 3그룹 nav를 콘텐츠로 렌더**(`advisor-renual/index.vue`), 리프는 클릭 이동.
+
+**배선(상담사/관리자 무영향 확인 후 진행):**
+- `mockupMenuList.ts`: 94 routePath `example/agentRenewal`→`advisor-renual`(허브). 리프10개 추가(parentId:0, **isHide:true**, routePath `advisor-renual/<기능>`, id 941~950).
+- `auth.ts` buildMenuItem: `isHide: rawItem.isHide ?? false`(하드코딩 false→목업플래그 존중, 기본 false라 하위호환).
+- 라우팅 근거: 가드(routers/index.ts:68)가 메뉴에 있는 path만 통과 → 리프도 메뉴등록 필요. isHide는 사이드바만 제외(getShowMenuList), flat(getFlatMenuList)엔 포함→라우트/딥링크 OK.
+
+**생성 파일(11개):** 허브 `advisor-renual/index.vue` + 리프10 `dashboard/chat/call-history/bookmark/memo/todo/notice/coaching/detect-word/settings`. 공지사항만 풀 분석주석, 나머지9는 최소껍데기(분석주석 순서대로 채울 예정).
+
+**다음:** 배포 URL 목록 받아 순서대로(북마크→메모→할일→감지어→코칭→설정→통화이력, 워크스페이스3개 포함) 분석주석 채우기.
+
+## 2026-07-06 (이어서) — 리뉴얼 방식 전환: 콘텐츠 허브(A) → 플라이아웃 그룹메뉴(B2)
+
+**재파악:** 사용자가 가리킨 "우측"은 페이지 콘텐츠가 아니라 **메뉴 플라이아웃(NewSubMenu.vue)의 three-depth 컬럼**. 흐름=상담어드바이저(0)→[hover]91~94→[94 hover]94의 자식(그룹렌더). NewSubMenu는 이미 `three-depth-menu-parent`로 **그룹헤더+항목(제목·설명·카운트)** 렌더 가능 = gnb_menu.png 모양 코드추가 없이 지원. 유일 블로커=makeMenuOfTree 3뎁스 한계.
+
+**B2 확정·구현:**
+- `mockupMenu.ts` makeMenuOfTree에 **4뎁스 루프 1개 추가**(기존 3뎁스 그대로, 순수 추가). node 시뮬로 검증: 94→3그룹→10항목 정상, 91/92/93 자식0(무영향).
+- `mockupMenuList.ts` 재구성: 이전 parentId:0 isHide 리프10 제거 → **94 → 그룹3(951 워크스페이스/952 내도구/953 코칭·설정) → 항목10**. 그룹은 children 보유→페이지없음(플라이아웃 헤더역할), 항목은 routePath advisor-renual/<기능>→기존 껍데기.
+- 콘텐츠 허브 `advisor-renual/index.vue`는 **남겨둠**(94가 자식생겨 라우트 연결은 끊김, 참고용).
+- 진단(getDiagnostics) 3파일 클린. require.context는 빌드타임이라 새 .vue 인식엔 dev 재시작/HMR 필요(사용자).
+
+**무영향 재확인:** auth.ts isHide 1줄(기본 false), 4뎁스 루프 additive, 메뉴변경 리뉴얼(94) 서브트리 한정 → 상담사(91)/관리자(92) 그대로.
+
+**다음:** 배포 URL 목록 받아 리프 껍데기에 분석주석 순서대로.
+
+## 2026-07-07 — 리뉴얼 상담화면(chat) 리프 구현 (하이브리드: 복사 후 UI 리뉴얼)
+
+**방식 확정:** 기존 상담화면 프로세스 재사용 + 실시간 살림. **원본 무수정** 대전제.
+- 로직·데이터(store/api/service/composable)는 기존 것 **import만**, **화면 UI(component)는 복사 후 리뉴얼**.
+- 하위 컴포넌트 import가 `@/` 절대경로면 복사본을 딴 위치에 둬도 원본 재사용(복제 아님). 상대경로(`./`)면 복사 후 sed로 절대화.
+
+**신규 파일 (전부 `src/view/advisor-renual/chat/`):**
+- `index.vue` — 부모 오케스트레이터(`advisor/agent/index.vue`의 상담뷰 배선 발췌 재현) + 리뉴얼 프레임. RenualPageHeader + 좌1:우2 grid + 우측레일.
+- `components/ChatRightRail.vue` — 우측 아이콘 레일 6개(코칭요청/콜이력/메모/북마크/할일/설정). 아이콘만, 모달연동 나중. hover=테마색.
+- `components/RenualChatPanel.vue` — 상담내용(원본 `chat/index.vue` 복사, 2340줄). @/ 절대경로라 composable/SpeechBubble/store 원본 재사용.
+- `components/RenualKnowledgePanel.vue` — 지식저장소(원본 `knowledge/TabTypeKnowledgeIndex.vue` 복사, 상대경로 8개 절대화).
+- `components/RenualDocumentCard/ContentPanel/DetailView.vue` + `RenualContentCollapse.vue`(재귀) — 지식저장소 하위 4개 복사, 상호참조 복사본끼리 연결. SearchSpeedBadge 등 리뉴얼 대상 아닌 건 원본 재사용.
+
+**실시간 재현:** 리뉴얼 index.vue 가 Chat emit 4종(updateChatDocumentList/Summary/Timing/SelectedRefs) + detailItemClick/clearChatSelection 를 받아 로컬 ref→Knowledge props 로 배선(agent/index.vue 발췌). 식별자(cc_cti_id/assigned_workspace_id/botId)는 userProfileStore. onMounted 에 ensureBootstrapped()+refreshKeywordDetect(), onUnmounted vocStore.clear().
+
+**UI 리뉴얼 완료분:**
+- 4등분 레이아웃: 좌(상담내용)/우(지식저장소) 하나의 카드처럼 — 공유 보더 + 바깥4모서리 radius + 가운데 세로선(`__know border-left`) + 제목 아래 가로선(전체폭, 음수마진 -20으로 카드끝~세로선 꽉참) + 좌우 제목영역 높이 44px 통일.
+- 헤더 아이콘: 상담내용 `forum` / 지식저장소 `menu_book`, 색=텍스트와 동일(`info`).
+- VOC 헤더 반응형: 좁아지면 wrap→nowrap(높이 44 고정), 스파크라인만 flex-shrink 축소(등급·score 보존).
+- 상담원 말풍선 배경: `:deep(.bubble-consultant)` → `--color-primary-10`(테마색). 고객 말풍선은 인라인 로직이라 나중.
+- 지식저장소: 검색input(radius 6px·placeholder·포커스 테마색), AI요약 박스 배경 `--color-primary-10`+"AI 요약" 라벨(search 탭·상세 둘 다), 탭(상단 card + 활성 하단 2px `--color-primary` 밑줄), 탭 영역 꽉참(음수마진 -20)+하단 분리선(탭 있을때만 렌더=빈상태 라인 제거)+탭위여백 3px+탭↔AI 20px, AI/문서 padding=탭의 2배.
+
+**중요 원칙(메모리 저장):** 색은 하드코딩 말고 테마변수(`--color-primary` 계열, `--color-gNN`). 특히 hover. → `theme-color-over-hardcode` 메모.
+
+**검증:** 로컬(localhost:8173) 검색 실제 동작 확인(useKnowledgeSearch API 정상). 좌표 측정으로 레이아웃 검증. 발화 말풍선은 통화 필요라 사용자 검증.
+
+**남음:** 3번 상세 UI(문서카드 클릭→`[규정]/[FAQ]`배지+문서명+`☆북마크/⭐북마크됨` 상세헤더+뒤로가기+원본보기, new_knowledge_1/2.png 참고) / 우측레일 모달연동 / 고객 말풍선(SpeechBubble 복사) / 상담원 배경색 실측 조정.
+
+## 2026-07-07 — 리뉴얼 대시보드(dashboard) 리프 구현 (UI + 실데이터 1차)
+
+**흐름:** 배포 목업(`/agent/dashboard`)과 현 운영 대시보드(`/advisor/consultant`)를 MCP로 대조 → 껍데기였던 `advisor-renual/dashboard/index.vue`를 목업 UI로 채우고, 실데이터 4개를 기존 소스 재사용으로 연결. **원본 무수정.**
+
+**확정 사항(대화):**
+- 종합(집계) API 신설 안 함 → 기존 전용 스토어/API 그대로 재사용. 진입마다 4콜 병렬(현 운영 대시보드가 이미 하는 패턴, 훨씬 가벼움). 로그인 1회가 아니라 대시보드 진입마다 갱신이 맞음(숫자는 최신이어야 의미).
+- 미구현 3개는 배지 말고 심플하게 제목 텍스트로만 표기.
+- 데이터는 목업으로 두되 주석에 "실데이터 연동 시 목업 제거" 명시. 색은 테마변수. 카드 링크는 리뉴얼 라우트 연결.
+
+**조사(Explore 에이전트 + 직접):** 현 대시보드 `Dashboard.vue`는 자식이고 부모 `agent/index.vue`가 데이터 로드. 소스 확정 — 공지=`noticeStore.dashboardNotices`, 코칭=`coachingStore.unReadCoachingCount`+`receiverCoachings[0].content`, 오늘통화=`CallStatAPI.getAgentSummaryStats.total_calls`+`callHistoryStore` 최근콜, 지식=`DashboardAPI.getPopularDocuments`.
+
+**✅ 실연결 4개:** ①긴급공지(최신1건, 긴급/일반무관) ②코칭(미확인수+최근문구) ③오늘통화(건수+마지막callId) ⑥자주열람지식(문서명+저장소명, max5, 없을수있음). 각각 빈상태 처리 + 카드클릭→리뉴얼 라우트.
+**⛔ 미구현 3개:** ④이슈어 ⑤자주하는질문 ⑦오늘KPI — 제목에 `· 미구현` 텍스트만, 내용은 `[MOCK]` 플레이스홀더.
+
+**버그픽스:** 자주열람지식 0건 → 원인=`assigned_workspace_id`만 봐서 목업/mock 계정(workspace 미할당)에서 빈값. `resolveWorkspaceId()`(설정/env override 우선) 로 교체해 해결. chat 리뉴얼·운영 대시보드와 동일 우선순위.
+
+**상태:** IDE 진단 0. UI+실연결 1차 완료. 대시보드 세부 보완은 **나중에** 하기로(사용자: "일단 정리, 나중에 보완마무리"). 상세는 renual-todo 7-7 대시보드 항목 참고.
+
+## 2026-07-08 — AICM 검색 카테고리(category_ids) 기능 + highlightable boolean/string 정규화
+
+> 리뉴얼(renual)은 홀드하고 **기존 소스 수정**. 백엔드가 workspace별 카테고리 트리를 제공 → 상담사가 선택하면 RAG 검색범위를 그 카테고리로 제한.
+
+**흐름:** ① 카테고리 조회(`GET /aicc/asst-service/categories?workspace_id=`) → ② 설정 모달에서 선택 → ③ assist-stream/문서검색 호출 시 `category_ids` 전달. 선택 안 하면 빈 배열 `[]`(제한 없음, 하위호환).
+
+**확정 사항(대화):**
+- 선택 안 함 → `[]` 로 전송(undefined 아님).
+- 선택은 **workspace별로** persist store 저장(workspace 바뀌면 API 재조회).
+- 응답이 **트리 구조**(부모=봇그룹 한투_챗봇/한투_콜봇, children=실제 카테고리 FAQ/KMS/의도분류…). `category_ids` 로 보내는 값 = **리프(자식) UUID만**. **부모 선택 = 하위 자식 전체 펼침 토글**. UI = 트리(그룹헤더+자식 체크박스).
+- 응답형식 미확정 기간엔 파싱을 `normalizeNode` 한 곳에 격리(방어적). 실제 형식 확정되어 트리 재귀 파싱으로 교체.
+
+**신규 파일(3):**
+- `src/api/types/category.type.ts` — `CategoryNode`(id/name/parent_id/path/children[] 트리).
+- `src/api/apis/categories.api.ts` — `getCategories(workspaceId)` + 재귀 `normalizeNode`(id|category_id|uuid, name|label|title, {categories|data|items} 감쌈 방어) + `collectLeafIds` export.
+- `src/stores/modules/category.ts` — persist store, `selectedByWorkspace: Record<wsId, string[]>`, getter `selectedIdsFor(wsId)`, action `setSelected`.
+
+**수정 파일:**
+- `src/api/config/path.ts` — `CATEGORIES: "/categories"` 추가.
+- `src/api/types/assist-stream.type.ts` — `AssistStreamReq.category_ids?: string[]` 추가. (+ 뒤에서 `SourceItem.highlightable` widen)
+- `src/api/types/ce.type.ts` — `DocumentSearchReq.category_ids?: string[]` 추가.
+- `Setting.vue`(`components/layout/Drawer/components/Setting/`) — **카테고리설정 탭 신규**. 트리 UI(부모 그룹헤더=하위 전체토글+indeterminate, 자식 들여쓴 체크박스), 탭 진입 시 `effectiveWorkspaceId`로 조회, 저장은 리프 UUID만 store 반영. **저장 성공 시에만** 알럿 "AICM 검색 카테고리가 정상적으로 변경되었습니다" → `setTimeout 1000ms` 후 모달 닫힘.
+
+**category_ids 전달 3곳(전부 workspace_id 1회 해석 후 `selectedIdsFor(wsId)`):**
+- ① 실시간 발화: `useChatAssist.ts` (`/assist-stream`).
+- ② 지식패널 수동검색: `useKnowledgeSearch.ts` (`/stream`).
+- ③ 상담이력 모달 키워드→문서조회: `useKeywordDetail.ts` (`/stream`). ← 사용자가 처음 놓쳤다가 추가.
+- store/전달값이 `string[]`이라 3곳 전달부는 값 그대로. 리뉴얼 chat/knowledge 는 ①②composable 재사용이라 **자동 반영**(리뉴얼 설정 리프는 미착수라 선택 UI는 나중).
+
+**highlightable boolean/string 정규화(별건 요청):**
+- 문제: 기존 `highlightable !== false` 는 엄격한 boolean `false`만 제외 → 백엔드가 문자열 `'false'`로 주면 못 걸러 노출되는 버그. (`true`/`'true'` 혼용도 들어옴)
+- 신규 `src/utils/highlightable.ts`: `isHighlightableFalse(v)=v===false||v==='false'`, `isSourceVisible(v)=!isHighlightableFalse(v)`. `undefined`(옛데이터)는 노출 유지.
+- 적용: `useChatAssist.ts`·`useKnowledgeSearch.ts` 문서필터 → `isSourceVisible`. `DocOriginalViewerModal.vue`(V1)·`DocOriginalViewerModalV2.vue`(실사용) 안내배너 `highlightUnsupported` → `isHighlightableFalse`. `SourceItem.highlightable` 타입 `boolean` → `boolean|string`. 리뉴얼도 공유 V2+composable이라 자동 커버.
+
+**상태:** 사용자 라이브 검증 완료(카테고리 트리 정상, 저장 알럿·1초 닫힘, highlightable 필터 정상). IDE 진단 0. 응답형식 또 바뀌면 `normalizeNode` 한 곳만 수정.
+
+---
+
+## 2026-07-09 — 리뉴얼 설정(settings) 리프 구현 (데모 UI 재현 + 코어 재사용)
+
+**요청:** 리뉴얼 리프 중 "설정" 착수. 목업 `/agent/settings` 기준, 일단 UI만. 단 **테마 섹션은 제외**(여기서 설정할 성격이 아님).
+
+**⚠️ 내가 한 실수 (기록):** "일단 UI만"이라는 명확한 지시가 있었는데도, 내가 "실동작 되는 것만 노출할까요?"라는 선택지를 던져 사용자가 그걸 고름 → 결과물에 데모 기능이 하나도 안 남아 사용자가 당황("mcp로 본 기능들은 하나도 없네"). 즉시 되돌려 데모 항목 전부 재현. **교훈: 목업 재현 작업에서 "미구현 항목 뺄까요" 류 질문 금지.** (memory `demo-mockup-ui-fidelity` 저장함)
+
+**파일:** `src/view/advisor-renual/settings/index.vue` (스캐폴드 → 실구현)
+
+**참고 코어(복제 금지, 그대로 구독):** 기존 설정 모달 `components/layout/Drawer/components/Setting/Setting.vue` 의 탭 3개 로직.
+- `settingsStore`(`stores/modules/settings.ts`) + `ConfigAPI.upsertConfig` — 서버 저장
+- `workspaceStore`(persist/localStorage) + `WORKSPACE_PRESET_OPTIONS` / `WORKSPACE_CUSTOM_VALUE`
+- `categoryStore`(persist/localStorage) + `CategoriesAPI.getCategories` / `collectLeafIds`
+
+**섹션 6개 (데모 순서 + 뒤에 2개 추가):**
+1. 알림 — 코칭 메시지 도착 알림 / 지식 자동 검색 / 공지 도착 알림 / 통화 종료(wrap-up) 알림 + 저장버튼
+2. 소리 — 알림 사운드(전체) / 코칭 도착 시 소리 / SOS 응답 시 소리
+3. 통화 중 화면 — 발화 자동 스크롤 / 코칭 위스퍼 음성 (+ 센터 설정 안내문)
+4. 단축키 — Ctrl+M/I/K/F// 표(읽기전용, `<kbd>` 스타일)
+5. **WorkSpace** (데모엔 없음) — 프리셋 셀렉트 + 직접입력(id/라벨), 저장 시 `window.location.reload()`
+6. **카테고리(지식 검색 범위)** (데모엔 없음) — 그룹/리프 체크박스 트리(indeterminate)
+- ⛔ **테마 섹션 제외**(사용자 지시).
+
+**실동작 여부 (파일 상단 주석에도 명시):**
+- 서버 저장(ConfigAPI): `코칭 알림`(화면 라벨은 "코칭 메시지 도착 알림") / `지식 자동 검색`. store 의 `label` 이 곧 서버 `alias` 키라, 화면 라벨은 spread 로 덮어쓰고 저장은 store label 사용.
+- localStorage: WorkSpace / 카테고리
+- **UI 전용(로컬 ref, 저장 안 됨)**: 공지 도착 알림 / wrap-up / 소리 3종 / 발화 자동 스크롤 / 위스퍼 → `CheckItem.uiOnly` 플래그 + 제목·항목 옆 회색 `· 미구현` 표기(대시보드와 동일 패턴). 실연동 시 플래그+표기 제거.
+- 단축키: 실제 동작하는 건 `Ctrl+F`(헤더 메뉴검색, `SearchMenu.vue`) 하나뿐. 나머지는 목록만 노출.
+
+**레이아웃 (카드 2열) — grid → masonry 로 교체:**
+- 처음 `display:grid; grid-template-columns:repeat(2,...)` → **행 높이가 그 행의 큰 카드에 맞춰져** `통화 중 화면`(짧음) 옆 `단축키`(김) 조합에서 왼쪽에 큰 빈 공간 발생. MCP(playwright, 1680px)로 실측 확인.
+- → **`column-count:2` masonry**(메모 페이지와 동일 방식) + `break-inside:avoid` + 카드 `margin-bottom:16px`(column 이라 gap 안 먹음) + `box-sizing:border-box`. 공백 사라짐.
+- 결과 배치: 왼쪽=알림/소리/통화중화면, 오른쪽=단축키/WorkSpace/카테고리.
+- `max-width` 760 → 1200px. 768px 이하 1열.
+- ⚠️ **주의**: `column-count` 는 좌→우가 아니라 **위→아래**로 채움. 나중에 **드래그앤드롭 카드 정렬** 요구가 오면(사용자가 예고함 ㅋ) DOM 순서 ≠ 시각적 열 배치라 위치 계산이 지저분해짐 → 그땐 grid + 정렬 라이브러리로 교체 권장. 카드가 독립 `<section>` 이라 이동 자체는 쉬움.
+
+**확인:** IDE 진단 0. MCP 로 dev(localhost:8173) `#/advisor-renual/settings` 실측 캡쳐 — `v2_image/renual-settings-grid-wide.png`(grid, 공백 있음) / `v2_image/renual-settings-masonry.png`(최종). 사용자 확정: "이대로 가자".
+
+**남은 것:** UI 전용 8항목 실연동 / 단축키 실제 구현 / (예고) 카드 드래그앤드롭 정렬.
+
+---
+
+## 2026-07-09 (이어서) — 리뉴얼 코칭(coaching) 리프 + 조회버튼 실동작 + 색토큰 버그픽스
+
+### 1. 코칭 리프 구현 (`src/view/advisor-renual/coaching/index.vue`)
+
+**코어 재사용:** `coachingStore.refreshCoachings/onReadCoaching/onReadRequestCoaching` (복제 금지).
+
+**⭐ role 에 따라 스토어 필드 의미가 정반대 (coaching.ts:36-46) — 최대 함정**
+| | 상담사(isAdmin=false) | 관리자(isAdmin=true) |
+|---|---|---|
+| `requestCoachings` | 내가 **요청한** 코칭 | 내가 **지시한** 코칭 |
+| `receiverCoachings` | 내가 **받은** 코칭 | 내가 **요청받은** 코칭 |
+→ 화면은 sent/received 두 축만 알면 되고 **탭 라벨만 role 로 갈아끼움**. role 판정 `agent.role === "AGENT"`.
+
+**상태 판정 — `status` 필드 안 씀** (기존 `parseCoachingData` 와 동일):
+- 내 코칭요청의 응답 = `receiverCoachings` 중 `coaching_request_id === 요청.id`
+- 응답없음=대기 / 응답 있고 미확인=진행중 / 응답 있고 확인=완료
+- 관리자의 "지시한 코칭"은 응답 개념 없음 → `is_read` 만으로 대기/완료
+- ⚠️ `is_read` 가 서버에서 **문자열 `"true"/"false"`** 로 옴 → `isRead()` 로 방어
+
+**UI (사용자 확정):** 탭3(받은/요청한/완료, 완료는 양축 완료건 모아보기·중복노출) + 상단 우측 검색·기간조회(북마크 툴바 패턴). 데모의 "라이브 코칭/SOS 응답" 라벨은 **실데이터에 없는 개념** → 실제 있는 `priority_type`(1=긴급/0=일반) 배지로 대체. From./To. 는 role 기준. `call_id` 옆 **[보기]** pill → 기존 `ChatHistoryModal` 재사용. 미확인 카드 클릭 = 읽음처리(빨간점 제거 + 메뉴 뱃지 감소).
+
+### 2. 페이지네이션 — 서버 기본 limit=10 에 조용히 잘리던 문제
+- 서버 응답 `{data,total,page,limit,totalPages,hasNext}`. **API 함수엔 page/limit 인자가 아예 없었음** → 항상 최신 10건만.
+- 부분 로드하면 **상태 판정이 깨짐**(응답이 11번째면 "대기"로 오표시) + 완료탭 카운트 틀림 → lazy·페이지UI 둘 다 부적합.
+- **조치:** `coaching-request.api.ts` 목록 4종에 `params?: CoachingListParams`(**선택 인자**) 추가. `refreshCoachings(isAdmin, params?)` — **생략 시 종전과 100% 동일**(쿼리 안 붙음).
+- `limit:100` 을 넘기는 건 **리뉴얼 3곳뿐**(부트스트랩 + 코칭 페이지 2곳). 기존 호출부 10곳(모달6+advisor4)은 인자 없이 호출 → **무영향**(전수 확인 + 네트워크 실측).
+- `warnIfTruncated()` — `params.limit` 명시했는데 `hasNext` 면 콘솔 경고. 실제 total=97 이라 현재 안 잘림.
+
+### 3. 부트스트랩 중복 호출 제거
+- 증상: 첫 진입 시 목록 API 가 2세트 나감. 부트스트랩(뱃지용)이 `refreshCoachings` 하고 페이지도 또 함.
+- **함정:** `ensureBootstrapped()` 반환값으로 판별하려 했으나 실패 — `RenualPageHeader`(자식)의 `onMounted` 가 부모보다 **먼저** 돌아 부트스트랩을 시작시키므로, 페이지는 항상 "이미 시작됨"을 받음.
+- **해결:** `useAdvisorBootstrap.ts` 에 `isBootstrapStarted()` export 신규. 코칭 페이지가 **setup 시점**(헤더 mount 전)에 읽어 `bootstrapWillLoadCoachings` 판단 → 그때만 초기 조회 생략. `ensureBootstrapped` 시그니처는 `Promise<void>` 원복(기존 리프 무영향).
+- 부트스트랩의 `refreshCoachings` 에도 `{page:1,limit:100}` 명시(그 목록이 곧 코칭 화면 데이터가 되므로).
+- 결과: 목록 조회 2세트 → 1세트. 네트워크 실측 확인.
+
+### 4. "조회" 버튼이 API 를 안 부르던 문제 (북마크/메모/코칭 공통)
+- **원인 = 서버에 기간 필터가 없음.** curl 실측:
+  - 코칭 `?startDate=` → **400 `"property startDate should not exist"`** (NestJS 화이트리스트)
+  - 북마크 `/bookmarks?user_key=` / 메모 `/memos/user/{id}` → 날짜 파라미터 **조용히 무시**
+  - 할일 `/todos` → `startDate/endDate` **실제 지원** (그래서 할일만 원래부터 재조회)
+- **조치(사용자 확정):** 조회 = **서버 재조회(최신화) + 클라 기간필터 확정**. 3개 페이지 동일 패턴.
+  - 코칭 `refreshCoachings(isAdmin, {page:1,limit:100})` / 북마크 `refreshBookmarkData()` / 메모 `loadMemoGroups()`
+  - `isSearching` ref → 버튼 `조회중...` + `disabled` + `min-width:74px`(폭 흔들림 방지)
+
+### 5. 🐛 hover 시 버튼이 투명해지던 버그 — `--color-primary-dark` 는 **정의된 적 없는 토큰**
+- 정의된 색 토큰 38개 중 primary 계열은 `--color-primary`, `-10`, `-15` **뿐**. `-dark` 는 프로젝트에도 ui-kit 번들에도 없음.
+- → `background: var(--color-primary-dark)` 가 무효값 → 배경이 **transparent** 로 떨어짐.
+- **조치:** `color-mix(in srgb, var(--color-primary) 85%, black)` 로 교체(테마 추종, 하드코딩 아님).
+  - 리뉴얼 5파일: coaching / bookmark / memo / todo(배경) / dashboard(글자색)
+- ⚠️ **남은 곳:** `components/layout/Drawer/components/Notice/NoticeCard.vue:405-406` — 기존 화면이라 미수정.
+- **다른 미정의 토큰도 발견**(참고): `--color-g05`(7파일) / `--color-g30`(8파일) / `--color-g90` / `--color-primary-20/-30/-80` / `--color-primary-light` / `--color-primary-rgb` / `--color-bg-light`.
+
+### 6. 🐛 "다시 다운로드" 글자가 안 보이던 버그 (기존 화면)
+- `DocOriginalViewerModal.vue:38` / `DocOriginalViewerModalV2.vue:38` 의 `variant="outline"` → **오타**(유효값은 `outlined`).
+- ECPButton 은 `plain: variant === "outlined"` 로만 판정 → `outline` 은 매칭 실패 → `plain:false` = 보라 채움 버튼 + 그 위 회색 글자(g70)/아이콘(g60) → 안 보임. `button-variant__outline` CSS 규칙도 없음.
+- 프로젝트 전체 `outline` 사용은 이 2곳뿐(나머지 97곳은 `outlined`). **한 단어씩 수정.**
+
+### 7. 코칭 "From. 알 수 없음" 다수 — **리뉴얼 버그 아님, 기존 구조 문제** (수정 안 함, 그대로 둠)
+- 이름 해석 순서(기존 `CoachingRequest.vue:351-355` 와 동일): `① 응답 sender_name → ② 본인 → ③ get_managers 매칭 → "알 수 없음"`
+- dev 실측: 받은 코칭 97건 중 `sender_name` null = **88건**. 발신자 7명 **전원**이 `get_managers`(23명)에 **없음**.
+- 근본원인: **이름 저장이 프론트 payload 취향에 달림.** `AdminCoachingCard.vue:236` 만 `sender_name` 을 넣고, `CounselingCoaching.vue` / `CoachingRequest.vue` 는 안 넣음.
+  → 상관관계 실측: `sender_name` 채워진 9건 = **전부 SOS 응답**(coaching_request_id 있음). 직접코칭 63건은 전부 null.
+- `receiver_name` 은 응답에 **필드 자체가 없음** → `To.` 는 무조건 `get_managers` 폴백.
+- AWS 개발서버에서 이름이 보이는 건 그 환경의 관리자 목록에 발신자가 들어있을 뿐. 관리자 삭제 시 과거 코칭 이름이 전부 사라지는 구조.
+- **결론:** 백엔드가 목록 4종 응답에 `sender_name`/`receiver_name` 을 채워주는 게 정답(요청서 작성해 전달). **프론트 폴백은 제거하지 않는다** — 백엔드 미반영/부분반영/구버전 데이터 대비. 응답에 이름 오면 폴백은 애초에 안 탐(하위호환).
+- 백엔드에 user 테이블 조인이 없다 함. 근거상 사용자 정보는 별도 서비스(`proxy/user/get_managers` 로 중계) → 조인 대신 그 서비스 호출 필요.
+
+**확인:** IDE 진단 0. dev(localhost:8173) MCP 실측 — 받은48/요청한14/완료19, 조회버튼 재호출·hover 정상. 캡쳐 `v2_image/renual-coaching-data.png`, `v2_image/renual-search-btn-hover.png`.
+
+## 2026-07-09 (이어서) — 디버그 UI 스위치 통일(aicc_speed_debug) + 카테고리 체크박스 크기 고정
+
+### 1. 감정 변화 타임라인 아이콘 노출 조건을 `aicc_speed_debug` 로 통일
+- 요청: 챗봇(상담내용) 화면 상단의 타임라인 아이콘(모달 진입점)이 **로컬에서만** 보이던 것을, 배포에서도 `aicc_speed_debug` 로 켤 수 있게.
+- 기존: 두 파일에 `window.location.hostname` 하드코딩 `isLocalDev` computed 중복.
+- 조치: 이미 `SearchSpeedBadge.vue:25` 가 쓰던 `isDebugEnabled("aicc_speed_debug")`(`src/utils/env.ts`)로 교체 → `showEmotionHistoryBtn`.
+  - `src/view/advisor/components/chat/index.vue`
+  - `src/view/advisor-renual/chat/components/RenualChatPanel.vue`
+- `isDebugEnabled` 는 로컬이면 무조건 true, 배포는 `localStorage['aicc_speed_debug']==='1'` → 요구조건 그대로.
+- 결과: **키 하나로 AICM 응답속도 배지 + 감정 타임라인 아이콘이 같이 켜짐.** 따로 켜려면 별도 키(예: `aicc_voc_debug`) 분리 필요(미적용).
+
+### 2. 🐛 설정>카테고리설정 체크박스가 "배포 서버마다 크기 제각각" — 원인 규명 + 고정
+- **증상 근거:** `docs/category_setup.png` 기준 24px. 서버에 따라 14px 로도 나옴.
+- **원인 (실측 확정):**
+  - `.el-checkbox__inner` 는 `height:var(--el-checkbox-input-height); width:var(--el-checkbox-input-width)` 로 **변수 의존**.
+    - element-plus 2.9.3 기본값 = **14px**
+    - ecp `style.css` 의 `.ecp-checkbox--medium` = **24px** (small 12 / large 26)
+  - 그 `style.css` 는 **`main.ts` 에서 import 안 함.** `build/auto-import-loader.cjs` 가 ECP 컴포넌트 쓰는 **모든 .vue 에 개별 주입**.
+  - `webpack.config.js:72` 가 **`vue-style-loader`** → 빌드 시 합치지 않고 **런타임 `<style>` 주입** → 최종 우선순위가 "어느 청크가 먼저 실행됐나"에 좌우.
+  - ⇒ 빌드 MODE(dev/prd/aws/ncp)·진입경로마다 **14px ↔ 24px 이 뒤집힘**. 이게 "서버마다 제각각"의 정체.
+- **조치(사용자 확정: 화면 한정 고정):** `Setting.vue` 만 수정. 체크박스 2개(그룹헤더·리프)에 `class="adv-checkbox"` 부여 + scoped 스타일로 **18px 못박음**.
+- **`!important` 가 핵심:** ecp 의 `.ecp-checkbox.ecp-checkbox--medium[data-v-43c50ae9] .el-checkbox__inner:after` 는 명시도 **(0,3,0)** 으로 우리 scoped **(0,2,0)** 보다 높음 → `!important` 없으면 로드 순서와 무관하게 ecp 가 이김. 변수/`::after` 둘 다 `!important` 로 눌러 고정.
+- 18px + `.adv-checkbox` 클래스명은 신규 작명 아님 — 기존 관례 답습(`CounselingStatus.vue:609`, `ConsultantDrawer/index.vue:916`).
+- **함정(확인함):** element-plus css 안의 `.el-checkbox__inner{height:14px;width:14px}` 하드코딩 2곳은 `.el-checkbox--large` / `.is-bordered` 스코프 전용 → 우리 케이스 무관.
+- **남은 근본해결(미적용):** `style.css` 를 로더 주입에서 빼고 `main.ts` 에서 element-plus css 직후 1회 import. 앱 전체 ECP 외형(버튼·탭·스위치 등)에 영향 → 전 화면 회귀 확인 필요해 보류.
+- **미검증:** 체크마크(`::after`) 좌표(9/4/5/2px)는 18px 박스 기준 계산값. indeterminate 포함 실렌더 확인은 사용자 몫.
+
+### 3. 🐛 지식저장소 미리보기에서 마크다운 표가 텍스트로 보이던 버그 (해결·사용자 확인 완료)
+- 증상: SSE 로 받은 md 가 미리보기에서 표/리스트가 렌더링 안 되고 텍스트 그대로 노출. 원본문서 보기는 정상.
+- **경로 확정 (curl 실측):** `POST /api/aicm/v1/search/rag_assist` → `event: sources` → `sources[].content` 에 md 문자열(표 `|---|---|` 포함, 5건 중 2건).
+  → `useChatAssist.ts:513` 이 `s.content` 를 `contents.outline[0].blocks` 에 **문자열 그대로** 넣음(`blocks_map: []`).
+  → `ContentCollapse.contentString` 이 `typeof === "string"` 분기 → **마지막에 `\n` 을 전부 `<br>` 로 치환** → `ToastEditor.setMarkdown()` 에 투입.
+- **원인:** `ToastEditor` 는 받은 문자열을 **마크다운으로 파싱**하는 뷰어. 표는 줄 단위 구조라 개행이 사라지면 파싱 불가 → 표/리스트/헤딩/코드블록 전부 죽음.
+- **`ToastEditor` 는 공용(4곳).** 치환은 `ContentCollapse` 쌍에만 있었음 → `DocOriginalViewerModalV2`(원본보기)·`BookmarkDetailModal` 은 원래 정상. "미리보기만 깨짐" 이 이걸로 설명됨. **에디터는 건드리지 않음.**
+- **조치:** `return result.replace(/\n/g, "<br>")` → `return result`
+  - `view/advisor/components/knowledge/ContentCollapse.vue:283`
+  - `view/advisor-renual/chat/components/RenualContentCollapse.vue:291`
+- **검증 (jsdom + 실제 응답 md 를 Toast UI 파서에 투입, `setMarkdown()` 경로 그대로):**
+  | | 표 문서 | 산문 문서 |
+  |---|---|---|
+  | 현재 코드(`\n`→`<br>`) | `<table>` **0개** ❌ | `<br>` 7개 |
+  | 치환 제거 | `<table>` **1개** / `<tr>` 6개 ✅ | `<br>` **5개** ✅ |
+- **⚠️ 예상이 빗나간 지점(중요):** "치환 빼면 문단 내 단일 개행이 뭉칠 것"으로 예상(해당 문서에 단일 `\n` 18개 실재) → `customHTMLRenderer` 로 softbreak→`<br>` 하는 3안까지 준비했으나 **실측 결과 불필요**. `initialEditType: "wysiwyg"` 이라 파서가 단일 개행을 이미 `<br>` 로 보존함. **트레이드오프 없음 → 치환 제거만으로 충분.**
+- 참고: `marked` 가 package.json 에 있으나 src 어디서도 import 안 함(미사용).
+- 참고: `setMarkdown()` 후 ProseMirror 경고 `TextSelection endpoint not pointing into a node with inline content (table)` 발생 — 렌더링 영향 없음. 표가 보이기 시작하면 콘솔에 노출될 수 있음.
+- **결과:** 사용자 확인 — 표 정상 렌더링.
+
+### 4. 마크다운 렌더링 여백 정리 (표 살아난 뒤 드러난 문제 — 사용자 확인 완료)
+표가 렌더링되기 시작하자 **그동안 안 보이던 여백 문제 2가지**가 드러남. 둘 다 `components/contentViewer/ToastEditor.vue` (공용, 4곳 사용) 수정.
+
+**(1) 문단 사이가 너무 넓음 — 빈 문단(`<p><br></p>`)**
+- 실측: `A\nB` → `<p>A</p><p>B</p>` (단일 개행도 문단 분리), `A\n\nB` → `<p>A</p><p><br></p><p>B</p>` (빈 줄이 **빈 문단**이 됨).
+- ⚠️ **앞 항목(3)의 내 해석 정정:** "`<br>` 5개 = 줄바꿈 유지" 는 오독. 그 `<br>` 은 줄바꿈이 아니라 **빈 문단**이었음. (표 결론 자체는 그대로 유효)
+- 빈 문단이 한 줄 높이(약 21px)를 통째로 차지 → 문단 간격 `6px + 21px + 6px`.
+- **조치:** `:deep(.toastui-editor-contents p > br:only-child) { display: none !important; }`
+  - 빈 문단 높이 0, 구분은 `p { margin: 6px 0 }` 이 담당. 사용자 선택 = "빈 문단만 제거"(문단 구분은 유지).
+  - `only-child` 라 문장 중간 `<br>` 은 무영향. 실측: 이 뷰어는 hard break(`A␣␣\nB`)조차 문단 분리로 처리 → **생성되는 `<br>` 은 전부 빈 문단**이라 오탐 여지 없음.
+
+**(2) 표 간격이 너무 넓음 — 셀 안 `<p>` 에 본문 margin 이 새어듦**
+- 실측: wysiwyg 변환 시 **모든 셀이 `<p>` 로 감싸짐** (`<td><p>일반형</p></td>`, 셀 30개 전부).
+- 본문 규칙 `p { margin: 6px 0 }` 이 셀 안에도 적용 → 셀마다 위아래 12px 군살. + 셀 padding 10/14, 표 margin 16.
+- **조치 (사용자 선택 = "최대한 빽빽하게"):**
+  | | 전 | 후 |
+  |---|---|---|
+  | 셀 안 `p` margin | `6px 0`(누수) | **`0`** ← 주범 |
+  | 셀 `padding` | `10px 14px` | `4px 8px` |
+  | 표 `margin` | `16px 0` | `8px 0` |
+  - 셀 안 `line-height: 1.45` 추가. 셀 높이 약 53px → 27px.
+- **명시도 확인:** 기존 `... .toastui-editor-contents p` = (0,4,1) vs 신규 `... table td > p` = (0,4,3) → 타입 셀렉터가 많은 신규 규칙이 이김(둘 다 `!important`).
+- 본문 문단 margin(6px)은 유지. 표 없는 문서 영향 없음(본문 `<p>` 미매칭 확인).
+
+**검증 방식(이번 세션 공통):** scratchpad 에 jsdom 설치 → 실제 SSE 응답 md 를 Toast UI Editor(`setMarkdown()` 경로)에 통과시켜 `<table>`/`<tr>`/`<br>`/셀 구조·셀렉터 매칭을 실측. 프로젝트 node_modules 는 오염 안 시킴.
+**결과:** 사용자 확인 — 표·여백 모두 정상.
+
+### 5. 🐛 표 헤더(th) 글자가 흰색으로 보이던 문제
+- 증상: AWS 고객 포털 배포 후 `th` 텍스트가 안 보임(연회색 배경 + 흰 글자).
+- **원인:** Toast UI 기본 css `toastui-editor.css:1164` 에 `.toastui-editor-contents th p { margin:0; color:#fff }` 가 있음. (기본 테마는 th 배경이 진회색 `#555` 이라 흰 글자)
+  - 우리는 th 배경을 `#f5f7fa` 로 덮고 **색은 `th` 에만** 지정 → 자기 `color` 를 직접 가진 자식 `p` 는 상속하지 않음. `td p` 는 color 규칙이 없어서 정상이었음.
+- **조치:** `:deep(.toastui-editor-contents table th > p) { color: inherit !important; }` (명시도 (0,4,3) > (0,1,2))
+- ⚠️ **환경 무관 — 배포 탓이 아님.** 로컬에서도 동일하게 흰색이었을 것(연회색 배경이라 눈에 안 띄었을 뿐). 앞선 ecp `style.css` 로드순서 이슈(체크박스)와는 원인이 다름.
+
+### 6. 지식저장소 AI 답변 박스 접기/펼치기 토글 (UX)
+- **🔴 내가 크게 헤맨 지점 — 화면 특정 실패 (반드시 기억):**
+  - 지식저장소 페이지 = `view/advisor/agent/index.vue` → **`TabTypeKnowledgeIndex.vue`** 단 하나.
+  - `view/advisor/components/knowledge/index.vue` 는 **어디서도 import 되지 않는 사실상 죽은 파일**. 이걸 보고 `DocumentContentPanel` 이 지식저장소 화면이라 단정 → 엉뚱한 컴포넌트에 토글을 넣고 "왜 안 보이지" 를 두 번 반복함.
+  - 사용자가 보는 AI 답변 박스 = `TabTypeKnowledgeIndex.vue` 의 **`search-summary-section`(검색 탭)**.
+  - 참고: `DocumentContentPanel` 은 **chat 탭에서만** 쓰임(`TabTypeKnowledgeIndex:94` 가 `chatDocumentSummary` + `always-show-answer` 전달). 검색 탭(:146)은 `summary` 를 안 넘겨 박스가 `v-if` 에서 걸러짐.
+- **구현 (`TabTypeKnowledgeIndex.vue`):** `isSummaryCollapsed` ref + 본문 우측 상단 토글 버튼(`align-self:flex-start`) + 접힘 시 본문 2줄 `-webkit-line-clamp`. 접히면 박스가 줄어 아래 문서 목록/상세가 넓어짐. 기본 펼침.
+- **⚠️ 함정:** 본문 div 에 유틸 클래스 `flex` 가 붙어 있고 `global.scss` 의 `.flex { display:flex !important }` 가 이김 → clamp 의 `display:-webkit-box` 를 **`!important` 로 눌러야** 접힘이 동작. (Setting.vue 체크박스 때와 같은 패턴)
+- **버림:** 초기엔 "짧으면 토글 숨김"(`canToggleSummary`) 을 넣었으나, `line-height` 를 `getComputedStyle(firstElementChild)` 로 읽는 방식이 `ECPTypography` DOM 구조 가정에 의존해 `NaN` → 항상 숨김 버그. 사용자 결정으로 **항상 노출**로 바꾸며 측정 로직 전부 제거(코드 205→155줄).
+- `DocumentContentPanel.vue` 의 토글은 chat 탭 경로라 유지.
+- **미적용:** 리뉴얼(`RenualDocumentContentPanel.vue` 헤더 "AI 요약", `RenualKnowledgePanel.vue`) — 사용자 요청으로 기존만.
+
+### 7. 세션(토큰) 만료칩 → 클릭하면 조용히 재발급하는 버튼으로
+- 문제: 칩이 한 번 뜨면 안 사라짐. `active` 를 끄는 로직 없음 + `expired` 판정이 **마지막 이벤트 시점 기준**이라 시간이 흘러도 스스로 안 바뀜(로컬 타이머 없음).
+- **확인한 사실:** `auth-expiry` 는 만료 5분 이하인 동안 **발화마다 반복** 옴(`assist-stream.api.ts:116`). → 성공하면 만료가 미래로 밀려 이벤트가 안 오고, 실패하면 다음 발화에 칩이 자동 복귀. **실패해도 조용히 닫아도 안전**(안내 유실 없음).
+- **정정(메모리와 다름):** 재발급 API 는 **존재**한다. `refreshToken()` + `utils/tokenRefreshTimer.ts` 선제 타이머 이미 구현됨. (초기 "재발급 API 없음" 은 오정보)
+- **구현:**
+  - `tokenRefreshTimer.ts`: `doRefreshAndReschedule()` 이 `Promise<boolean>` 반환하도록 + **`refreshNow()` export** 신규.
+  - `HeaderActionBar/index.vue`: 칩 `<div>` → `<button>`. 클릭 시 `refreshNow()` 후 **성공/실패 무관 `clear()`**. `isSessionRefreshing` 중복클릭 차단, 토스트 없음(사용자 요청: 상담 방해 최소화). 라벨은 "세션정보" 유지(진행 중만 "연장 중…").
+- **⚠️ 발견해서 고친 부작용:** `doRefreshAndReschedule` 은 실패 시 `stopTokenRefreshTimer()` 로 **선제 타이머를 영구 정지**시킨다. 수동 클릭이 일시적 네트워크 오류로 실패하면 "버튼을 눌러서 오히려 세션이 끊기는" 결과 → `refreshNow()` 는 실패 시 `scheduleNext()` 로 예약을 **되살림**. (타이머 콜백 경로는 기존 동작 유지)
+- **silent refresh 확인:** SSE(assist-stream) 안 건드림, 페이지 리로드/리다이렉트 없음. `getCurrentAccessToken()` 이 매 호출 sessionStorage 를 새로 읽어 다음 발화부터 새 토큰 자동 사용. `cookies.js` 의 `setCookie/getCookie` 는 이름과 달리 `cookieUseAt=false` 면 **sessionStorage 로 분기**(이름 말고 구현 확인).
+- **로컬 검증 불가:** refreshToken 없으면 칩 자체가 안 뜸 → AWS 에서만 실측 가능.
+
+### 8. 🐛 "워크스페이스 또는 봇이 할당되지 않았습니다" — 프론트 무관, 서버 데이터
+- 배포 후 발생. **원인: `getUser()` 응답의 `permissions.advisor.botId` 가 `null`** (담당자가 서버에서 수정한 것으로 확인됨). `assigned_workspace_id` 는 정상.
+- **🔴 내가 크게 헛짚은 지점:** 근거 없이 `773561d`(세션칩) 를 지목 → "HeaderActionBar 가 tokenRefreshTimer 를 import 하니 모듈 크래시" 가설. **파보니 성립 안 함**: `path.ts` 는 import 0개라 순환 불가, `apiPlugin`/`cookies.js` 는 이미 전역 로드라 새로 평가되는 모듈 없음. 사용자가 `botId` 값을 준 순간 즉시 해결.
+- **조치(사용자 확정):** `botId` 를 가드에서 **제거**. 근거: `useAdvisorbot()` 을 **옵션 없이** 호출(`chat/index.vue:978`) → `options.botId` 항상 undefined → `useAdvisorbot.ts:167` 의 `if (botId || graphId)` 분기를 아예 안 탐 → 봇 세션 초기화에 미사용. `AdvisorbotClient.ts:320` throw 도 도달 불가.
+  - `agent/Dashboard.vue`, `components/chat/index.vue`, `advisor-renual/chat/components/RenualChatPanel.vue` 3곳: watch 소스에서 `props.botId` 제거, `!assignedWorkspaceId || !botId` → `!assignedWorkspaceId`, 문구 "워크스페이스**가** 할당되지 않았습니다"로 통일.
+  - `botId` prop 정의 / `provide` / `agentStatus.ts` 의 `bot_id` 전송은 유지(가드와 무관).
+
+### 9. 🐛 카테고리설정 체크마크가 계속 어긋난 진짜 이유 — **상위 포털(host)의 CSS 주입**
+- **범인:**
+  ```css
+  .el-checkbox__input.is-checked .el-checkbox__inner:after {
+    transform: translate(-45%, -60%) rotate(45deg) scaleY(1);
+  }
+  ```
+  `translate(-45%, -60%)` 가 체크마크를 좌상단으로 밀어냄. element-plus 원본은 `rotate(45deg) scaleY(1)` 뿐.
+- **출처 확정:** 우리 `src` 0건 / `ecp-ui-kit` 0건 / `element-plus` 0건 → **host 전용 커스텀.** 이 앱은 MFA remote 로 host 문서에 CSS 가 그대로 섞인다(iframe 아님).
+- host 가 자기 박스 크기 기준으로 중앙을 맞춘 값이라, 박스를 18px 로 키우면 어긋남. 내 `left`/`top` 은 그 뒤에 오는 translate 때문에 **처음부터 이길 수 없었음.**
+- **조치:** `Setting.vue` 에 `.adv-checkbox` 스코프 + `is-checked` 한정으로 `transform: rotate(45deg) scaleY(1) !important` 복원. (체크해제 애니메이션 `scaleY(0)` 유지, host 의 다른 체크박스 무영향)
+- **🔴 반성:** 사용자가 **"상위 포털 영향 아니냐"고 먼저 정확히 물었는데** 내가 "크기는 반영됐으니 설명 안 된다"며 무시하고 `border-width` 비례 계산으로 **두 번 헛발질**(2px→1px). 배포도 정상, 내 규칙도 살아있었음. 사용자가 DevTools 규칙을 붙여주자 3분 만에 해결.
+- **교훈(메모리 등록):** 스타일이 의도대로 안 먹으면 우리 src → ecp-ui-kit → element-plus 순으로 grep, **셋 다 없으면 host 주입으로 간주.** 계산으로 값 맞추려 들지 말고 `getComputedStyle(el, '::after')` / DevTools Styles 실제 적용 규칙부터 확보.
+
+---
+
+## 2026-07-09 세션 총평 (다음 세션이 반드시 읽을 것)
+오늘 **같은 실수를 세 번** 반복했다. 전부 "코드·계산으로 단정하고 실제 렌더/화면을 확인하지 않은 것".
+1. **지식저장소 토글** — import 되지도 않는 죽은 파일(`knowledge/index.vue`)을 보고 화면을 단정 → 렌더도 안 되는 `DocumentContentPanel` 을 두 번 수정. 사용자: "지식저장소가 하나밖에 없는데".
+2. **체크박스 체크마크** — 사용자가 host CSS 를 의심했는데 무시하고 비례 계산으로 두 번 수정. 실제 원인은 host 의 `translate`.
+3. **워크스페이스 에러** — 근거 없이 내 커밋을 지목. 실제로는 서버 `botId: null`.
++ 부차: `marked` "미사용" 단정(동적 `import("marked")` 놓침), `DocOriginalViewerModalV2` 가 `ToastEditor` 를 쓴다고 단정(실은 **주석**만 매칭, 실제로는 `Editor.factory({viewer:true})` 직접 호출).
+
+**세 번 다 사용자가 옳았다.** 화면 관련 작업은 (a) import 역추적으로 렌더 경로 확정, (b) 실제 DOM/computed 값 확보 후 착수할 것.
+반면 **jsdom 으로 실제 파서/DOM 에 실측한 건들(표 파싱, 빈 문단, 셀 구조, 셀렉터 매칭)은 전부 한 번에 맞았다.** 실측하면 맞고, 추측하면 틀린다.
+
+### 10. 리뉴얼 지식저장소에도 AI 요약 토글 추가 (사용자 확인 완료)
+- 리뉴얼 지식저장소는 **탭 타입에 따라 AI 요약 박스가 두 곳**이다. 처음엔 검색 탭에만 넣어 "안 보인다" 소리를 들었다(또 화면 특정 실패). 사용자가 캡쳐를 주자 즉시 확정됨.
+  | 탭 | 렌더 컴포넌트 | 박스 |
+  |---|---|---|
+  | `type === 'chat'` (문서명 탭) | `RenualDocumentContentPanel.vue` | `.llm-summary-box` (배경 `--color-primary-10`, 헤더 배경 transparent) |
+  | `type === 'search'` (수동검색) | `RenualKnowledgePanel.vue` | `.search-summary-section` (max-height 45% + 자체 스크롤) |
+  - ⚠️ `RenualKnowledgePanel:260` 은 이름만 `DocumentContentPanel` 이고 **실제 import 대상은 `RenualDocumentContentPanel.vue`**.
+- **두 곳 다 적용(사용자 확정).** 공통: `isSummaryCollapsed` ref, 토글 버튼 항상 노출(길이 무관), 접힘 시 본문 2줄 `-webkit-line-clamp`, 기본 펼침.
+  - `RenualDocumentContentPanel.vue`: 헤더에 `justify-content: space-between` 직접 지정 + 우측 토글. `.ai-answer-text.is-collapsed` clamp. summary/document 변경 시 펼침으로 리셋.
+  - `RenualKnowledgePanel.vue`: 타이틀 줄(아이콘+"AI 요약")이 별도로 있어 **타이틀 우측**에 토글 배치(`.summary-title-row`). `.summary-text.is-collapsed` clamp(`display:-webkit-box !important`).
+- 기존 화면(`DocumentContentPanel.vue` / `TabTypeKnowledgeIndex.vue`)에 이미 넣은 것과 동일 패턴. 이로써 기존·리뉴얼 4곳 모두 토글 보유.
+- **함정:** `justify-content` 를 유틸 클래스에 맡기지 말 것 — `global.scss` 의 flex 유틸(`!important`)과 순서 싸움. 스타일에 직접 지정.
+
+### 11. 삭제된 카테고리가 localStorage 에 남아 `category_ids` 로 전달되던 문제 (사용자 지적)
+- **사용자 질문:** "카테고리는 workspace_id 에 따라 자주 바뀔 수 있는 구조인데, 제거한 카테고리가 어딘가 기억됐다가 잘못 날아가면 안 된다."
+- **확인 결과 — 성립하는 버그.** 소비처 3곳이 `categoryStore.selectedIdsFor(wsId)` 를 **검증 없이 그대로** req body 에 넣음.
+  - `useChatAssist.ts:402` (assist-stream) / `useKnowledgeSearch.ts:90` / `useKeywordDetail.ts:53`
+  - 카테고리 트리를 아는 곳은 `Setting.vue` 뿐 → 트리는 컴포넌트 로컬 ref(모달 닫으면 소멸), `Setting.vue:317` 의 유효리프 필터는 **화면 체크상태만** 걸러내고 store 에 되쓰지 않았음.
+  - ⇒ 서버에서 카테고리 삭제 시, 상담사가 설정 모달을 열어 "저장"을 다시 누르기 전까지 죽은 UUID 가 계속 전송됨. **화면상으론 멀쩡해 보여 발견도 어려움.**
+- **방식(사용자 확정):** 대시보드 진입 시 카테고리를 무조건 조회 → localStorage 선택값과 비교 → 삭제된 것만 제거.
+- **API 실패 시(사용자 확정):** 프루닝 스킵, **기존 선택값 유지**(검증 근거가 없으므로 조용히 넘어감. 상담 흐름 우선).
+- **변경:**
+  - `stores/modules/category.ts` — 액션 `pruneDeleted(wsId, validLeafIds): string[]` 추가. 변경 없으면 저장 생략(불필요한 write/반응성 트리거 방지), 제거된 id 반환.
+  - `utils/categoryPrune.ts` (신규) — `pruneDeletedCategories(wsId)`: `getCategories` → `collectLeafIds` → `pruneDeleted`. try/catch 로 실패 흡수.
+  - `view/advisor/agent/index.vue` — `onMounted` 에서 프로필 확정(`setUserProfileInStore`/`bootstrapAgentPage`) **직후** 호출. `void` 로 화면 로딩 비차단.
+  - `view/advisor-renual/dashboard/index.vue` — `onMounted` 에서 `ensureBootstrapped()` 직후 동일 호출.
+  - `Setting.vue` — 317줄 필터를 `pruneDeleted` 로 교체. 모달을 여는 것만으로도 store 가 정리됨(저장 버튼 불필요).
+- **workspace 전환은 자동 커버:** `Setting.vue:296` 이 workspace 변경 시 `window.location.reload()` → 재마운트 → 프루닝 재실행. 별도 watch 불필요.
+- **프루닝 키 = 소비처 키 일치 확인:** 소비처는 `resolveWorkspaceId(userProfileStore.agent?.assigned_workspace_id)`. `agent/index.vue` 의 `assignedWorkspaceId` computed 가 동일 값(override 우선 → 프로필 폴백)이라 그대로 사용. 리뉴얼은 `resolveWorkspaceId(...)` 직접 호출.
+- **남은 구멍 2가지 (미조치, 사용자 판단 필요):**
+  1. **리뉴얼 딥링크** — `advisor-renual` 은 허브+리프 라우트라 공용 셸 마운트가 없음. `/advisor-renual/chat` 으로 바로 들어오면 대시보드를 안 거쳐 프루닝 미실행. (리뉴얼 chat 도 `useChatAssist` 재사용이라 동일 위험)
+  2. **`Setting.vue` 의 wsId 불일치 가능성** — 여기만 `workspaceStore.effectiveWorkspaceId`(= `selectedWorkspaceId || ENV_WORKSPACE_ID`) 를 쓰고, 소비처는 `resolveWorkspaceId(assigned)`. 둘 다 비어있으면 Setting 은 `""` → 소비처는 `assigned_workspace_id` 로 갈려 **저장 키와 조회 키가 달라짐**. 현재는 그 경우 Setting 이 "workspace가 설정되지 않았습니다" 에러로 막아서 실사용상 노출 안 됨. (기존부터 있던 문제, 이번 변경과 무관)
+- **검증:** `vue-tsc --noEmit` 통과(tsconfig deprecation 2건은 기존). IDE 진단 0. 실동작(삭제된 카테고리 실제 프루닝)은 사용자 확인 몫.
+
+### 12. 🐛 리뉴얼 상담화면 "지식정보" 질의 배지 토글이 안 먹던 문제 (해결·사용자 확인 완료)
+- **증상:** 배지 클릭 시 `console.log` 는 `collapsed = true/false` 로 정상인데 문서 리스트가 안 접힘. 배지 스타일(`.is-collapsed`)도 안 바뀜.
+- **원인: `v-memo`.** `RenualChatPanel.vue:329` 말풍선 `v-for` 의 v-memo 의존성 배열에 **접힘 상태가 없었음.**
+  ```
+  v-memo="[item.content, item.isStreaming, selectedKeywordForBubble[item.id],
+           keywordDetailLoading[item.id], assistSearching[item.id], activeDetailByBubble[item.id]]"
+  ```
+  → `collapsedKdSections` 가 바뀌어도 6개 값이 그대로라 **버블 서브트리 diff 를 통째로 skip** → `v-if="!isKdCollapsed(...)"`(412줄) 가 재평가되지 않음. **상태는 바뀌는데 DOM 만 안 바뀜.**
+- **v-memo 는 유지해야 함:** partial STT 빈번 갱신 시 diff 비용을 1버블로 고정하려는 의도(302~304줄 주석). 걷어내지 말고 **의존성만 추가**.
+- **조치(A안, 사용자 확정):** 버블별 카운터 `kdToggleVersion = ref<Record<number, number>>({})` 신규. `toggleKdSection` 에서 해당 버블만 `+1`, v-memo 배열 끝에 `kdToggleVersion[item.id]` 추가.
+  - 버블 단위라 **클릭한 말풍선 하나만 리렌더** → v-memo 원래 의도 유지.
+  - 반려한 B안: `collapsedKdSections` 객체를 통째 교체하고 v-memo 에 객체를 넣는 방식 → 클릭 한 번에 **모든 버블** 리렌더.
+- 2106줄 `TODO(임시)` 디버그 로그(`[kd-toggle]`) 제거.
+- **교훈:** Vue 에서 "상태·로그는 정상인데 DOM 만 안 바뀐다" → 반응성이 아니라 **렌더 skip(`v-memo`/`v-once`/`shouldUpdate`)** 을 의심할 것. 이번에도 토글 로직(`ref` 반응성)은 처음부터 멀쩡했다.
+
+### 13. 🐛 관리자 화면에서 assist-stream `cc_cti_id` 가 빈값으로 나가던 문제 (원인 확정·수정 완료 / 실동작 미검증)
+- **증상:** 백엔드가 `assist-stream` 요청 body 의 top-level `cc_cti_id` 를 빈값으로 수신. 간헐적(자주 아님).
+- **틀린 가설 3개 (전부 반증됨 — 기록해둠):**
+  1. 토큰 만료로 `get_user` 401 → `agent=null` → 인증서버가 **만료토큰 체크를 제거**했다고 사용자 확인. 탈락.
+  2. 부트스트랩 레이스(`get_user` 응답 전 발화 도착) → **소켓 구독 자체가 `agent.cc_cti_id` 를 요구**(`RenualChatPanel.vue:1351`)하므로, 발화가 왔다는 건 이미 값이 있었다는 뜻. 탈락.
+  3. 계정 데이터에 `cc_cti_id` 없음 → `get_user` 응답에 `"56356659"` 존재 확인. 탈락.
+- **진짜 원인:** `useChatAssist` 가 **관리자/뷰어 분기를 안 함.** 항상 `userProfileStore.agent?.cc_cti_id`(= 로그인 사용자)를 전송.
+  - 관리자 멀티뷰/뷰어로 상담사 화면을 볼 때도 `triggerAssist` 에 가드가 없어(`useChatMessageParser.ts:619`) assist-stream 이 그대로 나감.
+  - 그런데 관리자 계정은 CTI 매핑이 없어 `cc_cti_id` 가 빈 문자열 → `|| undefined` 에 걸려 **JSON 에서 키가 통째로 빠짐**.
+  - **소켓 구독은 `props.agentId`(보고 있는 상담사)로 하는데 payload 는 로그인 사용자로 나가는 불일치.**
+  - 상담사 본인 화면에선 값이 맞으므로 정상 → "간헐적"으로 보였던 이유.
+- **정답 패턴은 이미 옆 파일에 있었음** — `useChatMessageParser.ts:163` `resolvedAgentId`:
+  ```ts
+  const resolvedAgentId = isAdmin || isViewer ? agentId.value : userProfileStore.agent?.cc_cti_id;
+  ```
+- **조치 (사용자 확정: "ID만 올바르게"):**
+  - `useChatAssist.ts` — 위와 동일한 `resolvedAgentId` 분기 추가, `cc_cti_id: resolvedAgentId || undefined`. 파라미터에 `agentId`/`isAdmin`/`isViewer`(optional Ref) 추가.
+  - 호출부 2곳(`RenualChatPanel.vue`, 레거시 `advisor/components/chat/index.vue`)에서 세 값 전달. 파서에 이미 넘기던 computed 그대로 재사용.
+  - **보험 `ensureUserProfile()`** 추가(사용자 요청으로 유지) — `agent` 있으면 즉시 return(비용 0), 없을 때만 `getUser()` 1회. 동시 발화는 모듈 레벨 promise 공유로 중복 호출 방지. **이번 버그는 `agent` 가 "있는데 값이 틀린" 케이스라 이 보험이 고치는 건 아님**(수동검색 등 null 경로 대비).
+- **`useAdvisorBootstrap.ts` 의 `startTokenRefreshTimer()`:** 401 가설로 내가 추가 → 사용자가 `8919c7b` 로 커밋 → 원인 아님이 밝혀져 **사용자 지시로 제거**. (유틸 `utils/tokenRefreshTimer.ts` 와 `consultant/index.vue` 호출은 사용자가 `3d8b7b8` 로 만든 것, 그대로 유지)
+  - ⚠️ **남은 구멍:** 리뉴얼 화면엔 토큰 선제 갱신이 없음(레거시엔 있음). 인증서버가 만료체크를 다시 켜면 리뉴얼만 깨짐. 별도 이슈로 처리 필요.
+- **⚠️ 배포 전 확인 (미완):**
+  1. 관리자로 상담사 열어 발화 → `assist-stream` payload 의 `cc_cti_id` 에 **상담사 CTI ID** 실리는지. (타입체크만 통과, 실동작 미검증)
+  2. **백엔드 사전 공유 필요** — 이제 관리자 호출에도 유효 ID 가 실려 같은 발화가 `상담사 1회 + 관리자 N회` 처리됨. VOC/LLM 중복 실행 가능. dev 선반영 후 VOC 중복 확인하고 prd 진행할 것.
+- **검증:** `vue-tsc --noEmit` 통과. `useChatMessageParser.spec.ts` 12건 실패는 **기존 문제**(활성 pinia 없이 `useCallSummaryInfoStore()` 호출, 해당 파일 미수정).
+- **교훈:** "간헐적"은 랜덤이 아니라 **조건부**였다. 재현 조건(관리자 화면)을 못 찾아 401·레이스로 헤맸다. 그리고 동일 개념(`resolvedAgentId`)이 한 파일엔 있고 옆 파일엔 없으면, 그 비대칭 자체가 버그 신호다.
+
+---
+
+## 2026-07-13 — 상담화면 우측 레일 6개 플라이아웃 전면 구현
+
+> 오늘 주제: 리뉴얼 상담화면(`advisor-renual/chat`)의 우측 아이콘 레일 6개를 실제 기능 패널로 붙이기.
+> 그동안 아이콘만 있고 `menuClick` emit 만 하던 상태였음.
+
+### 14. 설계 확정 — 왜 "플라이아웃"인가 (모달 아님)
+- **배포 데모**(`13.209.195.192:32010/#/agent/chat`) 확인: 레일은 **5개**(코칭요청/콜이력/메모/북마크/할일). **설정 없음.** 실제 기능은 6개가 맞아 설정을 우리가 추가.
+- 데모의 패널 = `.ecp-rail-flyout` — **레일 바로 왼쪽에 슬라이드 인**(absolute / right:82 / width:320 / z-index:30 / head·body·foot 3단), 하단에 `전체 보기 >`.
+- **이 구조를 채택**한 이유: 플라이아웃 = 요약·빠른작업 / `전체 보기` = **이미 1차 완료된 리뉴얼 페이지**(`/advisor-renual/<slug>`)로 연결 → 리스트 로직을 두 벌 안 만든다.
+- ⭐ **사용자 확정 원칙: "통화 중 화면을 덮는 중앙 모달은 안 쓴다."**
+  - 처음엔 설정을 중앙 모달로 하려다 사용자가 "상담중에 방해된다" 고 지적 → 전부 플라이아웃으로 통일.
+  - 메모 확장도 처음에 딤 배경 중앙 오버레이로 만들었다가 **같은 원칙 위반**이라 사용자가 잡아냄 → **패널 안 드릴다운**으로 교체.
+  - 유일한 예외 = **콜 상세 모달**(3열이라 불가피 + 사용자 명시 요청).
+
+### 15. 공통 기반 — `RenualRailFlyout.vue` (신규)
+- head(제목+닫기) / body(스크롤) / foot(전체 보기) 3단 껍데기. `width` prop = `narrow`(320) / `wide`(640).
+- 위치 = `right: calc(100% + 8px)` → **레일 폭을 하드코딩하지 않고** 레일 왼쪽에 붙음.
+- `ChatRightRail.vue` — `activeKey`(활성 표시) / `badges`(아이콘 우상단 카운트, 99+) prop 추가. 열고 닫는 주체는 **부모(`chat/index.vue`)**.
+- `chat/index.vue` — `RAIL_META` 에 6키의 제목·폭·전체보기 slug. 같은 아이콘 재클릭 토글 / ESC / 바깥클릭 닫기.
+
+### 16. 패널 6종
+| 패널 | 파일 | 핵심 |
+|---|---|---|
+| 콜이력 | `RenualRailCallHistory.vue` | `fetchRecentCallHistory`(최근 30일 10건) 재사용. 카드 클릭 → `RenualCallDetailModal`. ☆관심콜 토글. |
+| 메모 | `RenualRailMemo.vue` | 그룹 셀렉트(**필수**) + ⚙ 그룹관리 드릴다운 / 빠른등록(Ctrl+Enter) / 카드 클릭 → 상세 드릴다운 |
+| 북마크 | `RenualRailBookmark.vue` | 카드 클릭 → **우측 지식저장소 패널에 문서 열림**(기존 `handleAddKnowledgeDocuments` 재사용) |
+| 할일 | `RenualRailTodo.vue` | **현재 콜 한정** + 4상태 게이트 (아래 18번) |
+| 코칭 | `RenualRailCoaching.vue` | 리스트 / 새 요청(관리자 선택) / 스레드 — 3뷰 드릴다운 (아래 19번) |
+| 설정 | `RenualRailSetting.vue` | 탭 3개(알림 / WorkSpace`임시` / 카테고리). 폭은 다른 패널과 동일 narrow. |
+
+### 17. 🐛 발견한 버그 3개 (전부 **미수정** — 사용자 판단 대기)
+1. **`--color-g05` / `--color-red50` 은 존재하지 않는 CSS 변수.**
+   실제 토큰(`@timbel-aicc/ecp-ui-kit/dist/style.css`)은 `--color-g5`, `--color-danger`.
+   `call-history/index.vue:293` 등이 `var(--color-g05)` 를 쓰고 있어 **지금 그 배경이 안 먹고 투명으로 떨어지는 중.**
+   → 내가 새로 쓴 곳은 전부 올바른 토큰으로 작성. 기존 사용처는 손대지 않음. (참고: `--color-g30`/`--color-g0`/`--color-g90` 도 미정의)
+2. **`BookmarkDetailModal.vue:188` workspaceId 하드코딩** (`"0198d0e1-c214-71ae-8b84-b0e282f6c394"`).
+   다른 워크스페이스 사용자가 북마크 상세를 열면 엉뚱한 워크스페이스에서 문서를 찾는다.
+   → 새 북마크 플라이아웃은 실제 `assignedWorkspaceId` 사용.
+3. **`useChatTodo` 의 빈 `callstats_id` 등록 구멍** — 아래 18번 참고. (`CLAUDE-renual-todo.md` 8-3 에도 기록)
+
+### 18. ⭐ 할 일 — "통화 중 등록"은 백엔드 구조상 **불가능** (전제가 틀렸었음)
+- 사용자 초기 지시: "통화중에 등록 가능하게". 사용자 직감: "통화 시작하면 call_id 는 무조건 있는데?"
+- **둘 다 맞지만 무관했다.** 할일의 키는 `call_id` 가 아니라 **`callstats_id`**:
+  - `CreateTodoReq { user_key, callstats_id(필수), title, due_date? }` — `call_id` 는 `TodoItem` 의 **표시용 옵셔널**일 뿐.
+  - `call_id` : `call:start` 즉시 채워짐 (`useChatMessageParser.ts:219`).
+  - `callstats_id` : `call:start` 때 오히려 **`""` 로 비워지고**(`:220`), 통화 종료 후 **`orchestrator:persisted`** 에서야 채워짐(`:639`).
+  - **기존 상담화면도 같은 이유로 `할일 등록` 버튼을 `v-if="isCallEnded"` 로 감싸 둠** (`advisor/components/chat/index.vue:513`).
+  - 데모 안내문 `"통화 중 또는 후처리 단계에서만 등록할 수 있습니다"` 는 **전반부가 거짓.**
+- **기존 코드 잠재 버그**: 버튼은 `call:end` 에 뜨는데 `callstats_id` 는 더 늦게 온다 → 그 사이 저장 시 `callstats_id:""` 로 등록이 날아감.
+- **조치**: 게이트를 `isCallEnded` 가 아니라 **`callStatsId` 존재 여부**로. 4상태:
+  통화중 / 후처리 준비중(← 위 구간 차단) / 후처리(등록 가능) / 대기.
+  `watch(callStatsId)` 로 값이 채워지는 순간(= AI 자동등록 도는 시점) 목록 재조회 → 자동생성분이 바로 뜸.
+- **교훈:** 이름이 비슷한 두 식별자(`call_id` / `callstats_id`)를 같은 것으로 착각하면 스펙 전체가 어긋난다. **필수값이 언제 생기는지**를 먼저 추적할 것.
+
+### 19. 코칭요청 — 데모가 틀렸다 (2단 복원)
+- 데모는 레일 클릭 → 곧장 "코칭 대화" 화면. **수신자(관리자) 선택 단계가 통째로 없음.**
+  그건 상담사↔관리자 1:1 고정일 때만 성립하는데 실제는 1:N이고 기존 `CoachingRequest.vue` 도 `관리자 선택` 셀렉트가 필수.
+- → **리스트 + 관리자 선택 단계를 앞에 복원.** (사용자가 먼저 "데모가 좀 잘못된 거 같다" 고 지적한 그대로)
+- **🐛 내가 처음에 낸 버그 2개 (사용자 지적으로 발견·수정):**
+  1. `is_read` 를 `!!` 로 판정 → 백엔드가 **`"false"` 문자열**로도 주므로 `!!"false" === true` → **안 읽은 게 읽은 걸로 샘.**
+     리뉴얼 코칭 페이지의 `isRead()` 정규화(`v === true || String(v).toLowerCase() === "true"`)를 가져다 씀.
+  2. 읽음처리에 **요청 id** 를 넘김 → 읽어야 할 대상은 **관리자 응답(코칭)** 이라 `replyId` 를 따로 들고 그걸 전송. (안 고쳤으면 읽음처리가 조용히 no-op)
+- 상태 배지도 누락했다가 추가: 응답없음=**대기** / 응답+미확인=**진행중** / 응답+확인=**완료** (페이지와 동일 판정). 미확인 = 빨간점(페이지의 `cch-dot` 과 같은 관례).
+- **`확인완료` 버튼도 누락** (사용자 지적). 나는 "스레드를 열면 자동 읽음 처리" 로 만들었는데, 기존 UX(`CoachingRequestCard.vue:49-61`)는 **명시적 버튼**이다:
+  응답이 있을 때만 노출 / 미확인 → `[미확인 ✓]`(클릭 가능) / 확인함 → `[확인완료 ✓]`(info색, `cursor:default`, 클릭 불가).
+  → **자동 읽음 제거하고 버튼으로 교체.** 실수로 열었다 닫아도 읽음이 되던 문제도 같이 사라짐.
+- 참고: 기존 `CoachingRequest.vue:263-264` 주석에 **내가 낸 것과 똑같은 `is_read` 문자열 버그가 이미 적혀 있었다** — *"문자열 "false"는 truthy라 그냥 쓰면 전부 확인완료로 잘못 표시됨"*. 같은 함정을 이 코드베이스가 이미 한 번 밟았다는 뜻. **비슷한 기능을 새로 만들 땐 기존 구현의 주석부터 읽을 것.**
+
+### 20. 리팩터 — `htmlToText` 공용화
+- `memo/index.vue` 안에만 있던 걸 **`src/utils/htmlText.ts`** 로 추출. 메모 페이지도 import 로 교체(동작 동일).
+- 레일 메모/코칭 패널이 같이 사용.
+
+### 21. 사용자 지적으로 뒤늦게 메운 것 3가지
+1. **메모 그룹이 통째로 빠져 있었음** — 그룹은 **필수**인데 `createMemo(userId, undefined, ...)` 로 미지정 등록하고 있었다.
+   → 그룹 셀렉트(필수) + ⚙ 그룹관리 드릴다운(추가/삭제). 삭제는 안의 메모도 함께 지워지므로 `ElMessageBox.confirm` 으로 "그룹과 메모 N건이 삭제됩니다" 확인. 새 그룹 만들면 바로 선택. 선택 그룹이 삭제되면 `watch` 가 첫 그룹으로 복구.
+2. **코칭 상태 배지 누락** (19번).
+3. **설정 폭** — `wide`(640) 로 했다가 "다른 거랑 동일하게" 지시 → `narrow`(320). 카테고리 트리도 2열 → 1열.
+
+### 오늘의 교훈
+- **사용자가 세운 원칙은 내가 만든 코드에도 적용된다.** "모달 금지"라고 해놓고 메모 확장을 모달로 만들었다. 사용자가 잡아줌.
+- **데모(목업)는 기획자의 그림이지 사실이 아니다.** 오늘만 3건이 실제 데이터/구조와 어긋났다 — 콜이력 배지 3종(등급/결과/방향), 할일 "통화 중 등록", 코칭 수신자 선택 누락. **붙이기 전에 API·타입·기존 호출부를 먼저 확인할 것.**
+- **"기존에 이런 기능 있는데?" 라는 사용자 지적은 항상 옳았다** (메모 그룹, 코칭 확인/미확인). 기존 화면 기능 목록을 먼저 훑고 시작했어야 했다.
+
+---
+
+## 2026-07-14 — VOC 채널이 "간간히 안 되는" 문제 근본원인 규명 (프론트 버그 2개 수정)
+
+### 증상
+- 다른 채널(STT `nlp:*`, 상담사 상태 `call:events`, 공지, 코칭)은 멀쩡한데 **VOC(`call:voc`)만 간헐적으로 안 옴.**
+- 상담사/관리자 양쪽에서 발생. 새로고침하면 다시 됨. **DB에는 매 턴 정상 저장됨.**
+- 프론트/백엔드가 서로 책임 추궁하며 원인 못 찾던 상태.
+
+### 최종 결론 — 원인은 프론트 버그 2개. 채널명·구독구조는 무죄.
+
+#### 🐛 버그 1 (진짜 원인) — `useChatSocket.ts` 의 `once("connect")`
+```js
+socket.once("connect", requestAndJoin);   // ❌ 최초 연결 때 딱 한 번만 join
+```
+- **Socket.IO 룸 멤버십은 소켓 id 기준.** 재연결하면 소켓 id가 새로 발급되어 **이전 룸이 전부 소멸**한다.
+- 백엔드 `socket.gateway.ts` 는 **룸을 복구해주지 않는다** (`client.join()` 호출부는 `@SubscribeMessage('join-room')` 핸들러 딱 하나. `handleConnection()` 에 복구 로직 없음 — 백엔드 코드 확인 완료).
+- → `once` 라서 **재연결 후 voc/nlp/partial/db 룸에 영영 못 돌아옴.**
+- **왜 VOC만 티가 났나:** `events`(admin/index.vue:311)와 `coaching`(:467)은 **`on("connect")`** 이라 재연결마다 재조인돼 살아남음. `once` 인 voc/nlp/db 만 죽음.
+  → 백엔드 로그의 *"재연결 2초 뒤 6개 방만 join, voc 없음"* 이 정확히 이 결과.
+- **수정:** `on("connect")` + 중복등록 방지(`rejoinOnConnect` 로 off 후 on) + `teardownListeners` 에서 정리.
+
+#### 🐛 버그 2 (2차 방어) — `useChatMessageParser.ts` 의 `currentCallId` 굳음
+```js
+if (!currentCallId.value) { currentCallId.value = call_id }   // ❌ set-once
+```
+- `currentCallId` 는 `call:events` 의 `start` 에서만 갱신되고, **어디에서도 `""` 로 리셋되지 않음.**
+- `call:start` 를 한 번 놓치면(재연결/카드 도중 열기/관리자 상담사 교체) **이전 콜 id 에 영구히 굳고**, `nlp:complete` 백업은 `if (!currentCallId.value)` 라 **비어있지 않으니 못 고침.**
+- → 새 콜의 VOC 가 `voc.call_id !== currentCallId` 로 **전부 `[voc] drop stale`.** **STT는 이 필터를 안 타서 정상 표시** → "VOC만 안 나옴".
+- **수정:** set-once → **"call_id 가 바뀌면 갱신"**. `call:start` 유실 시에도 첫 `nlp:complete` 로 **자동 복구**. (`seenVocKeys`/`assistedTurnIdx` 도 함께 clear)
+- ⚠️ **`call:end` 에서 리셋하는 안은 폐기** — 종료 후에도 상담요약/할일이 `currentCallId` 를 쓴다(`chat/index.vue:534,633`). 비우면 그쪽이 깨짐.
+
+### 헛다리 짚은 가설들 (다음에 반복하지 말 것)
+1. **"채널명이 문제"** — ❌. 발행/구독 모두 `dev:{tenant}:{cc_cti_id}:call:voc` 로 **동일**. 이름 불일치 없음.
+2. **"구독 구조(agent 단위)가 문제"** — ❌. Redis pub/sub 은 구독자 N명에게 전원 broadcast. 상담사 1 + 관리자 N 동시구독 정상.
+3. **"프론트가 `cc_cti_id` 를 안 보내서 백엔드가 발행 못 함"** — ❌. 상담사 화면은 사실상 항상 보냄. 예외 경로는 있으나 간헐증상 설명 못 함.
+4. **"프론트가 `unsubscribe` 를 불러서 남의 구독까지 죽임"** — ❌. **프론트는 `unsubscribe` 를 어디서도 호출하지 않음** (API 정의·래퍼는 있으나 호출부 0개 = dead code). 백엔드 전용(스웨거).
+5. **"`assist-stream` 호출 실패로 발행 누락"** — ❌. **DB에 매 턴 저장된다 = 호출은 성공했다** (사용자 지적. 이 한마디로 가설 제거됨).
+
+### 판별법 (재발 시 이 순서로)
+관리자/상담사 **브라우저 콘솔**만 보면 즉시 갈림:
+- `[voc] drop stale — voc.call=A current=B` 찍힘 → **메시지는 도착함. 프론트 필터가 버린 것.** (버그 2)
+- `[voc] received` 자체가 없음 → **메시지가 안 옴.** 룸 이탈(버그 1) 또는 백엔드 미발행. 백엔드 publish 로그와 대조.
+- `[chat-sub] 채널 구독 및 룸 참가 완료: ...:call:voc` 가 **재연결 후 다시 안 찍히면** → 버그 1.
+
+### 백엔드와 확정한 사실
+- 서버는 소켓을 **능동적으로 끊지 않음** (`disconnect()` 호출부 0). disconnect 사유는 전부 `transport close`, `ping timeout` 0건.
+- 재연결 시 **룸 복구는 전적으로 클라이언트 책임.**
+- 끊김의 진짜 원인(탭 닫힘/새로고침/ALB 등)은 **미제 — 그리고 중요하지 않다.** 끊김은 0으로 못 만든다(사용자가 지하철 타면 끊김). **고쳐야 할 것은 "재연결 후 복구"** 이고 그건 프론트에서 처리함.
+
+### 교훈
+- **"VOC만 안 되고 STT는 된다"** 같은 **선택적 증상**은 **두 채널이 공유하지 않는 코드 경로**를 찾으면 범인이 나온다. (여기선 `drop stale` 필터 = VOC 전용, `once` vs `on` = 채널별 등록 방식 차이)
+- **`once` vs `on` 은 재연결 안전성의 문제다.** 소켓 룸/구독처럼 **연결마다 다시 세워야 하는 것**은 반드시 `on`. 이벤트 리스너처럼 socket 객체에 붙어 유지되는 것만 `once` 로 충분.
+  (`useChatSocket.ts:77` 의 `once("connect", onConnectCallback)` 는 **redis-message 리스너 등록용**이라 그대로 둠 — 리스너는 재연결해도 유지됨.)
+- **책임 핑퐁이 붙으면 "말"이 아니라 "로그가 답을 정하게" 만들어라.** 위 판별법 3줄이면 프론트/백엔드가 즉시 갈린다.
+- **VOC 발행을 프론트 `/assist-stream` 호출에 종속시킨 설계(내가 제안했던 것)는 실패작이다.** VOC만 "브라우저가 살아있고 네트워크가 성공해야 존재하는 데이터"가 됐다. 근본해법은 **백엔드가 `nlp:complete` 를 직접 구독해 자체 발행**하는 것 — 다른 채널과 동일한 "밀려오는 브로드캐스트" 구조. (미착수. 백엔드가 `workspace_id`/`category_ids`/`company` 를 콜 시작 시점에 자체 확보 가능한지가 관건)
+
+---
+
+## 2026-07-14 (이어서) — 지식정보 "빈 박스" 노출 수정 (참고자료 0건 시 인텐트 칩 비활성)
+
+### 증상
+- 상담사 발화 → 보라색 인텐트 칩(예: `CMA 수율에 대한 사실 확인 질의`)은 뜨는데,
+  그 칩을 **누르면 내용 없는 "지식정보" 빈 박스**가 펼쳐짐 (제목만 덩그러니). 고장처럼 보임.
+- 처음엔 안 보이다가 **클릭해야** 나타남 → 조기표시가 만든 껍데기를 클릭이 펼친 것.
+
+### 원인
+`useChatAssist.ts` — `sources` 이벤트가 **왔지만 표시 가능한 문서가 0건**일 때:
+```js
+showAssistDocs(pendingAllItems.slice(0, MAX_DOCS));   // ❌ 건수 확인 없이 호출
+```
+`showAssistDocs()` 내부에서 **건수와 무관하게** 아래를 실행 → 껍데기 생성:
+```js
+keywordDetailData.value[messageId] = [{ type: "지식정보", content: [] }];  // ← 빈 박스의 정체
+targetMessage.highlightKeywords = [hintKey];                                // ← 보라색 칩 생성
+```
+- 표시 문서 0건이 되는 경로: `sources` 배열이 비었거나, **`highlightable` 필터로 전부 제외**된 경우.
+- ⚠️ 백엔드 로그의 `total_candidates: 0` (= `sources` 이벤트 자체가 안 옴) 케이스는 **칩도 안 뜨는 별개 경로.**
+  이번 증상은 **`sources` 는 왔는데 표시할 게 없는** 케이스. (둘 다 이제 빈 박스 안 나옴)
+
+### 수정 (4파일)
+1. **`useChatAssist.ts`** — `noDocsBubbles: Record<bubbleId, boolean>` 추가
+   - `showAssistDocs()`: 0건이면 **`keywordDetailData` 를 만들지 않고 기존 것도 delete** + 열린 영역 닫기(`selectedKeywordForBubble = null`) → **빈 박스 원천 제거**
+   - `distilled` 0건 경로에도 동일 플래그 세팅
+   - 재검색 시작 시 `delete noDocsBubbles[bubbleId]` (이전 상태 해제)
+2. **`SpeechBubble.vue` / `RenualSpeechBubble.vue`** — `isKeywordDisabled` prop 추가.
+   기존 `:disabled="isViewer || isAdmin"` 에 조건만 얹음 → **회색 비활성은 ECPButton 기본 스타일. 새 CSS 없음.**
+3. **`chat/index.vue` / `RenualChatPanel.vue`** — `noDocsBubbles` 전달 + **`v-memo` 배열에 추가**
+   (⚠️ v-memo 에 안 넣으면 값은 바뀌는데 화면이 안 바뀜)
+
+### 설계 결정 (사용자 확정)
+- **채택: 0건이면 칩을 회색 비활성 + 클릭 불가.** 회색 처리 자체가 이미 안내이므로 별도 문구 불필요.
+- 폐기: ②"박스는 열되 안내문구 표시" / ③"칩 옆에 '참고자료 없음' 표기 + 클릭막기"
+  → 사용자 판단: *"버튼명에 이미 적혀있는데 무의미한 연장행위"*. 동의.
+- 참고: 백엔드는 `token` 으로 **"참고자료를 찾지 못했습니다."** 를 보내주지만, 프론트는 그 텍스트를
+  문서 카드의 `search_summary` 에만 채우는 구조라 0건이면 붙일 곳이 없어 버려진다. (현재는 미사용)
+
+### 버블(발화) 단위 독립 — 검증됨
+- 모든 상태가 `messageId`(= bubbleId) 키. 한 통화 안에서 **발화마다 따로 판정**된다.
+  (1번 발화 3건 → 칩 활성 / 2번 발화 0건 → 칩 회색 / 3번 발화 2건 → 칩 활성)
+
+### 교훈
+- **"박스가 뜬다"의 범인을 데이터 생성부에서만 찾지 말 것.** `done` fallback 은 `pendingAllItems.length > 0` 가드가
+  있어서 무죄였고, 진짜 범인은 **가드가 없던 `sources` 조기표시(`showAssistDocs`)** 였다.
+- **`v-memo` 를 쓰는 리스트에 새 반응형 키를 추가할 땐 v-memo 배열도 함께 갱신**해야 한다. 안 그러면 조용히 리렌더가 안 된다.
+
+---
+
+## 2026-07-14 (이어서) — 포털 menu-manifest.json 생성기 구현 (PR-B r6 handoff 대응)
+
+### 배경
+- 포털/auth 담당자가 handoff 문서(`2026-06-04_pr-b-r6-asst-web-handoff.md`)를 보내옴.
+- 목적: asst-web 이 `public/menu-manifest.json` 을 뱉으면 → 포털이 읽어 **사이드바 메뉴 동기화** +
+  `selfRemoteUrl`/`selfRemoteName` 으로 **`company_conf.advisorRemoteAppUrl/Name` 자동 UPSERT**
+  → **운영자 수동 입력 해소.** (안 만들어도 포털은 no-op → 기존 수동 모드 유지)
+
+### 🐛 내가 크게 헛발질한 것 (교훈)
+- 문서는 *"ce-web 은 이미 완료(commit cb70cb5)"* 라고 단언했으나 **ce-web 소스에 그 구현이 전혀 없었다**(전수 grep 확인).
+  문서와 실제 코드가 안 맞았음.
+- 더 큰 실수: **메뉴 원본이 우리 레포 안에 있는데** (`src/api/modules/menus/mockupMenuList.ts`)
+  `dynamicRouter.ts` 만 보고 *"메뉴는 포털이 원천"* 이라 단정하고, 담당자에게 되묻기만 반복했다.
+  → 사용자가 **"우리쪽 소스를 확인도 안 하고 자꾸 남에게 물어보라고만 하냐"** 고 지적. 정당한 지적.
+- ⭐ **남에게 묻기 전에 우리 소스부터 grep 할 것.**
+
+### 메뉴 원본 (단일 소스)
+`src/api/modules/menus/mockupMenuList.ts` — asst-web 은 이 **목업**에서 메뉴를 읽는다.
+(`stores/modules/auth.ts:89-92` — 서버 API 호출은 **주석 처리**되어 있고 목업 사용 중)
+→ **메뉴를 바꾸려면 이 파일만 고치면 generator 가 자동 반영.** manifest 를 직접 손댈 필요 없음.
+
+### 구현 (4파일)
+1. **`scripts/generate-menu-manifest.cjs`** (신규) — 목업 → 포털 스펙 변환
+   - `code`: **`ADVISOR_` 접두어 강제** (포털 필수. 없으면 백엔드가 거부) → `RENUAL_*` → `ADVISOR_RENUAL_*`
+   - `parentId`(숫자) → `parentCode`(문자). **원본 루트(id=0)는 내보내지 않고**, 그 자식들을 포털 시드 루트(`ADVISOR_HUB`)에 붙임
+   - `isActive` → `isVisible`, `routePath` 앞에 `/` 부여
+   - `routeType`: component 있으면 `FEDERATION`, 그룹헤더는 `DEFAULT`
+   - **부모 → 자식 순 정렬** (포털이 배열 순서대로 넣으며 parentCode 로 부모를 찾음 = 순서가 계약)
+   - `checksum`: `sha256-<64hex>` (포털은 version/serviceType/menus배열 3가지만 얕게 검증하고 echo back)
+2. **`package.json`** — `generate:menu-manifest` 스크립트
+3. **`webpack.config.js`** — `exposes` 에 **`./AdvisorRenualComponent`** 추가
+   (기존 exposes 2개뿐이라 **리뉴얼은 포털이 로드할 수 없는 상태**였음)
+4. **`public/menu-manifest.json`** — 생성 산출물 (메뉴 17건)
+
+### ⭐ 핵심 발견 — 권한 분기 구조
+`ADVISOR_ADMIN` 과 `ADVISOR_CONSULTANT` 가 **같은 component(`./AdvisorConsultantComponent`)** 를 가리킨다.
+`consultant/index.vue` 가 `getUser().agent.role` 로 **관리자/상담사 화면을 자체 분기**하기 때문(`:10-11`, `:77`).
+→ 포털이 둘을 따로 로드하는 게 아니라, **같은 MF 컴포넌트가 로그인 권한에 따라 다른 얼굴을 보여주는 구조.**
+(handoff 문서의 menus 스펙엔 **권한 필드가 아예 없다** — isVisible 은 단순 boolean)
+
+### 미확정 (문서 `docs/advisor_menu_manifest.md` §5~§7 참조)
+- `PORTAL_ROOT_CODE` = `ADVISOR_HUB` 로 정했으나 문서엔 `AICC_PLATFORM` 도 병기 → **담당자 확인 필요**
+- 리뉴얼 리프 13개를 **모두 같은 component 로 매핑** — 포털이 리프별 component 를 요구하면 exposes 를 늘려야 함
+- **`SELF_URL` 값 미확인** + ⚠️ **Dockerfile 은 `build:aws`(MODE=aws) 인데 레포에 `.env.aws` 가 없다**
+  → `.env.dev`/`.env.prd` 에 넣어도 배포 빌드엔 안 잡힐 수 있음. **CI 주입 구조로 추정 — 확인 필요**
+- 포털이 이 파일을 **어떻게 읽어가는지** 문서에 없음 (닭-달걀: 주소를 채우려 manifest 를 읽는데, 읽으려면 주소를 알아야 함)
+- 빌드 자동화(`build:*` 앞단 연결)는 위가 정리된 뒤 결정 → **현재는 수동 실행**
+
+### 메뉴 통합 예정
+사용자 방침: 나중에 **리뉴얼/현재 중 하나만** 남긴다 → 그때 **목업에서 항목만 지우면** 끝.
+
+### ⚠️ 최종 결정 — manifest 는 **OFF 상태로 원복** (현재 배포 영향 0)
+- 이 작업은 **"새로 만들 포털 서버"용 준비**다. **현재 운영 배포(특히 고객사 AWS)에는 영향이 가면 안 된다.**
+- 사용자가 `webpack.config.js` 의 리뉴얼 `exposes` 를 주석 처리(원상복구)한 것을 보고,
+  **내가 건드린 나머지도 전부 되돌렸다.**
+
+| 항목 | 원복 후 상태 |
+|---|---|
+| `webpack.config.js` `exposes` | 🔴 리뉴얼(`./AdvisorRenualComponent`) **주석 처리** |
+| `package.json` `build:*` | 🔴 **generator 자동 실행 제거** (5개 스크립트 전부 원래대로) |
+| `public/menu-manifest.json` | 🔴 **삭제** (dist 에 안 실림) |
+| `scripts/generate-menu-manifest.cjs` | 🟢 완성. **아무데서도 호출 안 됨** (수동 실행만) |
+| `.env.5f.dev` 의 `SELF_URL`/`SELF_REMOTE_NAME` | 🟢 설정됨. 5f 로컬 전용이라 배포빌드(`MODE=aws`)엔 안 잡힘 |
+
+→ **generator 는 완성돼 대기 중, 스위치만 꺼둔 상태.** 활성화 절차는 `docs/advisor_menu_manifest.md` **§0**.
+
+### 🐛 원복 과정에서 발견한 함정 (중요)
+- `exposes` 만 주석 처리하고 manifest 를 그대로 두면 → 포털은 **리뉴얼 메뉴 13건을 사이드바에 등록**하는데
+  로드할 컴포넌트(`./AdvisorRenualComponent`)가 `remoteEntry.js` 에 없다 → **메뉴는 보이지만 클릭하면 죽는다.**
+- ⭐ **`exposes` 와 manifest 는 반드시 같이 켜고 같이 꺼야 한다.**
+  리뉴얼을 감춘 채 manifest 만 쓰려면 **`mockupMenuList.ts` 에서 리뉴얼 항목을 빼고** 생성할 것.
+
+### 🐛 generator 가 `.env` 를 안 읽던 버그 (수정함)
+- generator 는 webpack 과 **별도 프로세스**라 `process.env` 만 봤다 → `.env.5f.dev` 에 `SELF_URL` 을 넣어도 **못 봄.**
+- → webpack 과 동일 규칙(`.env.{MODE}`)으로 dotenv 를 직접 로드하도록 수정.
+- ⚠️ **`SELF_URL` 은 백엔드(`LANGSA_GATEWAY_URL`)가 아니라 프론트(asst-web) 자신의 주소다.**
+  (포털이 `{SELF_URL}/remoteEntry.js` 를 가지러 온다. 처음에 백엔드 포트를 넣었다가 사용자가 바로잡음)
+
+### 오늘 배포 대상 정리
+| 건 | 배포 | 비고 |
+|---|---|---|
+| VOC 간헐 미수신 (버그 2) | 🟢 **나감** | 재연결 룸 재조인 + currentCallId 자동복구 |
+| 지식정보 빈 박스 (칩 비활성) | 🟢 **나감** | 참고자료 0건 시 회색 비활성 |
+| 메뉴 manifest | 🔴 **안 나감** | 코드만 들어가고 아무 동작 안 함 |
+
+---
+
+## 2026-07-14 (이어서) — 상담요약 마크다운 렌더링 marked 교체 + 간격 CSS 정리
+
+### 발단
+사용자가 `docs/advisor_after.png` 제시 — 상담요약 팝오버의 "상담내용" 안이 **엉성하게 뭉쳐 보임**.
+
+### 원인 (CSS 아니라 파서였음)
+`src/utils/markdown.ts` 의 자체 `parseMarkdown` 이 반쪽짜리였음:
+- `# 헤딩` / `- ` 불릿 / 문단 / 인라인만 처리 → **`1.` 순서목록(`<ol>`) 분기 자체가 없음**
+- 리스트 정규식 앞에서 `line.trim()` 을 먼저 해버려 **중첩 들여쓰기 정보 소실** → 전부 평평한 `<ul>`
+- 링크/표/인용/구분선 미지원, `*(.*?)*` 가 `**` 뒤에 돌아 오작동 여지
+
+### 실제 원본 마크다운 (사용자가 DB에서 확인해 제공)
+```
+## 상담 요약
+
+**1. 고객 문의**
+- 구매 상품의 사이즈 미스로 인한 교환 요청
+
+**2. 처리 결과**
+- ...
+```
+→ ⭐ **계층이 원본에 애초에 없음.** `## h2` + `**볼드 문단**` + `- 불릿` 구조.
+→ 즉 **marked 로 바꿔도 산출 태그는 거의 동일**(`<h2>`, `<p><strong>`, `<ul><li>`).
+→ **"엉성함"의 실제 원인은 CSS 간격**: `<p>` 와 `<ul>` 이 똑같이 `margin: 0.5em` 이라
+   "제목-불릿"이 안 묶이고 섹션 구분이 안 됨.
+
+### 조치
+1. **`src/utils/markdown.ts`** — 자체 파서 → `marked` (이미 `package.json` 에 `^16.4.1` 설치돼 있었는데 **아무데서도 안 쓰이고 있었음**).
+   - `marked.setOptions({ gfm: true, breaks: true })`, `marked.parse(text, { async: false }) as string`
+   - **시그니처 `(text: string) => string` 유지** → 호출부 3곳 무수정.
+   - sanitize(DOMPurify)는 **사용자 판단으로 패스** (패키지 추가 원치 않음, LLM 응답이라 신뢰).
+2. **간격 CSS** — 핵심 규칙:
+   ```scss
+   p + ul, p + ol { margin-top: 0; }    // 볼드 제목 + 그 아래 불릿 = 한 덩어리
+   ul + p, ol + p { margin-top: 1em; }  // 목록 끝나고 다음 섹션 제목 → 여백
+   ```
+   추가로 `ol / a / table / blockquote / hr` 스타일 신설(marked 는 기존 파서보다 태그를 더 뱉음).
+
+### 변경 파일 (4개)
+| 파일 | 내용 |
+|---|---|
+| `src/utils/markdown.ts` | 자체 파서 → marked |
+| `components/layout/HeaderActionBar/CounselingStatus.vue` | `.summary-content` — **이미지의 그 화면** |
+| `view/advisor/components/ChatHistoryModal/SummaryPanel.vue` | `.summary-content` 동일 규칙 |
+| `view/advisor-renual/call-history/components/RenualCallDetailModal.vue` | `.rcd-summary` 동일 규칙(13px/g80 톤 유지) |
+
+### ⚠️ 사용자 피드백 (반드시 새길 것)
+- 사용자: **"이미지에 특정 마크다운 수정하는데 왜 이렇게 많은 파일을 수정하는거야?"**
+- 필수는 `markdown.ts`(공용 파서라 불가피) + `CounselingStatus.vue`(요청받은 그 화면) **2개뿐**.
+  `SummaryPanel` / `RenualCallDetailModal` 은 **내가 "통일하자"고 제안**해 늘어난 것. 요청 범위 밖.
+- 이번엔 "일단 저질렀으니 놔두자"로 **유지 결정**. 다만 **다음부터 요청받은 화면만 고칠 것.**
+- 확인 사항: `src/styles/reset.scss:113` 의 `list-style: none` 은 **주석 처리**돼 있어 `<ol>` 마커 정상 표시됨.
+
+### 검증
+- 실제 원본 마크다운을 `marked` 로 파싱해 HTML 확인 → `typeof: string`(동기 반환 확인), 구조 예상대로.
+- ⛔ 화면 실확인은 **사용자 몫** (상담중 팝오버 / 상담이력 상세 / 리뉴얼 상담이력 상세).
+
+---
+
+## 2026-07-14 (이어서) — 관리자 모니터링: 상담사 상태 불일치 + "상담이 종료되었습니다" 잔존 (socket room 재조인 누락)
+
+### 증상 (사용자 보고)
+1. 관리자(상담어드바이저) 화면 **좌측 상담사 리스트의 상태(상담중/대기중)가 실제와 안 맞음**. → 추가 확인: **우측 모니터링 헤더의 상태값도 동일 증상**.
+2. **"상담이 종료되었습니다" 문구가 새 상담이 시작돼도 그대로 남음** (종료 후 *가만히 두면* 발생).
+
+### 근본원인 A (공통) — 소켓 재연결 시 room 재조인 누락 = **오늘 아침 VOC 이탈과 동일한 버그 클래스**
+- 오늘 아침 커밋 **`485699d "fix: socket room rejoin 구조 변경"`** 이 `useChatSocket.ts` 만 고침 (voc/nlp/db/partial 재조인 → `once` → `on`).
+- ⚠️ **그 커밋 주석의 전제가 틀렸음**: *"events/coaching 은 on 이라 살아남음"* → **사실 아님.**
+  `admin/index.vue` 의 룸 조인 코드는 이 형태였음:
+  ```js
+  if (socket.connected) { join(); }            // ← 재연결 핸들러를 아예 등록 안 함
+  else { on("connect", () => join()); }        // ← on 은 맞지만 이 분기를 타야만 등록됨
+  ```
+  관리자 부트스트랩은 **API 를 여러 개 await 한 뒤** 이 함수를 호출 → 그 시점엔 소켓이 **이미 connected** → `if` 로 빠져 **재연결 핸들러가 등록되지 않음**.
+  (소켓 연결 경합에 따라 가끔 else 를 타면 살아남음 → "될 때도 있고 안 될 때도 있는" 증상)
+- Socket.IO 룸 멤버십은 **소켓 id 기준** → 재연결하면 전부 소멸, 서버는 복구 안 해줌(재조인은 클라이언트 책임).
+- 결과: 유휴/네트워크 블립 후
+  - `agent-status-update` 유실 → **상태 안 맞음(증상 1)**
+  - 전 상담사 `call:events` 유실 → 새 상담 `start` 를 못 받음 → `useChatMessageParser.ts:234` 의 `isCallEnded = false` 초기화가 안 돎 → **문구 잔존(증상 2)**
+
+### 근본원인 B (증상 1 전용, 소켓과 무관) — 우측 헤더 상태 **영구 고정**
+- `admin/index.vue` `handleConsultantSelect` 에서 `selectedConsultants.value.push(consultant)` → **Drawer 객체를 그대로** 담아 `<Chat :currentConsultant>` 로 전달, `chat/index.vue:257` 이 `currentConsultant.isActive` 로 `(통화중/대기중)` 표시.
+- 그런데 `ConsultantDrawer` 의 `updateLoadedConsultants` 는 갱신 시 **`{...consultant}` 새 객체로 교체** → 그 순간 참조가 끊겨 admin 은 **클릭 시점의 낡은 객체**를 계속 붙듦 → 좌측은 바뀌는데 **우측은 영구 고정**.
+
+### 조치 (관리자 경로 2개 파일만 — 상담사 화면/공용 모듈 무수정)
+1. **`src/view/advisor/admin/index.vue`**
+   - `setupAgentStatusListener` / `setAgentMessageListener` → `useChatSocket` 과 **동일 구조**로 통일: `rejoinAgentStatusRoom` / `rejoinAgentEventRooms` 모듈 변수에 핸들러 보관 → `socket.off("connect", h)` 후 `socket.on("connect", h)` **항상 등록**, 그 다음 `if (socket.connected) 즉시 실행`.
+   - 재조인마다 `agent-status-update` 는 `off` → `on` 으로 **중복 등록 방지**.
+   - `setAgentMessageListener` 의 불필요한 `setupSocketListeners` 래퍼 제거(로직 동일).
+   - `onUnmounted` 에서 재조인 핸들러를 **연결 상태 무관하게 off** (안 하면 페이지 떠난 뒤에도 재연결마다 룸에 재진입).
+2. **`src/view/advisor/components/ConsultantDrawer/index.vue`**
+   - `updateLoadedConsultants` 끝에 **`props.selectedConsultants` 의 동일 상담사 객체도 제자리(in-place) 갱신** 추가 → 좌/우 상태 일치.
+
+### 영향 범위 확인 (사용자 우려 대응)
+- `ConsultantDrawer` 사용처는 `advisor/admin/index.vue` **한 곳뿐**, `admin/index.vue` 는 `advisor/consultant/index.vue:25` 에서 **role 분기**로만 렌더 → **상담사 계정엔 마운트조차 안 됨**.
+- 공용 모듈(`socketIOPlugin.ts`, `useChatSocket.ts`, `useChatMessageParser.ts`, `agentStatus.ts`) **한 줄도 수정 안 함**.
+- 상담사 본인 화면은 `chat/index.vue:1358-1364` 에서 `events` 를 **직접 구독**(관리자는 미포함)하고 아침 커밋으로 이미 재조인 fix 적용됨 → **누락됐던 건 관리자 경로뿐**.
+
+### 미조치 (별도 확인 필요)
+- `admin/index.vue:508` 초기 상태 스냅샷 redis key **`dev:global:call:status:active` — `dev:` prefix 하드코딩** (`utils/redisKey.ts` 의 `CHANNEL_ENV` 규칙 미적용).
+  → 운영/로컬에서 키 불일치로 스냅샷이 비면 진입 직후 전원이 기본값(`nonActiveType:"offline"` → **"업무 외"**)으로 보일 수 있음. **운영 키 규칙 백엔드 확인 후 처리 예정.**
+- 참고: ON_CALL/AFTER_CALL 을 서버에 쓰는 주체가 **상담사 본인 브라우저**(`useChatMessageParser` → `agentStatusStore.updateStatus`) → 상담사가 asst-web 미접속이면 서버 상태 자체가 갱신 안 됨(백엔드 설계 이슈, 프론트는 `call:events` 기반 `isActive` 로 보정).
+
+### 검증
+- 변경 2개 파일 **타입 에러 없음**(vue-tsc).
+- ⛔ 실화면 검증은 **사용자 몫 — 배포 후 테스트 예정**. 확인 포인트:
+  1. 네트워크 껐다 켜기/장시간 유휴 후 콘솔에 `[ADMIN] agent-status 룸 참가...` / `[ADMIN] Socket Room Joined :` 가 **재차** 찍히는지
+  2. 상담 시작/종료 시 **좌측 카드 + 우측 헤더가 같이** 갱신되는지
+  3. 종료 후 방치 → 새 상담 시작 시 **"상담이 종료되었습니다" 가 사라지는지**
+
+---
+
+## 2026-07-14 (이어서) — 관리자 상담사 상태 라벨 단일 소스화 (좌측 카드 ↔ 우측 모니터링 헤더 불일치 해소)
+
+### 증상 (배포 후 사용자 테스트)
+- 소켓 재조인 수정은 **정상 동작 확인**. 다만 **좌측 상담사 카드와 우측 모니터링 헤더의 상태 문구가 다름**.
+  - 예: 좌측 `상담중 - 후처리 - 대기중` vs 우측 `통화중 - 대기중 - 대기중`
+
+### 원인 — 상태 라벨 소스가 3개로 분산
+| # | 위치 | 분류 | 라벨 |
+|---|---|---|---|
+| 1 | `agentStatus.ts:15` `AgentStatusLabel` (enum) — **드롭다운에서만 사용** | 5 | 업무 외 / 대기 중 / 상담 중 / 후처리 / 휴식 |
+| 2 | `ConsultantCard.vue` — 템플릿 하드코딩 `상담 중` + `nonActiveText` computed | 5(+1) | 상담 중 / 후처리 / 휴식 / **업무문의** / 업무 외 / 대기 중 |
+| 3 | `chat/index.vue:257` — `isActive ? "통화중" : "대기중"` | **2** | 통화중 / 대기중 |
+- **우측은 `isActive` 불리언 2분류뿐** → 좌측의 `후처리`/`휴식`/`업무 외` 가 전부 **"대기중"으로 뭉개짐**. 문구도 `상담 중` vs `통화중` 으로 상이.
+
+### 조치
+1. **`src/stores/modules/agentStatus.ts`** — `resolveConsultantStatusLabel(isActive, nonActiveType)` **신규**. 내부에서 기존 `AgentStatusLabel` 재사용 → **라벨 문자열 정의는 enum 한 곳으로 일원화**.
+2. **`ConsultantCard.vue`** — 템플릿 하드코딩 `상담 중` + `nonActiveText` 제거 → `statusLabel` computed 하나로 교체. 색상(`statusTextColor`)·점(`statusIndicatorClass`)은 **무수정**(표시 결과 동일).
+3. **`chat/index.vue`** — `isActive ? "통화중" : "대기중"` → `currentConsultantStatusLabel` computed 로 교체(같은 함수 사용). 해당 라인은 `v-if="isAdmin && currentConsultant"` 안이라 **상담사 화면 영향 없음**.
+
+### ⚠️ "업무문의"(`nonActiveType === "coaching"`) 제거 — 사용자 지적
+- 사용자: *"업무문의는 좀 애매한데 상담중에 코칭요청을 하는거라서.."*
+- 전수조사 결과 **`nonActiveType = "coaching"` 을 세팅하는 코드가 어디에도 없음** (실제 세팅값은 `""` / `afterCall` / `break` / `offline` 4가지뿐, 모두 `ConsultantDrawer`). `AgentStatus` enum 에도 `COACHING` 없음.
+- → **도달 불가능한 죽은 분기**였고, 코칭요청은 *상담 중* 에 일어나는 행위라 "비활성 상태"로 표현하는 것 자체가 부적절 → **제거 확정**.
+
+### 결과
+- 상태는 **`상담 중 / 대기 중 / 후처리 / 휴식 / 업무 외` 5개**로 좌·우 완전 일치. 우측 문구는 사용자 확정에 따라 `통화중` → **`상담 중`** 으로 통일.
+- 변경 3개 파일 **타입 에러 없음**(vue-tsc). ⛔ 실화면 검증은 사용자 몫 — **핵심 체크: 후처리 상태 상담사를 우측에 띄웠을 때 헤더가 `(후처리)` 로 뜨는지** (이전엔 무조건 `(대기중)`).
+
+---
+
+## 2026-07-14 (이어서) — ⚠️ [미해결/리뉴얼 시 처리] 상담요약 마크다운 CSS 가 `scoped` + `v-html` 조합으로 **전부 죽어 있음**
+
+### 발견 경위
+- 위 "상담요약 마크다운 렌더링 marked 교체 + 간격 CSS 정리" 작업 후 사용자 실화면 캡쳐(`docs/advisor_after.png`) 확인 → **"4번은 그대로네"** (= 안 고쳐짐).
+
+### 진짜 원인 (파서·간격규칙 문제가 아님)
+- `CounselingStatus.vue:605` 는 `<style scoped>`, 상담내용은 `v-html="summaryHtml"`(`:124`)로 렌더.
+- **`v-html` 로 주입된 DOM 에는 scoped 속성(`data-v-xxx`)이 붙지 않는다.**
+  - `.summary-content` **자기 자신**은 템플릿 엘리먼트라 scoped 속성이 붙음 → `color: var(--color-primary)`(`:678`) **만** 살아남음 → **본문 글자가 전부 초록**.
+  - `p` / `ul` / `strong` / `p + ul` / `ul + p` 등 **자식 선택자는 `[data-v-xxx]` 가 붙어 컴파일** → `v-html` 생성 태그엔 그 속성이 없어 **전부 죽은 규칙**.
+- 캡쳐로 확인된 증거:
+  - `strong { color: var(--color-g80) }`(`:729`) 인데 **볼드 제목이 진회색이 아니라 초록** → `strong` 규칙 미적용.
+  - `ul { padding-left: 1.3em }`(`:747`) 인데 **불릿이 왼쪽 끝에 붙음** → 전역 reset 의 `padding:0` 만 적용된 상태.
+  - ⇒ 오늘 넣은 `p + ul { margin-top: 0 }` / `ul + p { margin-top: 1em }` 은 **단 한 번도 적용된 적 없음**.
+- 즉 **파서 교체(`marked`)는 성공**(구조는 정상 생성), **CSS 는 처음부터 무효**.
+- ❗ 반성: 작업 당시 실화면 확인 없이 "CSS 넣었으니 됐다"고 넘긴 것이 원인. **v-html + scoped 조합은 반드시 `:deep()` 필요.**
+
+### 해결 방법 (리뉴얼 시 적용)
+```scss
+.summary-content {
+  color: var(--color-primary);        // 자기 자신 → 그대로 적용됨
+  :deep(p) { margin: 0.5em 0 0.25em; }
+  :deep(p + ul), :deep(p + ol) { margin-top: 0; }
+  :deep(ul + p), :deep(ol + p) { margin-top: 1em; }
+  :deep(strong) { color: var(--color-g80); }
+  // h1~h3 / ul,ol / code / a / table / blockquote / hr 도 동일하게 :deep() 로 감쌀 것
+}
+```
+- **함께 결정할 것**: 현재 `.summary-content` 가 `color: var(--color-primary)` 라 `:deep` 만 고치면 **본문이 계속 초록**. 본문을 일반 텍스트색(g80 계열)으로 내릴지 결정 필요.
+
+### 동일 버그 존재 파일 (모두 `<style scoped>` + `v-html`)
+| 파일 | 화면 |
+|---|---|
+| `src/components/layout/HeaderActionBar/CounselingStatus.vue` | 상담중 상담요약 팝오버 (캡쳐의 그 화면) |
+| `src/view/advisor/components/ChatHistoryModal/SummaryPanel.vue` | 상담이력 상세 |
+| `src/view/advisor-renual/call-history/components/RenualCallDetailModal.vue` | 리뉴얼 상담이력 상세 |
+
+### 결정
+- **사용자 판단: "일단 놔두자, 리뉴얼할 때 수정하자"** → 이번 턴 코드 변경 **없음**.
+
+---
+
+## 2026-07-14 (이어서) — 워크스페이스 셀렉트 "직접입력" 안 보임 (AWS 배포 한정) → z-index
+
+### 증상
+- 설정 > WorkSpace설정 탭의 셀렉트에서 **"직접입력" 옵션이 AWS 배포에서만 안 보임**. 로컬/개발서버는 정상.
+
+### 헤맨 과정 (반성)
+- 코드상 `직접입력` 옵션은 `Setting.vue:225` 에서 **조건 없이 항상** 붙는다 → "코드로는 설명 안 됨".
+- `.env.aws` 부재 → `process.env.VITE_MOCK_WORKSPACE_ID` 미주입 → 빈 value 옵션 …으로 추정했으나 **전부 헛다리**.
+- ⚠️ **사용자가 "셀렉트 클릭하면 팝레이어가 모달 뒤에 뜨는 것 같다"고 말해준 순간 해결.** 화면 증상부터 물었어야 했다.
+
+### 진짜 원인
+- 설정 모달(`CustomModalContainer.vue:53`)은 body 로 teleport 되며 **z-index 9998**.
+- `ECPSelect` 는 `teleported: true` 기본 → 드롭다운(el-popper)이 **body 에 별도로 붙고**, element-plus 가 z-index 를 **2000번대부터 동적 부여**.
+- → 드롭다운(2000대)이 모달(9998) **뒤로 깔림**. 마지막 옵션인 "직접입력"이 특히 눈에 띔.
+- 로컬/dev 에서 되던 이유: element-plus z-index 카운터/인스턴스가 호스트 포털 환경과 달라 우연히 위로 떴던 것.
+
+### 수정 (2파일)
+1. `src/components/layout/Drawer/components/Setting/Setting.vue`
+   - ECPSelect 에 `popper-class="ws-select-popper"` 추가
+   - 파일 하단에 **non-scoped** `<style>` 로 `.ws-select-popper { z-index: 10000 !important; }`
+     (드롭다운은 body 로 teleport 돼 **scoped 로는 못 잡음**. MFA 로 remote 컴포넌트만 마운트되면 App.vue 경유 전역 스타일이 안 실릴 수 있어 컴포넌트에 직접 넣음)
+2. `src/styles/element.scss` — 같은 규칙 전역에도 추가(일반 진입 경로용)
+
+### 검증
+- 사용자 실서버 확인 **정상**.
+
+---
+
+## 2026-07-14 (이어서) — menu-manifest 활성화 + 신규 106 서버 구축
+
+### 배경
+- `docs/advisor_menu_manifest.md` 에 "구현 완료 · OFF 대기" 로 적혀 있던 포털 메뉴 신고 기능을 **신규 포털 서버(106) 용으로 켬**. 브랜치 `feat_106_serv`.
+
+### 켠 것 (문서 §0 절차)
+| 파일 | 변경 |
+|---|---|
+| `webpack.config.js` | `exposes` 에 `./AdvisorRenualComponent` **주석 해제** (manifest 와 반드시 같이 켜야 함 — 안 그러면 메뉴는 뜨는데 클릭 시 죽음) |
+| `webpack.config.js` | `devServer.static` 에 **`public` 추가** — serve 환경(로컬/5f/106)은 원래 `dist` 만 서빙해 `/menu-manifest.json` 이 404 였음 |
+| `package.json` | `build:dev/prd/test/aws/ncp` 앞단에 generator 물림 |
+| `.env.106.dev` | **신규.** IP `106.242.165.142` (SELF_URL/HOST_APP_URL :32026, LANGSA_GATEWAY_URL :32025) |
+| `docker-compose.dev.106.yml` | **신규.** MODE=`106.dev`. `webpack serve` 는 `build:*` 스크립트를 안 타므로 **command 앞단에서 generator 직접 실행** (`sh -c "... generate && ... webpack serve"`) |
+| `.gitignore` | `public/menu-manifest.json` 제외 + 추적 해제(`git rm --cached`) |
+
+### 함정 (문서가 틀렸던 부분)
+1. **`webpack serve` 는 generator 를 안 탄다.** package.json `build:*` 에만 물려 있어서, docker 로 serve 하는 5f/106 은 compose command 에 직접 넣어야 함.
+2. **`devServer.static` 이 `dist` 뿐**이라 public 에 만들어도 serve 환경에선 404 → `public` 추가 필요.
+3. ⚠️ **copy-webpack-plugin 이 없다** → 프로덕션 빌드(`build:aws` → nginx)에서 `public/` 이 `dist/` 로 **복사되지 않음**. 문서 §6-2 의 "webpack 이 public 을 dist 로 복사한다"는 **사실이 아님**. → AWS 를 포털에 물릴 땐 copy-webpack-plugin 설치 필요. **(미해결/보류)**
+4. **manifest 를 레포에 커밋하면 안 됨** — `selfRemoteUrl` 이 환경별로 달라서, 106 값이 박힌 파일을 5f/로컬이 그대로 서빙하게 됨. → 빌드 산출물로 취급(gitignore), 각 환경이 자기 `.env.{MODE}` 로 생성.
+
+### 환경별 현황 (4개 제각각)
+| 환경 | 빌드 | MODE / env | manifest 생성 |
+|---|---|---|---|
+| 로컬 | webpack serve | `local` | ✗ (404, 무해) |
+| 5f | docker + serve | `5f.dev` | ✗ (404, 무해) |
+| 106 | docker + serve | `106.dev` | ✅ 기동 시 compose command 가 생성 |
+| AWS | docker + `build:aws` → nginx | `aws` (레포에 .env.aws 없음) | 생성은 되나 **dist 에 안 실림** |
+- `MODE=aws` 로 generator 실행 시 `.env.aws` 없어도 **경고만 찍고 exit 0** → **AWS 빌드는 안 깨짐** (실측 확인).
+
+### 검증
+- 106: `http://106.242.165.142:32026/menu-manifest.json` **정상 노출** (selfRemoteUrl=106, 메뉴 17건).
+- 5f: 기존과 동일하게 정상 (manifest 만 404).
+- 두 서버는 **다른 물리 머신**이라 container_name/포트 동일해도 충돌 없음. (같은 머신이면 충돌 — 그땐 이름/포트 분리 필요)
+
+### 남은 확인 (포털 담당자)
+1. `PORTAL_ROOT_CODE` 가 `ADVISOR_HUB` 인지 `AICC_PLATFORM` 인지
+2. 포털이 manifest 를 언제/어디서 읽어가는지 (public 배포로 끝인지, push 필요한지)
+3. FEDERATION 메뉴가 리프마다 별도 component 를 요구하는지
+
+---
+
+## 2026-07-14 (이어서) — 리뉴얼 페이지: 부트스트랩 실패 시 에러 화면 추가
+
+### 배경 (기존 차이)
+- **기존 상담사 화면**(`view/advisor/consultant/index.vue`): 초기화(`initApi`→`initSocket/connect`→`getUser`)를 자신이 수행하고, 실패 시 `isError=true` 로 **화면 전체를 에러 박스로 대체**(`:4-9`, `:79-83`).
+- **리뉴얼**(`view/advisor-renual/composables/useAdvisorBootstrap.ts`): 같은 초기화를 공용 컴포저블로 뺐는데 실패를 **`console.warn` 으로 삼키고 진행** → 이름 "알 수 없음" 등 **조용히 반쪽 동작**. (catch 문구 "프리뷰/토큰 한계일 수 있음" — 프리뷰 단계라 일부러 안 막은 흔적)
+
+### 수정 (2파일 — 리뉴얼 리프 10개 전부 커버)
+1. `useAdvisorBootstrap.ts`
+   - 모듈 스코프 `bootstrapError = ref<string|null>(null)` 신설 + return 에 추가.
+   - `getUser()` 실패는 `class ProfileError` 로 감싸 초기화 실패와 **구분** → 기존 상담사 화면과 **동일 문구**:
+     - ProfileError → `"사용자 프로필 조회 중 장애가 발생했습니다."`
+     - 그 외(API/소켓) → `"어드바이저 초기화 중 장애가 발생했습니다. 관리자에게 문의하세요."`
+   - 메뉴 뱃지 카운트(공지/코칭/할일) 실패는 **여전히 화면을 안 막음**(기존 별도 try/catch 유지).
+2. `components/RenualPageHeader.vue`
+   - 이 헤더가 **리프 10개 전부**(chat/dashboard/call-history/bookmark/memo/todo/coaching/notice/detect-word/settings)에 들어가고 **이미 `ensureBootstrapped()` 를 부르는 주체** → 여기 한 곳에 에러 오버레이를 넣어 리뉴얼 전체 커버.
+   - `v-if="bootstrapError"` 오버레이(아이콘+문구, consultant 스타일 재현).
+   - ⭐ **오버레이는 `position: absolute`** — `fixed` 로 뷰포트를 덮으면 **포털 GNB 까지 가려 다른 메뉴로 못 빠져나감**. 기준을 리프 루트로 잡기 위해 `onMounted` 에서 헤더의 부모가 `static` 이면 `relative` 로 바꿔줌(리프 10개를 각각 안 고치기 위한 최소 조치).
+
+### 트레이드오프
+- 기존 상담사 화면은 `v-if/v-else` 로 **렌더 자체를 차단**. 이 방식은 콘텐츠가 렌더된 채 **위를 덮는** 것 → 리프 내부 API 가 한 번 더 나갈 수 있음(어차피 실패, 화면 영향 없음). 완전 차단이 필요하면 리프 10개에 `v-if` 를 넣어야 함.

@@ -134,3 +134,49 @@
 - (무관) `asst-service/summary`에서 뜬 `503 "LLM Orchestrator 서비스에 연결할 수 없습니다"`는 **토큰과 무관한 백엔드 이슈**(401 아님=인증 통과). 별건.
 
 **정식화 시 고민:** 이 수동 버튼은 경로①(자동)이 실패했거나 refreshToken 만료 직전 백업 용도로 유용. 칩은 `active`일 때만 뜨게 유지하고, 성공 후 `authExpiryStore.clear()`로 칩 제거되는 UX가 자연스러움(경로① 성공 후에도 칩이 안 사라지는 기존 미세버그 함께 해소됨).
+
+## 2026-07-06 등록
+
+### 8. "이전대화 불러오기" — 문서/오른쪽 패널(AI요약·문서 탭)까지 복원 [대화복원 후속, 요청 시 착수]
+**배경:** 실시간 상담 중 이탈→복귀 시 유실되는 데이터 복원 기능. 이번(2026-07-06)에 **대화(turn)만** 복원 구현 완료(상세: CLAUDE-history.md 2026-07-06 "이전대화 불러오기"). 오른쪽 화면의 **문서/AI요약(탭 형태 패널)은 이번 범위에서 제외** — 사용자 판단으로 "대화만" 확정, 문서 복원은 요청 시 후속.
+
+**왜 대화보다 복잡한가:** 문서/요약은 "고객 발화(turn) → assist-stream 검색 → 결과 문서·요약"의 **파생물**이라 ①turn 종속(어느 turn에 어떤 문서 붙었는지 매핑 복원) ②탭 UI 상태(열린 탭/선택 문서)까지 신경 써야 함.
+
+**백엔드 확인 완료된 사실 (복원 가능 전제 = 통과):**
+- assist 결과(문서/요약)는 **DB에 저장됨 + 턴별 저장**.
+- ⭐ **백엔드 자동 저장이 아니라 프론트가 `POST /assist-stream/snapshot`(`path.ADVISOR.API.ASSIST_STREAM_SNAPSHOT`, path.ts:57) 호출해서 저장**함. 저장 진입점은 백엔드 컨트롤러 하나(`AssistSnapshotService.save()`). → **문서 뜰 때마다 실시간 저장이라 진행 중 통화도 DB에 원본 존재** = 복원 재료 있음.
+- **상담 종료 후 이력에서 문서 클릭해서 보는 기능이 이미 존재** → 조회 API + 렌더 로직이 이미 있음 = **재활용 발판**(난이도 낮추는 핵심).
+
+**착수 시 프론트에서 확인할 3가지 (미조사):**
+1. **저장 호출부** — 프론트 어디서 `POST /assist-stream/snapshot` 부르나 + payload에 **turn 연결키(turn_idx/call_id)** 포함되나.
+2. **조회 경로** — snapshot GET API + 상담이력 모달의 문서/요약 렌더 로직 위치(재활용 대상).
+3. **실시간 오른쪽 패널 데이터** — 지금 문서/요약이 화면에서 어디 보관되나(store? `chatContent` 항목 필드? `chatData.ts`의 `assistStreamText`/`assistStreamSummary` 등).
+
+**예상 접근:** 대화 복원(`loadPreviousTurns`)과 동일 궤 — 복귀 시 call_id로 snapshot 조회 → turn 매핑해 오른쪽 패널/탭 재구성. 실시간 무영향(try/catch 격리) 원칙 동일 적용.
+
+## 2026-07-08 등록
+
+### 9. RAG 원본보기(V2) — 계층형 청킹 대응 + 하이라이트 제목/본문 보정 [배포 후 라이브 검증 중]
+**상태:** 코드 적용 완료, **배포 후 사용자 라이브 검증 중**. 문제 시 직전으로 원복 가능하도록 기록. **(이 repo는 git 명령 금지 — 원복은 파일 직접 편집)**
+
+**배경/원인:** 한투 적용되면서 aicm의 청킹이 **서브청킹(계층형)** 으로 바뀜(2026-07-03 무렵 `_blocks_to_outline` 목차 계층화, "앞으로 이 구조가 표준"). 그 결과 원본보기(docx=`get_doc` 마크다운 렌더, `DocOriginalViewerModalV2.vue`)에서 두 가지 문제 발생:
+1. **본문 잘림** — `assembleMarkdown`이 top-level `section.blocks`만 읽고 `section.children`을 재귀 안 해서, children에 중첩된 본문(대부분)이 조립에서 빠짐 → "앞 몇 개만" 보임.
+2. **제목만 하이라이트** — 계층형에선 `source_location.heading_path`가 실제 섹션 제목이 아니라 **상위 카테고리 하나**(예: `["CMA"]`)만 담음. `focusByHeadingPath`가 그 "CMA" 부모 제목에 매칭 → 제목만 칠해지고 본문 못 잡음. (1번 수정으로 부모 카테고리 제목이 렌더되기 시작하면서 표면화된 부작용)
+
+**적용한 변경 (1파일 · `DocOriginalViewerModalV2.vue`):**
+- **① `assembleMarkdown` 재귀화** — 기존 flat `for (section of outline)` → 내부 `walk(sections, depth)`로 `section.children`까지 재귀. heading 레벨은 depth 기반(`"#".repeat(depth+1)`), 직접 블록 없는 상위 섹션도 `if (heading || body.trim())`로 제목만 넣고 자식 진입. → 계층형 전체 조립(평탄 구조도 그대로 동작 = 범용).
+- **② `headingHasBody(startEl)` 헬퍼 신설 + `focusByHeadingPath` 매칭 가드** — 매칭된 게 heading인데 그 아래 청크 본문이 안 붙으면(`/^H[1-6]$/.test(el.tagName) && !headingHasBody(el)`) 그 매칭 버리고 continue → 본문 텍스트 폴백(`focusActiveContent`)으로 넘어가 실제 답변 문단 하이라이트.
+- **③ `highlightSectionRange` 양방향 확장** — 기존 "앞으로만" 확장 → 앵커 기준 **앞뒤 양방향**으로 청크(content) 속 블록 확장. 본문 앵커면 위 섹션 제목까지(`kms-focus`) 강조. → 긴 답변에서 앵커가 중간에 걸려도 앞부분까지 다 칠해짐("일부만 하이라이트" 방지) + 제목+본문 끊김 없이 강조. (heading 앵커면 뒤로 확장 안 함 = 정상 케이스 무변경)
+- **④ `focusByContentAnchor` 신설 + `focusActiveContent` 우선순위 재정렬 (content 우선)** — 기존은 heading_path를 먼저 써서, heading_path가 거친 카테고리("계좌개설")일 때 **같은 카테고리의 다른 섹션(예: "스마트폰 계좌개설 중 신분증 촬영")에 오매칭**(substring 매칭 + "대분류/세부분류" 공통 접두로 본문검사까지 통과)됐음. → 이제 ①청크 본문(`sectionContent`)의 **템플릿 접두 제외한 '구별되는 줄'로 실제 블록을 먼저 찾고** ②실패 시 heading_path(표 문서용) ③최후 activeContent 순. 특정성 높은 content 우선이라 오섹션 방지.
+
+**원복 방법 (파일 직접 편집, 셋 다 `DocOriginalViewerModalV2.vue`):**
+- **①** `walk` 재귀 제거 → 원래 `for (const section of outline)` flat 루프로. 핵심 원형: `if (!blocks.length) continue;` / `const level = section?.title_block_type === "heading_1" ? "# " : "## ";` / `if (body.trim()) parts.push(heading + body);`.
+- **②** `headingHasBody` 함수 삭제 + `focusByHeadingPath` 매칭 블록의 `if (/^H[1-6]$/.test(el.tagName) && !headingHasBody(el)) continue;` 한 줄 삭제.
+- **③** `highlightSectionRange`를 "앞으로만 확장" 원형으로 되돌림: 제목 매칭 요소(startBlock)에 `kms-focus` → `startIdx+1`부터 `isCoveredByContent` 참인 동안 `kms-focus-range`로 forward 확장(양방향/뒤로-제목 로직 삭제), `!contentCompact || startIdx===-1` 조기 return.
+- **④** `focusByContentAnchor` 함수 삭제 + `focusActiveContent`에서 호출부(`if (focusByContentAnchor()) return;`) 삭제 → `focusByHeadingPath` 먼저 호출하던 순서로 복귀.
+
+**회귀 안전장치:** ②는 heading 매칭에만 적용(본문/폴백 무관), ③은 앵커가 heading이면 안 탐 → 제목=실제 섹션이라 원래 잘 되던 케이스는 무변경. ①은 평탄/계층형 둘 다 처리(범용).
+
+**검증 체크포인트:** "CMA유형을 변경하고 싶어요" 케이스로 ①본문 뒷부분까지 다 나오나 ②하이라이트가 "CMA" 제목이 아니라 실제 답변 문단에 칠해지나 ③폴백 케이스(예: ISA 공모주)에서 제목~본문 사이 구멍 없이 이어지나 ④정상(제목=섹션) 케이스 회귀 없나.
+
+**검증 결과 따라:** 정상이면 이 항목 삭제, 문제면 위 "원복 방법" 적용.

@@ -1107,3 +1107,105 @@ docker-compose environment:  >  Dockerfile ENV  >  코드 기본값(configServic
 - **프론트 최종 구현(2축, 확정)**: **A. 선제 타이머** — sessionStorage(VITE_COOKIE_USE_AT=false) 토큰 읽어 **만료 ~3분 전 주기 refresh**(모든 요청이 매번 저장소서 토큰 재읽기라 저장소만 갱신되면 다음 발화부터 새 토큰 자동적용, assist-stream 코드 무수정). **B. auth-expiry 세션칩** — 우리 #84 이벤트 구독해 헤더에 "세션정보" 칩(주황/빨강+툴팁) 표시(안전망). → **우리 #84가 버려진 게 아니라 "2차 안전망"으로 실역할 부여됨**. 백엔드 #84 필드(`auth-expiry`/`expiresInSec`/`expiresAt`/`thresholdSec`)가 프론트 `AuthExpiryEvent`와 **계약 일치 확인 → 백엔드 무변경**.
 - **배포**: 백엔드 배포 완료(#82~84), 프론트 배포 중. 소명문서 ①②③ 전부 **조치 완료**로 확정. 커버 이메일도 작성(발송 완료).
 - **교훈/메모**: ① 고객 소명문서엔 dev 특수케이스(로컬 dev토큰 exp 2083 불멸) 제외 — AWS 실환경 기준만. ② "적용예정 vs 조치완료" 등 상태표기는 실배포 맞춰 사용자가 확정. ③ 문서에 "세부기술 요청시 제공" 같은 상투구도 고객이 부스럼 느낄 수 있음(단 무해). ④ **외부 curl(/auth/refresh 등)은 사용자가 직접 실행**, Claude는 오프라인 디코드·명령작성만.
+
+### 86. 실시간 이전대화 조회 API 신규 + 문서정보(assist-snapshot) 저장/조회 구조 파악 (2026-07-06)
+프론트 요청: 상담 통화 중 페이지 이탈/뒤로가기 후 복귀하면 실시간 STT 대화가 인메모리라 화면에서 사라짐 → "이전대화 불러오기"용으로 저장된 turn 조회 API 필요. 제안 `GET /aicc/asst-service/turns?call_id=`.
+- **테이블 관계 재확인(사용자 분석 검증)**: `raw_call.callstats_call.id`(PK) = 다른 테이블들이 참조하는 `callstats_id`(1:N). `callstats_call.call_id`는 외부에서 전달받은 통화ID로 id와 1:1이지만 조인키 아님. `callstats_turn.callstats_id` = `callstats_call.id`. 코드 근거: `call-stats.service.ts:66` `ck.callstats_id = call.id`, `:155` `call.id = s.callstats_id`. **turn_idx는 0부터 시작**(프론트 명세는 "1부터"라 되어있어 불일치 — 프론트에 전달 필요).
+- **기존 유사 API 존재**: `GET /callstat/calls/by-call-id/:call_id/turns`(findTurnsByCallNumber)가 거의 동일. 차이 딱 2가지 → ① 응답이 `CallstatTurn` 엔티티 통째(프론트는 `{call_id,turns:[6필드]}` 래핑) ② call 못 찾으면 **404 throw**(프론트는 실시간 화면이라 빈배열 원함). 결론: **기존은 손 안 대고**(다른 소비자 영향 방지) 내부 조회로직만 재활용해 신규 생성.
+- **구현(수정 2파일, tsc 통과)**:
+  - 경로 확정(사용자 지정): **`GET /callstat/calls/realtime-by-callid/:call_id/turns`**(게이트웨이 `/aicc/asst-service/callstat/calls/realtime-by-callid/{call_id}/turns`). 프론트 제안 `/turns` 대신 명시적 경로로.
+  - `advisor.service.ts`: `findTurnsRealtimeByCallNumber(callId, token)` 신설 — call_id로 CallstatCall 찾고 없으면 `{call_id, turns:[]}`, 있으면 `callstats_id=call.id`로 turn 조회(turn_idx ASC) 후 6필드(callstats_id/turn_idx/role/utterance/masked_utterance/created_at) 매핑. **전체를 try/catch로 감싸 통화없음/턴없음/오류 전부 예외 없이 빈배열**(실시간 화면 보호).
+  - `callstat.controller.ts`: 엔드포인트 + Swagger 스키마 추가.
+  - 프론트 전달: 변경된 endpoint 통보 + turn_idx 0-base 주의.
+- **문서정보 조회 질문 조사(사용자 질문: 상담종료 후 대화이력에 메시지별 "문서정보"가 노출됨 → DB저장한다는 뜻, 조회 API 있나?)**:
+  - **저장처 = `advisor.callstat_assist_snapshot`** 테이블. assist-stream이 실시간 relay하는 "근거문서 Top5 + hint + distilled + answer"를 turn별로 저장. 컬럼: id(uuid PK), call_id(varchar128), turn_idx(int4), customer_query(text, 매칭보강), payload(jsonb=sources/hint/distilled/answer), created_at. `@Unique(call_id, turn_idx)` upsert.
+  - **저장 API**: `POST /assist-stream/snapshot`(AssistSnapshotController, upsert) — GET 조회 전용 엔드포인트는 **없음**.
+  - **조회 경로**: 문서정보만 뽑는 독립 GET은 없고, `GET /callstat/calls/:id` 통화상세 응답의 **`snapshots` 배열**로 포함됨(advisor.service.ts:423, `call.call_id`로 조회 turn_idx ASC). 즉 프론트가 대화이력 화면에서 문서정보 보는 건 이 상세 API의 snapshots로 추정.
+  - **남은 것**: 이번 realtime turns와 짝으로, 문서정보도 call_id 단독으로 빈배열-안전 조회하는 전용 GET이 필요한지는 프론트 확인 후 결정(현재는 상세 API에 묶여있음). 커밋·배포는 사용자가 직접.
+
+### 87. todos 테이블 기한(due_date) 컬럼 추가 + 등록/수정 API 반영 (2026-07-08)
+프론트 요청: 할일(todo)에 "기한 적용"(언제까지 처리) 기능 → 우선 컬럼 1개로 충분. 요구=일자까지만(시각 불필요).
+- **컬럼 확정**: 처음 `due_at timestamptz` 제안했다가, 요구가 "일자까지만"이라 **`due_date date NULL`로 교체**. 이 코드베이스는 timestamptz +9 타임존 어긋남 이력(started_at)이 있어 날짜전용은 `date`가 정석·안전. (사용자가 준 CREATE TABLE 스키마 기준, 사용자가 직접 ALTER 실행: `DROP COLUMN due_at; ADD COLUMN due_date date NULL`.)
+- **동작 확정(사용자 결정)**: ① 자동등록(auto-create)엔 기한 미적용 → 항상 null(나중 보완) ② 수정(PUT)은 **전달된 때만 반영**(미전달=기존값 유지, 명시적 null=기한 해제) — 기존 title/state의 "요청 필드만 업데이트" 패턴과 동일. state만 바꿀 때 기한 안 날아가게.
+- **⚠️ 핵심 함정**: 로컬 `NODE_ENV=local`은 synchronize=true라 **엔티티에 없는 컬럼을 DROP**함 → 수동 ALTER만 하고 엔티티에 안 넣으면 다음 접속에 컬럼 삭제됨. 그래서 엔티티 추가 필수.
+- **구현(6파일, tsc+eslint 통과)**:
+  - `todo/entities/todo.entity.ts`: `@Column({type:'date', nullable:true}) due_date: string|null` 추가(TypeORM date는 JS에서 'YYYY-MM-DD' 문자열).
+  - `todo/dto/create-todo.dto.ts`: `due_date?` 선택 필드, `@Matches(/^\d{4}-\d{2}-\d{2}$/)` 검증.
+  - `todo/dto/update-todo.dto.ts`: `due_date?: string|null`(null 허용=해제), 동일 검증.
+  - `todo/services/todo.service.ts`: createTodo에 `due_date: dto.due_date ?? null`; updateTodo에 `if (dto.due_date !== undefined) todo.due_date = dto.due_date`.
+  - `todo/controllers/todo.controller.ts`: GET 목록 Swagger 응답 스키마에 due_date(date, nullable) 노출.
+  - `common/services/dynamic-database.service.ts` runSchemaMigrations: `addColumnIfNotExists(advisor, todos, due_date, 'DATE NULL')` — develop 배포 시 **전 테넌트 DB 자동반영**(사용자 수동 ALTER는 한 DB만 적용됐을 것이므로).
+- **배포 반영**: 로컬은 서버 완전 재시작 필요(커넥션 캐시). dev는 develop 배포로 마이그레이션 자동. 자동등록 손 안 댐. 커밋·배포는 사용자 직접.
+- **남은 것**: 프론트 전달용 규격 정리(별도 산출). auto-create 기한 보완은 추후.
+
+### 88. todos 조회에 call_id 조인 추가 + memos 핀 고정(is_pinned) 기능 신규 (2026-07-08)
+#87(todos due_date)에 이어 프론트 요청 2건.
+- **① todos 조회에 call_id 추가**: `GET /todos` 응답에 `callstats_id`만 있고 `call_id` 없었음. `advisor.todos`엔 call_id 컬럼 자체가 없고 `raw_call.callstats_call.call_id`에 있음(관계: todos.callstats_id = callstats_call.id). 이미 전화번호(consumer_phonenumber) 때문에 CallstatCall을 **left join** 중이라 select+매핑만 추가. 매칭 통화 없으면 `call_id: null`(특수케이스 대응, left join이라 todo는 안 사라짐). 수정: `todo.service.ts` getTodos(addSelect `callstat.call_id` + 매핑 `?? null` + 리턴타입에 `call_id?: string|null`), `todo.controller.ts`(리턴타입+Swagger 스키마). CallstatCall 엔티티에 call_id는 varchar로 존재 확인.
+- **② memos 핀 고정 기능**: 프론트에 메모 핀 기능 있는데 저장 안 됨. 백엔드에 핀 컬럼 전무(is_pinned grep 0건). **주의**: memos의 `bookmark_id`는 핀 아님 — 메모↔북마크(스크립트/지식) 연결 링크(nullable). 이번 건과 무관하게 그대로 둠(사용자 지시).
+  - **결정(사용자)**: 타입=`is_pinned BOOLEAN NOT NULL DEFAULT false`(코드베이스는 플래그를 int로 쓰지만 사용자가 boolean 명시). 정렬 적용처=`findMemosByUserKey`(`GET /memos/user/:userKey`, 프론트 메모목록 화면이 쓰는 API로 확인). 업데이트 API=**기존 `PATCH /memos/:id` 재사용**(신규 엔드포인트 X, updateMemo가 Object.assign이라 DTO에 필드만 추가하면 동작).
+  - 구현(4파일, tsc+eslint 통과): `memo.entity.ts`(is_pinned boolean default false), `dto/update-memo.dto.ts`(`is_pinned?` @IsBoolean @IsOptional), `memo.service.ts` findMemosByUserKey 정렬 `{ is_pinned:'DESC', create_at:'DESC' }`(핀 1순위·최신 2순위), `dynamic-database.service.ts` runSchemaMigrations에 `addColumnIfNotExists(advisor, memos, is_pinned, 'BOOLEAN NOT NULL DEFAULT false')`.
+  - 참고: memos 조회 메서드가 5개(user/group/all/bookmark/그룹내부)라 정렬은 **화면이 쓰는 user별에만** 넣음(엉뚱한 데 넣으면 화면 안 고쳐짐).
+- **DB 반영**: 로컬 수동 `ALTER TABLE advisor.memos ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT false;` + 서버 완전재시작(캐시). dev는 develop 배포로 마이그레이션 자동. todos call_id는 컬럼추가 아니라 조인이라 DB작업 없음.
+- **프론트 전달**: todos 조회 응답에 call_id 추가(없으면 null) / 메모 핀 = `PATCH /memos/:id {is_pinned:true|false}`, 목록은 `GET /memos/user/:userKey`가 핀 우선 정렬해서 내려줌.
+- **상태**: 사용자가 배포 후 테스트 예정. 커밋·배포는 사용자 직접.
+
+### 89. 실시간 VOC 감정이 화면에 안 뜨는 문제 → 원인은 "전달"이 아니라 "감정 매핑 penalty" (2026-07-09)
+증상: "assist-stream VOC가 실시간 배포가 잘 안 됨(부분 손실). 근데 상담후 테이블엔 저장 잘 됨." → 배포/전달 문제로 의심.
+- **전달 경로 조사(무혐의 판명)**: publishVoc → Redis PUBLISH `{env}:{vendor}:{cc_cti}:call:voc` → asst self-subscribe → RedisMonitorController.handleChannelMessage → SocketGateway.broadcastToRedisMonitorRoom → 프론트 room. 로그로 정상턴(turn1) 확인: `발행완료(수신자:1명)` + `BROADCAST (1 clients)` + `ok=true`. **전달은 완벽.** pod 1개(멀티인스턴스 아님), 프론트는 로그인 시 room 상주. (구조 특이점: VOC만 코칭/nlp과 달리 "턴당 단발 publish, 무재전송"이라 진짜 손실 시 티남 — 이번 건 아님)
+- **진짜 원인(로그 turn3에서 발견)**: CE emotion API 원문 `emotionType:"dissatisfied", emotionScore:0.65` 인데 최종 `emotion=normal(0.5)`로 뭉개짐. summary 텍스트는 "불만족 표출"로 맞게 들어가는데 type/score만 틀림 = 파싱 아니라 **매핑 버그**.
+  - 범인: `summary.service.ts` `remapEmotionScore()`의 **부정감정 완화 penalty**(THRESHOLD=0.6, PENALTY=0.15). score≥0.6이면 −0.15 감점 후 `deriveEmotionTypeFromScore`로 type 재산출 → dissatisfied 0.65 → 0.5 → **normal로 강등**. dissatisfied는 CE score 0.75 미만 전부 normal, angry도 0.95 미만이면 dissatisfied로 강등. CE가 dissatisfied를 보통 0.6~0.7로 줘서 **거의 100% normal**로 나감 → 화면에 감정변화 안 보임.
+  - ⚠️ `remapEmotionScore`는 realtime·summary **공통** 매핑 → 실시간 배포값 + **DB 저장값도 normal로 뭉개져 저장**되고 있었음(사용자가 "저장 잘 됨"이라 한 값이 실은 normal).
+- **수정(사용자 확정: penalty 완전 제거)**: 사용자가 "부정감정이 너무 자주 나와서 의도적으로 눌렀던 것" 확인해줌. 그래도 type 강등 부작용이 근본문제라 **완전 제거** 결정.
+  - `NEGATIVE_EMOTION_PENALTY_THRESHOLD`/`NEGATIVE_EMOTION_PENALTY` 상수 2개 삭제 + remapEmotionScore 감점 블록 삭제(`let score`→`const`). clamp가 구간 보장하므로 `deriveEmotionTypeFromScore(score)`는 CE 원본 type과 항상 일치. tsc --noEmit 통과, 잔여 참조 0.
+  - 결과: dissatisfied(0.65)→dissatisfied, angry(0.85)→angry, normal 유지. 과거 저장분은 소급 안 됨(새 통화부터 정상).
+- **프론트 조언(감정변화 시각화)**: type 전환 강조 / score·3축 종합위험지수 실시간 그래프 / 통화중 최고치 배지(단발손실 대비 겸함). 필요시 종합위험지수를 백엔드 payload에 선계산해 넣는 것도 옵션(미결).
+- **상태**: 사용자가 배포(develop) 후 통화 테스트 예정. 커밋·배포는 사용자 직접.
+
+### 90. dev(5f)에서 LLM Orchestrator가 계속 호출됨 → 원인은 "배포 미반영", 결론은 orchestrator 코드 완전 제거 (2026-07-09)
+증상: 5f 개발기 로그에 `LLM Custom Complete 요청` + `호출 실패 500`이 계속 뜸. "orchestrator는 안 쓰기로 했는데 왜 호출되냐"가 출발점.
+- **호출부 특정**: `customComplete` 실호출 3곳(summary 상담유형·VOC, assist-stream-new) + `complete` 3곳(summary 요약/키워드, todo). 요약/키워드/상담유형/VOC/할일은 **전부 CE 대체 경로가 있고 orchestrator는 env 스위치(`POSTCALL_ANALYZER`/`VOC_ANALYZER`) 롤백용**, assist-stream-new는 미사용(NOT IN USE) 컨트롤러.
+- **범인 추적(핵심)**:
+  1. 에러 스택이 `VocRealtimeService.handleUtterance → SummaryService.analyzeVocViaOrchestrator`(게이트 안 거치고 직접 호출) → **실시간 VOC** 경로인데 현재 소스와 다름(현재 소스는 `analyzeVocByTenant → analyzeVoc` 게이트 경유).
+  2. `.env.5f.development`의 `VOC_ANALYZER=ce`로 바꿔도 계속 500 → **배포된 `dist`가 게이트 생기기 전 옛 빌드**라는 증거.
+  3. 도커는 `--build --force-recreate`까지 했는데도 옛 로그 → 진짜 원인은 **배포 서버 로컬(`/dataset/aicc/asst-service`)이 origin과 divergent라 `git pull`이 막혀** 소스·env가 옛 상태로 남아 그걸 빌드한 것. 도커 캐시가 아니었음.
+  4. 해결: `git fetch origin && git reset --hard origin/develop_nohsn`(5f는 `develop_nohsn` 브랜치 배포)로 소스 강제 정렬 후 재빌드. `b1f1326`에 `VOC_ANALYZER=ce` 이미 포함돼 있어 정렬만으로 CE 확정.
+- **결정(사용자): orchestrator 코드 아예 제거**(env `ce`로 봉인만으론 불안 → 롤백 스위치째 삭제). 2커밋 단계로:
+  - **1단계**: `summary.service.ts`·`todo.service.ts`에서 `*ViaOrchestrator`(요약/키워드/상담유형/VOC/할일) + `useOrchestratorForPostcall` + VOC 게이트 + orchestrator 전용 헬퍼(`parseVocResponse`/`parseRiskAxis`/`buildVocPrompt`/`parseCounselingTypeResponse`) 삭제, 게이트 4개 **CE 직행**. `LlmOrchestratorService`·`ConfigService`(todo) 주입 제거.
+  - **2단계**: 미사용 `assist-stream-new`(controller+service) 삭제, `common/services/llm-orchestrator.service.ts` 삭제, `advisor.module.ts` 등록(import/controllers/providers/exports) + `app.module.ts` AuthMiddleware 제외경로 정리.
+- **안전성**: 실행 경로 변화 0(orchestrator는 env가 이미 ce라 죽은 코드였음), `npm run build` 2회 통과, 코드 내 orchestrator 참조 0. DTO(`Llm*ContentDto`)는 `summary/dto` 소속이라 무관. ⚠️ 트레이드오프=orchestrator 롤백 스위치 소멸(요약/VOC 등 CE 단일경로, 단 각 경로 fail-soft). `LLM_ORCHESTRATOR_HOST` env는 존치(무해, 사용자 요청). 롤백은 git.
+- **메모리화**: 5f는 `develop_nohsn` 배포 + 배포서버 divergent로 pull 막히면 옛 소스 빌드됨(→ reset --hard) 함정을 memory에 기록.
+- **상태**: 코드 수정·빌드검증까지 완료. 커밋(2분할)·배포·재빌드는 사용자 직접. 배포 후 `CE emotion API VOC 3축 분석 시작`/`상담유형 분류 완료(CE)` 로그로 확인.
+
+### 91. 프론트 상담화면 리뉴얼 문의 2건 → ② direction/call_type 미적재(우리 소관 아님) + ③ 통화이력 목록용 신규 API + summary 4필드 컬럼화 (2026-07-13)
+프론트 문의: ② `GET /callstat/agent-summary` 의 `direction`/`call_type` 이 26건 전부 null, ③ 목록에 의도/상담유형/감정이 없음(상세엔 있음).
+- **② 결론: asst-service 무관, 적재 측 문제.** 두 필드는 `raw_call.callstats_call` 컬럼(`direction` varchar(8), `call_type` **jsonb**인데 엔티티 타입은 string — 값 들어오면 손봐야 함). asst-service는 `call.*` 로 읽어 그대로 내려줄 뿐 **INSERT/UPDATE 코드가 아예 없음**(read-only). 값 스펙 힌트는 목록 필터 DTO의 `@IsIn(['I','O'])` (I=인바운드/O=아웃바운드)뿐 → 콜 적재 담당자 확정 필요. 사용자 판단: **미구현으로 남겨둠**.
+- **③ 신규 엔드포인트 `GET /callstat/call-history`** (기존 agent-summary는 무손상 유지, 요청 파라미터 동일). 내부적으로 `getCallStatsByAgentAndDate()` 재호출 후 페이지 call id 로 일괄 조인(N+1 없음):
+  - `categories`: `advisor.call_categories` + `ce.external_categories` → `[{external_categories_id, category_path}]`
+  - `voc`: `advisor.emotions` 3축(emotion/complaintRisk/churnRisk) — **상세 API와 구조 동일**(프론트 컴포넌트 재사용). 구버전 스키마 테넌트 대비 try/catch로 격리(실패 시 voc=null, 목록 500 방지)
+  - `intent`: `raw_call.callstats_turn.intent` 원본. **콜 대표 의도 컬럼이 없고 적재도 안 됨 → 당분간 항상 null**, 가공 없이 자리만 유지(적재 시작되면 자동 반영)
+- **summary 4필드 컬럼화 (핵심 설계 변경)**: `POST /summary` 는 LLM 4개(내용요약/키워드/상담유형/VOC)를 호출하는데, 내용요약 결과 4필드(`customerInquiry/handlingResult/followUp/notes`)를 `buildSummaryMarkdown()` 으로 **합쳐서 리턴만 하고 버리고 있었음**. 저장은 별개 요청(`POST /summary/data`)이라 서버가 원본을 못 갖는 구조.
+  - **프론트 확인 결과**: `/summary` 200 → **자동으로 `/summary/data` 즉시 호출**(상담사 개입 없음) + 수동 저장 N회. **요약 텍스트는 사람이 편집 안 함(편집되는 건 상담유형뿐)** → 목록 카드에 LLM 원본 표시 OK.
+  - **결론(파싱·프론트 작업 0)**: `advisor.summary` 에 `customer_inquiry/handling_result/follow_up/notes` (**TEXT NULL**) 추가하고, **`POST /summary` 시점에 LLM 원본 4필드를 upsert**(VOC/emotions 저장하는 자리, 동일 fail-soft). 이후 `/summary/data` 저장은 summary 마크다운·키워드·상담유형만 덮어써서 4컬럼은 원본 유지.
+  - `callLlmSummarize()` 가 `{markdown, content}` 를 리턴하도록 변경 + `saveSummaryContent()` 신설. 마이그레이션은 `runSchemaMigrations` 의 `addColumnIfNotExists` 4개(전 테넌트 자동, RDS 접근 불필요).
+  - **조회 폴백**: `call-history` 는 컬럼값 우선, null이면(컬럼 도입 전 과거 요약) `summary` 마크다운의 `**1. 고객 문의**` 섹션을 정규식 파싱 → **기존 데이터도 즉시 표시**. 목록 카드 "의도" = `customer_inquiry`.
+  - **컬럼 타입 논의**: 사용자가 VARCHAR(100) 제안 → PG는 varchar/text 저장공간·성능 동일하고 **초과 시 truncate 아니라 에러**(=4필드 조용히 저장 실패), 게다가 `addColumnIfNotExists` 는 **add-only라 나중에 길이 확장 불가**(전 테넌트 수동 ALTER 필요) → **TEXT 확정**.
+- **수동 선반영 SQL**(사용자 요청, 파일로는 안 남김): `ALTER TABLE advisor.summary ADD COLUMN IF NOT EXISTS customer_inquiry TEXT NULL;` (handling_result / follow_up / notes 동일).
+- **상태**: 코드 수정 + tsc/eslint 통과. 커밋·배포는 사용자 직접. 배포 후 `[마이그레이션] 시작` 로그 + 신규 요약 1건 → `call-history` 의 `customer_inquiry` 채워지는지 확인 예정. (향후 과제: 오라클 백엔드 신규 구축 시 TEXT/TIMESTAMPTZ/jsonb 등 타입 매핑 재정의 필요)
+
+### 92. 실시간 VOC가 상담사/관리자에게 간헐적으로 안 옴 → 원인 100% 프론트(소켓 재연결 시 룸 재조인 누락), 백엔드 무결 (2026-07-14)
+증상: 관리자(최대 4명 상담사 동시 모니터링)와 상담사에게 **VOC(감정/민원/이탈)만** 간헐적으로 안 옴. STT·코칭·공지·상담사상태는 정상. "관리자로 로그인 후 시간이 지나면 안 오다가 **새로고침하면 옴**".
+- **초기 오진(기록용, 전부 틀렸음)**: ① "관리자용 공유 경로가 없다" → 틀림(관리자도 상담사별 voc 룸을 직접 구독 중). ② redis-monitor 참조카운트 부재로 서로 강제 퇴장 → 프론트가 unsubscribe를 **아예 호출 안 함**(스웨거 전용)이라 무관. ③ 채널 prefix(`VOC_CHANNEL_ENV`) 불일치 → 코칭 룸도 같은 env를 쓰는데 코칭은 정상이므로 배제. ④ 멀티 pod + socket.io redis adapter 부재 → 미검증. **교훈: 로그부터 봤어야 했다.**
+- **로그로 확정**(`aicc-asst-service-deploy-57c6d556f5-4hftw`, 24:13~24:34, 21분):
+  - 발행 채널 `dev:4609686:56356659:call:voc`(32건) == 프론트 join 룸(30건). **채널명·발행 타이밍·브로드캐스트 전부 정상.**
+  - `BROADCAST START` 인원수: **STT 룸 3~4명 vs VOC 룸 2~3명 — 항상 정확히 1명 적음.**
+  - 소켓별 join 룸 대조: 재연결 소켓(`3_TW` 끊김 24:17:48 → 2초 뒤 `2kPJ` 접속)이 6개 룸(coaching/notices/agent-status/events/persisted/nlp:complete)은 재조인했는데 **`call:voc`+`call:nlp:partial` 2개만 정확히 누락**.
+- **진짜 원인(둘 다 프론트, 프론트팀 인정·수정 완료)**:
+  1. `useChatSocket.ts:40` **`once("connect")`** — voc/nlp:partial 조인이 `once`라 **브라우저당 평생 1회만** 실행. 나머지 룸은 `on("connect")`이라 재연결마다 복구됨 → 재연결 시 VOC 룸만 영구 이탈. 새로고침하면 낫는 이유가 이것. → `on("connect")`로 수정.
+  2. `useChatMessageParser.ts:316` **`currentCallId` 굳음** — `call:start`를 놓치면 이전 콜 id가 남아 새 콜 VOC를 전부 stale로 drop. → 수정 완료.
+- **끊김 자체의 원인은 미제(정직하게 미확정)**: disconnect 8건 전부 `transport close`, **`ping timeout` 0건**, 소켓 수명 12초~21분으로 제각각 → LB idle timeout 패턴 아님(`pingInterval:25s`라 idle도 안 됨). 서버엔 disconnect 코드 0줄, 프론트도 로그아웃 때만 disconnect. Redis는 **무관**(브라우저↔서버 구간 vs 서버↔Redis 구간은 별개 연결). 결론: 끊김을 0으로 만드는 건 불가능하므로 **고칠 것은 "재연결 후 복구"**.
+- **백엔드 확인 사실**: `client.join()`은 `@SubscribeMessage('join-room')` 한 곳뿐(`socket.gateway.ts:302`). `handleConnection()`에 **룸 복구 로직 없음** → 재연결 시 소켓 id가 새로 발급되어 룸 멤버십 전부 소멸. **"재조인은 클라이언트 몫"이 현재 계약.**
+- **상태**: 프론트 2건 수정 완료, 배포 후 검증 예정. **검증법**: `grep "BROADCAST START: Room" | grep -E "call:voc|call:nlp:complete"` → **VOC 룸 인원수 == STT 룸 인원수**면 해결.
+- **미해결 숙제(이번 원인 아님, 실재하는 버그)**:
+  1. `voc-realtime.service.ts:81` **`FALLBACK_CC_CTI_ID='56356659'` 하드코딩** — cc_cti_id 못 구하면 모든 통화 VOC가 저 상담사 1명 채널로 발행. 주석에도 "제거 대상". 현재는 프론트가 항상 보내줘서 잠복.
+  2. **redis-monitor 구독에 참조 카운트 없음** — `DELETE /redis-monitor/unsubscribe-all` 한 번이면 그 pod에 붙은 **전원의 모든 채널**이 죽음(`deleteRedisMonitorRoom`이 룸의 전 클라이언트를 강제 leave + Redis 구독 해제). 프론트가 안 불러서 잠복.
+  3. **재연결 시 서버 룸 자동 복구**(handshake query로 채널목록 수신 → `handleConnection`에서 자동 join) — 프론트 실수에 면역이 되는 안전망. 프론트팀 합의: **프론트 배포 결과 확인 후 논의**.
