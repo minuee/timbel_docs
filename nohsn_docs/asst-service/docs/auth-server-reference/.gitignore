@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+# 개인키는 절대 형상관리에 올리지 않는다
+keys/

@@ -2217,3 +2217,304 @@ targetMessage.highlightKeywords = [hintKey];                                // �
 
 ### 트레이드오프
 - 기존 상담사 화면은 `v-if/v-else` 로 **렌더 자체를 차단**. 이 방식은 콘텐츠가 렌더된 채 **위를 덮는** 것 → 리프 내부 API 가 한 번 더 나갈 수 있음(어차피 실패, 화면 영향 없음). 완전 차단이 필요하면 리프 10개에 `v-if` 를 넣어야 함.
+
+---
+
+## 2026-07-14 (이어서) — 상담화면: 스크롤바 간격 + 과거 대화 볼 때 자동스크롤 방지
+
+### 1) 스크롤바가 말풍선에 붙어 보이는 문제
+- 증상: 대화가 쌓이면 우측에 테마색 스크롤바가 생기는데 말풍선과 딱 붙음. 좀 더 오른쪽(구분선 쪽)으로 밀고 버블과 간격을 두고 싶다.
+- 구조: 패널 루트가 `ECPContainer`(ui-kit 기본 `padding: 20px`) → `.chat-content-host`(**overflow:hidden**) → `.adv-chat-content-container`(overflow-y:auto, 실제 스크롤러).
+- ⚠️ **첫 시도 실패**: 스크롤 컨테이너에 `margin-right:-12px; padding-right:12px` → 삐져나간 스크롤바가 **부모의 `overflow:hidden` 에 잘려 아예 안 보임**.
+- ✅ **해결**: 음수마진을 **부모(host)** 로 올림. 자기 padding box 안이라 안 잘림.
+  - `.chat-content-host { margin-right: -12px; }` — 루트 padding(20px) 안으로 확장 → 스크롤바가 12px 오른쪽으로
+  - `.adv-chat-content-container { padding-right: 12px; }` — 말풍선은 제자리 유지 → 버블-스크롤바 간격 12px
+- 적용: `view/advisor-renual/chat/components/RenualChatPanel.vue`, `view/advisor/components/chat/index.vue` (리뉴얼/원본 둘 다 같은 증상)
+
+### 2) 스크롤을 위로 올려도 새 발화가 오면 맨 아래로 튀는 문제 (과거 대화 열람 불가)
+- 원인: "위로 올림" 상태를 **`showScrollToBottomButton` 하나로만** 판단. `onScrollerScroll` 이
+  ```ts
+  if (!isCalling.value) { showScrollToBottomButton.value = false; return; }  // ← 여기
+  ```
+  라서 **`isCalling` 이 false 인 환경에선 위로 올려도 플래그가 항상 false** → 파서의 `if (!showScrollToBottomButton.value) scrollToBottom()` 가드가 통째로 뚫림.
+  (버튼 노출 + 자동스크롤 억제 두 역할을 한 플래그가 겸하던 게 화근. 로컬/5f 에서 재현)
+- 수정(두 파일 동일):
+  1. `isUserScrolledUp` ref 신설 — `isCalling` 과 **무관하게** 스크롤 위치(맨 아래에서 150px 초과)로만 갱신
+  2. `scrollToBottom(force = false)` — `isUserScrolledUp` 이면 스킵. **디바운스(80ms) 실행 시점에 재확인**(대기 중 사용자가 올린 경우)
+  3. "최근대화로 이동" 버튼 클릭 → `isUserScrolledUp=false` + `scrollToBottom(true)` 강제 이동
+  4. 새 통화 clear 시 자동 따라가기 모드 복귀
+- 버튼 노출 조건(`isCalling` + 150px)은 **그대로 유지**. 사용자 테스트 결과 정상 동작 확인.
+
+---
+
+## 2026-07-15 — WAV 샘플: 시연1에 로컬 음성 재생 붙이기 (자막↔음성 싱크)
+
+### 배경
+- 기존 WAV 샘플(시연1/2)은 백엔드가 redis→STT 로 **자막 텍스트만 페이싱**해서 흘려보냄 → 화면 상담내용은 뜨는데 **음성이 안 들림**.
+- 서버에 있는 것과 **동일한 wav 2개**(고객/상담사)를 `public/assets/sample/` 에 넣어둠(`agent.wav`, `customer.wav`, 각 2944670 bytes = 동일 길이). 이걸 프론트가 직접 재생해 음성을 들려주는 게 목표.
+- 요청 확정: ①동시 재생(오버랩) ②시연1만 우선 ③싱크는 튜닝 가능하게.
+
+### 수정 (1파일) — `components/layout/Drawer/index.vue`
+- `agent.wav`+`customer.wav` 를 `new Audio()` 2개로 **동시 재생**. `startWavAudio()` / `stopWavAudio()` 헬퍼.
+- **재생 시작 = `start` API 응답 직후**(백엔드 페이싱 t=0 와 가장 가까운 시점 = 싱크 기준점). 기존 2.5초 `status` 체크는 **"실패 감지 전용"으로만** 남기고 재생은 이걸 안 기다림.
+  - ⚠️ 사용자가 우려한 대로 status running 확인 후(2.5초 뒤) 재생하면 오히려 음성이 자막보다 2.5초+ **뒤처져** 싱크 최악 → 응답 직후 재생으로 결정.
+- 음성 정리 경로 전부 연결: 정지(■)클릭·`no_listener`·status idle 실패·통화 자연종료 watch·`onBeforeUnmount`.
+- **시연1(`set===1`)만** 재생(시연2 파일 준비되면 확장).
+
+### ⚠️ 함정 — import.meta.env 는 이 프로젝트에서 undefined
+- 처음 `import.meta.env.BASE_URL` 로 경로를 짬 → **이 프로젝트는 webpack 빌드**(vite.config 없음, 모든 스크립트 webpack; `redisKey.ts` 도 `process.env.VITE_*` 로 읽음)라 **undefined** 되어 경로 깨짐. `tokenRefreshTimer.ts:7` 주석이 경고하던 그것.
+- ✅ 해결: `webpack.config.js` 의 `devServer.static` 이 `public` 을 루트로 서빙(`publicPath:"auto"`) → **절대경로 `/assets/sample/...`**(상수 `WAV_AUDIO_BASE`)로 로드.
+
+### 싱크 튜닝 포인트 + 실측 결과
+- `WAV_SYNC_OFFSET_MS` 상수(`Drawer/index.vue`) 한 줄만 조정:
+  - 음성이 자막보다 **빠르면** 양수(ms) → 그만큼 늦게 재생 시작(`setTimeout`).
+  - 음성이 자막보다 **느리면** 음수(ms) → 그만큼 앞부분 skip(`currentTime`).
+- ✅ **실측 확정값 = `1000`(+1000ms).** 실제로는 음성이 자막보다 ~1초 빨라서 음성을 1초 늦게 트니 맞음.
+  (처음 사용자가 방향을 반대로 말해 `-1000` 시도 → 더 어긋남 → `+1000` 으로 뒤집어 해결.)
+- ✅ **로컬 + 개발서버(`.env.5f.dev`, CHANNEL_ENV=localDev) 둘 다 `+1000` 으로 싱크 완벽 확인.**
+  (STT 파이프라인 지연이 두 환경에서 비슷했음. 환경변수화(`VITE_WAV_SYNC_OFFSET_MS`)는 값이 갈릴 때만 하기로 — 지금은 불필요.)
+- 자동재생 정책 차단 시 콘솔에 `[Drawer] WAV 오디오 재생 차단/실패` 경고. (localDev 데스크톱 크롬 데모라 대개 통과)
+
+## 2026-07-15 (이어서) — WAV 시연2 배선 + 리뉴얼 헤더/레일 알림 작업
+
+### A. WAV 시연2 파일 배선 (`components/layout/Drawer/index.vue`)
+- 위 시연1 후속. 시연2도 자기 파일로 재생하게 하드코딩(임시).
+- `WAV_AUDIO_FILES`(고정) → **`WAV_AUDIO_FILES_BY_SET`** 맵으로: `1:[agent.wav, customer.wav]` / `2:[agent2.wav, customer2.wav]`.
+- `startWavAudio()` → **`startWavAudio(set)`** 파라미터화. 호출부 `if (set===1) startWavAudio()` → **`startWavAudio(set)`** (시연1·2 각자 파일 오버랩 재생).
+- `public/assets/sample/` 에 `agent2.wav`+`customer2.wav` (8kHz·모노·16bit 2채널) 업로드하면 바로 동작. (시연1 파일과 동일 스펙 권장 = 싱크 일치)
+- ⚠️ 이 버튼은 `CHANNEL_ENV==="localDev"` 에서만 노출(로컬 시연용).
+
+### B. 리뉴얼 작업 1 — 상담화면 우측 레일 unread 숫자 (`view/advisor-renual/chat/index.vue`)
+- 요구: 기존 상담화면처럼 우측 레일(코칭요청/할일) 아이콘에 미확인 숫자 뱃지.
+- **`ChatRightRail.vue` 는 뱃지 UI 가 이미 완성**(badgeText/`.crr-badge`, 99+ 상한) — 부모가 `badges` 를 안 넘겨서 안 뜨던 것뿐.
+- 부모 `chat/index.vue` 3곳만: `coachingStore`/`todoListStore` 구독 + `railBadges` computed(`{ coaching: unReadCoachingCount, todo: remainingTodoCount }`) + `<ChatRightRail :badges="railBadges" />`.
+- 소스는 **기존 상담화면 레일과 동일**(CoachingRequest.vue=`unReadCoachingCount` / Todo.vue=`remainingTodoCount`). 카운트는 부트스트랩이 채움. 나머지 4개(콜이력/메모/북마크/설정)는 unread 개념 없어 미노출.
+
+### C. 리뉴얼 작업 2 — 공통 헤더 우측(상담사|상태|알림) 데모 반영
+> 데모 `#/agent/chat` 헤더 우측 = `홍길동 | ●대기중(pill) 🔔②(pill)`. CDP 크롬(9222)으로 실측.
+
+**C-1. `RenualPageHeader.vue`**
+- 상태 드롭다운 → **테두리 pill**(흰 배경+`--color-g20` 테두리+radius 999px, 화살표 유지). 상태↔알림 **구분선 제거**. (이름↔상태 `|` 만 유지)
+- 알림 부분(옛 ElBadge/벨) → 신규 **`<RenualNotifBell />`** 로 교체. 미사용 `alertCount` prop / `.rph-bell` 정리.
+
+**C-2. `RenualNotifBell.vue` (신규) — 알림 벨 + 알림 팝오버**
+- 벨 = 흰 pill + 벨 + **미확인 합계**(공지 unread + 코칭 unread) 빨간 뱃지.
+- 알림 = **공지 + 코칭 병합**(신규 API 없이 기존 스토어 2개: `noticeStore` + `coachingStore`). 백엔드 통합 API 나오면 items 계산만 교체.
+- **탭 없이 통합 한 리스트**(사용자 확정) + **드릴다운 상세**(뒤로가기, 페이지 이동 없음 → 상담 중에도 안전).
+  - 공지 상세: `[긴급/일반] 제목 + 본문(HTML)`, 열면 자동 읽음(`markNoticeReadByDetail`).
+  - 코칭 상세: `발신자 + 본문(text) + 확인완료`(`onReadCoaching`).
+- **⭐ "미확인만" 노출**(사용자 확정): 공지=`isNew` / 코칭=`!is_read` 만. 읽으면 목록에서 사라짐 → 스크롤 문제 해결. 벨 뱃지 = 목록 개수와 일치.
+  - **함정**: 미확인만 필터하면 공지 상세 여는 순간 자동읽음→목록에서 빠져 상세가 깨짐 → 상세는 **클릭 시점 복사본(snapshot ref)** 으로 유지.
+- 로드 타이밍: 벨 뱃지 카운트는 부트스트랩이 이미 채움. 목록 본문은 팝오버 열 때(`@show`) `fetchPopoverNotices`+`refreshCoachings` 최신화. (상담사 기준 — 관리자 케이스 나중)
+- 미정의 토큰 주의: `--color-g05`/`--color-g30` 은 없음(정의는 `--color-g5`/`--color-g35`) → 미정의 쓰면 pill 배경·테두리 투명. `g5`/`g35` 로 사용.
+
+**C-3. 초기 논의에서 접은 방향 (기록)**
+- 코칭 항목 클릭 시 코칭 페이지 이동 → 상담 중이면 상담화면 이탈 문제 → 드릴다운 상세로 전환하며 **페이지 이동 자체가 사라져** 상담중 토스트 안내안도 폐기.
+- 공지 탭 분리 / 현 공지 팝오버(기간조회) 풀재현 → **폐기.** 공지 풀기능은 **이미 좌측 단일메뉴의 리뉴얼 공지사항 페이지**(`notice/index.vue`, `RENUAL_NOTICE`)가 담당. 알림 벨은 "빠른 미확인 확인"만.
+
+### D. "알 수 없음" / 코칭 태그 — 데이터 실측 후 결론 (변경 없음)
+- 알림 코칭 발신자 "알 수 없음" 정체 = 백엔드 응답 `sender_name` 이 **대부분 null**(dev 97건 중 다수). 코드 폴백(`sender_name || "알 수 없음"`)이 뜬 것 = **데이터 문제, 코드 정상**(문서 8-4 기존 이슈와 동일). 이름 있는 소수는 `coaching_request_id` 있는 요청응답(노성남/data_05/timbel_super4).
+- 받은코칭/코칭요청 태그 구분 검토 → `getCoachingsByReceiver` 응답은 **전부 "받은 코칭"** 이라 구분 실익 적음 → **구분 안 하고 '코칭' 태그 유지**(사용자 확정, 코드 변경 없음).
+
+---
+
+## 2026-07-15 (이어서) — 리뉴얼 북마크 인터랙션 구현 (`view/advisor-renual/bookmark/index.vue`)
+
+> 기존: 읽기전용 리스트(배지·그룹·제목·날짜)만, 클릭 무반응. 원본(우측 레일 팝오버 `components/layout/Drawer/components/Bookmark/`)의 상세·그룹관리 기능을 풀페이지 리뉴얼로 이식.
+
+### 확정된 방향 (사용자 선택)
+- **상세 표시 = 행 인라인 확장(아코디언, 한 번에 하나만)** — 모달/우측패널 아님.
+- **구현 범위 = 상세보기(내용) · 그룹이동/삭제 · 그룹 생성/편집.**
+- **⭐ 메모(추가/편집)는 의도적 제외** — 사용자가 "북마크 순수기능만"으로 확정(원본엔 상세모달 안에 메모목록+MemoEditorModal 있었으나 안 넣음).
+- **그룹 관리 UI = 통합 '그룹 관리' 모달**(신규생성+이름수정+삭제 한 곳). 진입 버튼은 **툴바 우측 끝**(A안, "조회" 버튼 뒤 📁 그룹 관리).
+
+### 구현 (한 파일)
+- **인라인 확장**: 행 클릭→▸/▾ 펼침. 내용은 `content_key` 유형(idx_/sect_/document_)별 `KnowledgeAPI.getDocIndex/getSection/getDoc` → `ToastEditor` 렌더. **원본 `BookmarkDetailModal.getDescription` 로직 그대로 이식.** 받은 내용은 `contentCache`(카드별) 캐시 → 재조회 안 함, 로딩 스피너.
+  - ⚠️ `allCards` FlatCard 에 **`contentKey`(= card.description = bookmark.content_key) 추가** 필요했음(기존엔 빠져 있었음).
+  - ⚠️ `WORKSPACE_ID` 하드코딩(`0198d0e1-...`) = 원본과 동일. 환경 데이터 안 맞으면 "내용을 불러올 수 없습니다"(원본 데모서버에서도 그랬음) → 실화면 확인은 사용자 몫.
+- **⋮ 메뉴**: memo 페이지와 동일 `ElDropdown`(more_vert) → 그룹이동/삭제.
+- **그룹 이동**: 모달(그룹 셀렉트, 현재 그룹 제외) → `bookmarkStore.moveBookmark` → 새로고침.
+- **삭제**: 확인 모달 → `bookmarkStore.deleteBookmark`(204) → 열린 행/캐시 정리.
+- **그룹 관리 모달**: 신규 `bookmarkStore.createBookmarkGroup` / 이름수정 `BookmarkGroupAPI.updateBookmarkGroup` / 삭제 `BookmarkGroupAPI.deleteBookmarkGroup`(인라인 확인 후). 그룹 삭제 시 선택 탭이 그 그룹이면 '전체' 복귀(watch groupTabs).
+
+### 잔 수정
+- 그룹 생성 성공 토스트가 무조건 뜨던 흠 수정: 스토어 `createBookmarkGroup`은 비201일 때 에러 안 던지고 `false` 반환 → 반환값(ok) 체크 후에만 성공 토스트.
+
+### API 결선 (전부 실 백엔드, 목업 없음)
+목록 `refreshBookmarkData` / 내용 `KnowledgeAPI.*` / 이동 `moveBookmark` / 삭제 `deleteBookmark` / 그룹 생성·수정·삭제 `createBookmarkGroup`·`BookmarkGroupAPI.update/deleteBookmarkGroup`.
+- 참고: `createBookmarkGroup`은 내부적으로 user_key=`agent.ecp_account` 사용(다른 리뉴얼 화면들과 동일 경로). 생성만 실패하면 이 값 확인.
+- 재사용/토큰: `ToastEditor`·`ElDropdown`(memo 패턴)·테마 CSS 변수만(하드코딩 색 없음). 진단(diagnostics) 클린.
+
+---
+
+## 2026-07-15 (이어서) — WAV 시연 버튼 노출조건 변경 + 다음 작업 예고
+
+### 작업 1 (완료): WAV 시연1/시연2 버튼 노출조건 통일 — `components/layout/Drawer/index.vue`
+- **요청**: 시연 버튼 노출조건을 다른 디버그 UI(감정 타임라인 버튼·AICM 속도배지)와 동일한 `isDebugEnabled("aicc_speed_debug")` 로만 노출되게. (5F 개발 배포 대상)
+- **변경 전**: `const isWavSampleEnabled = CHANNEL_ENV === "localDev";` (로컬에서만 노출).
+- **변경 후**: `const isWavSampleEnabled = computed(() => isDebugEnabled("aicc_speed_debug"));`
+  - `@/utils/env` 의 `isDebugEnabled`: 로컬(localhost)은 항상 true, 배포는 `localStorage.aicc_speed_debug === "1"` 일 때만 true.
+  - import 정리: 안 쓰게 된 `CHANNEL_ENV`(@/utils/redisKey) import 제거 → `isDebugEnabled`(@/utils/env) import 추가. `computed`는 기존 import 재사용.
+- **효과**: 로컬 항상 노출 유지 + 배포(5F 개발)에선 F12 콘솔 `localStorage.setItem('aicc_speed_debug','1')` 켤 때만 노출(새로고침 반영, removeItem 으로 끔).
+
+### 작업 2 (다음 턴 예정, 미착수): 관리자 실시간 모니터링 페이지
+- 리뉴얼 작업 중 **가장 중요한** 화면. 관리자용 실시간 모니터링.
+- 현재 상태: **빈 화면만 존재**. (신규 `src/view/advisor-renual/admin/` 디렉토리 있음 — git status untracked)
+- 참고 문서: `CLAUDE-renual-todo.md`.
+- ⚠️ 오늘은 시간 늦어 미착수 — **내일 진행**. 이번 턴은 작업 1만 적용하고 마무리.
+
+---
+
+## 2026-07-20 — 포털 임베드 대응 4건 (다크모드 분석 / 메뉴 role / flex / 체크박스 / 리뉴얼 폰트)
+
+> 온프레 포털(MFA host)에 임베드될 때만 생기는 문제들. 공통 뿌리 = **MF expose 진입점은 App.vue/main.ts 를 안 거쳐** 전역 스타일·초기화가 임베드 경로에 안 실림.
+
+### 1. 다크모드 핸드오프 분석 (코드 대조) — `docs/dark-mode-svc-web-handoff.md` 하단에 기록
+- 포털 담당자 요청서를 asst-web 실제 코드와 대조. **전체 대응 가능**하나 위젯 목록이 우리 실정과 다름.
+- 정정: wangEditor·Vue-Flow·Highcharts 는 **미사용**. 실제 대상 = **DevExtreme**(dx.dark.css 신규 필요) + **Toast UI Editor**(isDark 하드코딩 false → 전역 연결). §4 store id 는 `ecp-layout`(ecp-global 없음)이나 이미 postMessage 로 isDark 수신 중이라 정렬 불필요할 수 있음.
+- 상세 분석/대응현황은 해당 문서 "[asst-web 자체 분석·대응 현황]" 섹션 참고.
+
+### 2. 메뉴 role 노출 — 포털이 전담 (우리 작업 없음, 확정)
+- 106 에서 SUPERVISOR 계정인데 상담사+관리자 메뉴 4블록 전부 노출.
+- 원인: asst-web 은 메뉴 role 필터가 **없음**(`mockupMenuList.ts` 4블록 통짜, `menu-manifest.json` 에 role 필드 없음). 설계상 role별 노출은 **포털이 관리**(`docs/advisor_menu_manifest.md` §6-4 확정).
+- 결론: **포털에서 메뉴관리로 처리. 프론트 변경 없음.** (담당자 "supervisor 계정이 이제 추가됐다"= 계정 생성 통보였음)
+
+### 3. 🐛 flex 레이아웃 깨짐 (포털 임베드) — 진입점에서 전역 스타일 import
+- 증상: 로컬 정상, 포털 임베드 시 한 줄에 나와야 할 게 세로 개행.
+- 원인: `.flex`(global.scss `!important`)·`.flx-*`(common.scss) 가 **main.ts / App.vue `<style>` 에만** 물려 있어 MF 임베드 경로엔 안 실림(vue-style-loader 는 import 될 때만 주입).
+- 조치: MF expose 진입점 3곳(`consultant/index.vue`, `admin/management/user/index.vue`, `advisor-renual/index.vue`) `<script setup>` 최상단에 `import "@/styles/global.scss"; import "@/styles/common.scss";` 추가. 단독 실행 시엔 중복 dedup 되어 무해. (다크 스타일 로드 §3.1 도 동반 해결)
+
+### 4. 🐛 체크박스 체크마크 좌상단 몰림 (포털 임베드) — remote 스코프 앵커
+- 원인(기존 파악 재확인): host 포털이 `.el-checkbox__input.is-checked .el-checkbox__inner:after { transform: translate(-45%,-60%) ... }` 전역 주입. 이전 조치는 `Setting.vue .adv-checkbox` 한 곳만이라, 106 에서 리뉴얼 화면(LEAF_ROUTING 전용 서버) 체크박스가 무방비로 노출.
+- 조치: 진입점 3곳 최상위에 `adv-remote-scope` 클래스 부여(리뉴얼 리프는 `<div class="adv-remote-scope" style="display:contents">` 로 감쌈 — 레이아웃 영향 0), `global.scss` 에 `.adv-remote-scope .el-checkbox__input.is-checked .el-checkbox__inner::after { transform: rotate(45deg) scaleY(1) !important }`. host 자체 체크박스 무영향. **사용자 테스트 통과.**
+
+### 5. 🐛 리뉴얼 폰트 크기 조절 안 됨 — 포털 `--font-size-*-dynamic` 연동 (핵심, MCP 실측으로 규명)
+- 증상: UI설정 글자크기(작게/일반/크게)가 리뉴얼 화면에서 **로컬은 되는데 106 임베드는 반쪽짜리**(재활용 el-* 만 반응, 리뉴얼 커스텀은 고정).
+- **로컬 O / 106 X** 단서로 MCP(CDP 9222) 접속해 106 포털 실측 → **진짜 메커니즘 발견**:
+  - 포털이 host `<html>` 에 **완전한 `--font-size-*` 토큰 + `-small/-large/-dynamic` 변형**을 세팅. "크게" 클릭 시 `--font-size-body1-dynamic` 16→20, `subtitle4-dynamic` 12→16 등 **실시간 반응**(실측 확인).
+  - 재활용 el-* 는 이 토큰(+`--el-font-size-*`)을 봐서 반응 / 리뉴얼 px 하드코딩은 안 봐서 고정 → "반쪽".
+  - 우리가 처음 넣은 `--fs-scale`(switchFont 세팅)은 임베드에서 switchFont 가 안 돌아 **1 고정** = 무용.
+- 원인 규명 과정: 리뉴얼 폰트 px 집계(345곳, 11/12/13/14 중심) → px→`var(--fs-N)` 치환 → **로컬만 되고 106 안 됨** → MCP 실측으로 포털 dynamic 토큰 발견.
+- **최종 해법(로컬·임베드 양쪽 동작):**
+  1. `src/view/advisor-renual/` px 345곳 → `font-size: var(--fs-N)` 치환(자동, font-size 만).
+  2. `global.scss`: `--fs-N: calc(Npx * var(--fs-scale))` + **`--fs-scale: calc(var(--font-size-body1-dynamic, 16px) / 16px)`** — 포털 dynamic/base 비율=배율. 포털 없으면(로컬) fallback 16/16=1.
+  3. `useTheme.ts switchFont()`: 로컬용 `--fs-scale` setProperty(작게 0.75 / 일반 1 / 크게 1.25 — 포털 body1 비율과 일치). 임베드는 switchFont 안 돌아도 위 CSS calc 로 자동 연동.
+- **실측 검증 3종:** ①`calc(20px/16px)*100px=125px`(브라우저 length/length unitless 유효) ②포털 `body1-dynamic` 참조 연동 ③Sass 가 `calc(.../16px)` 나눗셈 안 뭉갬(CSS 보존). **재배포 후 사용자 테스트 통과("반쪽→전체 반응").**
+- ⚠️ 교훈: **"로컬만 보고 넘어갔으면 못 잡음."** host 가 CSS 변수로 제어하는 구조는 실제 임베드 DOM 을 실측(MCP/CDP)해야 진짜 원인이 보인다. (기존 host-portal-css-injection 메모리와 동일 계열)
+- 후속: 리뉴얼은 px*배율 방식이라 다른 앱(포털 절대 토큰)과 미세하게 다를 수 있음 → 완전 통일은 `CLAUDE-todo.md` 10번 참고(정의부 1곳 교체로 전환 가능).
+
+## 2026-07-20 (이어서) — 관리자 실시간 모니터링: 우측 멀티뷰 카드 리뉴얼 (A)
+
+> 이어서 작업: §11-2 B "선택 상담사 모니터링 화면이 구 UI" 중 **A(멀티뷰 카드)** 착수.
+> 확정: A(카드) → B(상담원페이지) 순. B 뷰어 헤더는 "이름+콜정보(콜ID/시작시간/전화번호)+확대취소 아이콘 / 우측레일 상담코칭·키워드·청취만" 방향(착수 시 원본 레일·팝업 구조 분석 반영).
+
+### A. 멀티뷰 카드 (구 `Chat` isAdmin → 리뉴얼)
+1. `admin/monitoring/index.vue`: `import Chat` 를 원본 `advisor/components/chat/index.vue` → **`advisor-renual/chat/components/RenualChatPanel.vue`** 로 교체. RenualChatPanel 은 원본 Chat 전체 복사본이라 props/emit 드롭인 동일 → 즉시 모던 말풍선/VOC 헤더 적용. 실시간 소켓/VOC 로직은 복사본 내부 @/ 절대경로가 원본 재사용(무수정).
+2. `RenualChatPanel.vue` 관리자 카드 헤더(`isAdmin && currentConsultant`, 263~) 모던화: 평문 `(업무외) 이름 상담원` → **상태 pill(통화중=초록/그외=회색 도트) + 이름(볼드) + 팀·센터 meta + 닫기 버튼**. 상태 라벨은 `resolveConsultantStatusLabel(isActive,nonActiveType)` 복원(원본과 동일 소스, 기존 복사본은 isActive 이진 단순화였음 → "업무 외" 등 정확 표시). `.rcp-admin-head*` scoped 스타일 신규.
+3. **`RenualChatAdminPanel.vue` 신규**(원본 `ChatAdminPanel.vue` 복사): 스크립트/로직(청취 onListeningCall / 키워드 countIssueKeywords / 발화 타임라인 세그먼트 / 콜타이머) 원본 그대로, template/style 만 모던(둥근 발화내용탐색 카드 + pill 툴바 `[키워드][상담원페이지][청취]` + primary `상담코칭` 버튼). `RenualChatPanel` 이 이 파일을 import 하도록 교체(admin 분기라 상담사 본인 리뉴얼 상담화면엔 무영향).
+
+**함정/교훈:**
+- ECPIcon `color` prop 은 CSS 변수와 별개인 **제한 enum**(g80/g60/g40/g35/g20/g15/g10/g5) → `g50` 넣으니 콘솔 "Unknown color g50" 경고 3개 → `g40` 으로 교체. (`--color-g50` CSS 변수는 존재하나 ECPIcon prop 에선 못 씀)
+- primary 버튼 hover 관례 = `color-mix(in srgb, var(--color-primary) 85%, black)` (리뉴얼 파일들 공통). `--color-primary-hover`/`--color-primary-rgb` 는 미정의.
+- 변경 3파일 `@vue/compiler-sfc` 직접 컴파일 OK. CDP(9222) 실측: agent40 선택 시 카드 헤더/툴바 모던 확인(오프라인이라 말풍선 실데이터는 라이브 검증 몫).
+
+**남음:** B(상담원페이지=AgentComponent isViewer) 리뉴얼. A 는 실통화 말풍선/VOC 라이브 검증 사용자 몫.
+
+## 2026-07-20 (이어서) — 관리자 실시간 모니터링: 상담원페이지(확대보기) 리뉴얼 (B)
+
+> A(멀티뷰 카드) 완료 후 이어서 B 착수. 확정 3건: ①헤더 콜정보 시작시간 생략(전역 신뢰소스 없음) ②레일 3종 인터랙션=상담화면처럼 플라이아웃 통일 ③상담코칭=새 리뉴얼 모달 제작.
+
+### 조사(Explore)로 규명한 원본 구조
+- 확대보기 = `advisor/agent/index.vue`(isViewer) + `ContentLayout`(헤더+우측레일 소유).
+- 우측레일 = `Drawer/index.vue`(isViewer) — 이미 **4개만**(다른 메뉴 `v-if="!isViewer"` 숨김): `zoom_in_map`(확대취소,emit backToAdmin) / 상담코칭(`hearing`,**모달**) / 키워드(`feedback`,**모달** 읽기전용 이슈어) / 청취(`graphic_eq`,**단순액션** onListeningCall).
+- 콜정보 소스: 콜ID=`chatDataStore.activeCallId`, 전화번호=`customerStore.phoneNumber`, **시작시간=전역 신뢰소스 없음**(헤더 더미).
+
+### 신규 파일 (advisor-renual/admin/monitoring/viewer/)
+- **`RenualConsultantViewer.vue`** — 확대보기 오케스트레이터(원본 AgentComponent isViewer 대체). 좌 `RenualChatPanel`(isViewer)/우 `RenualKnowledgePanel`(isViewer) 하나의 카드 + 우측 4-아이콘 레일. Chat↔Knowledge 연동 배선은 renual chat/index.vue 발췌(원본 로직 그대로). **`defineExpose({ chatInstance })`** — monitoring `toggleConsultantView` 복귀경로 계약 유지. assignedWorkspaceId/botId는 userListStore 매칭(원본 동치). viewerChatContent=`chatDataStore.getActiveChatContent`.
+- **`RenualViewerCoachingPanel.vue`** — 상담코칭 플라이아웃(EditorComponent 재사용 + `CoachingAPI.createCoaching` 전송로직 원본 이식).
+- **`RenualViewerKeywordPanel.vue`** — 키워드 플라이아웃(읽기전용 이슈어 `keywordDetectStore.countIssueKeywords` 그대로).
+- 청취 = 인라인 토글(onListeningCall/stopListeningCall). 레일 UX=`RenualRailFlyout` 재사용(상담화면 톤) + 투명 백드롭.
+
+### ⭐ 헤더 설계 재작업 (사용자 피드백 반영 — 최종)
+- 초안: 상단 간소 헤더([확대취소]+이름+콜정보). → 사용자: "닫기 버튼이 헤더 맨 왼쪽이라 어색, 헤더 휑함" → **헤더 아예 제거**.
+- **최종 확정(사용자 선택): 좌 상담내용 패널 헤더에 상담사 정보 통합.**
+  - `RenualChatPanel.vue` 비관리자 헤더에 **`monitorInfo` prop** 신규 — 있으면 "상담내용" 대신 `● 상태pill(통화중=초록/그외=회색) + 이름 상담원` 표시(VOC는 오른쪽 유지). **자기 상담화면은 prop 미전달 → "상담내용" 그대로(무영향).**
+  - **확대취소(zoom_in_map)는 레일 최상단으로 이동 → 레일 4개** `[확대취소] ─ [상담코칭][키워드][청취]`(구분선 `.rcv-rail__sep`).
+  - 팀은 공간상 헤더 텍스트에서 빼고 **title 툴팁**으로(이름 길면 max-width 140px+말줄임) → **VOC 점수 안 잘리게 확보**(팀까지 넣으니 VOC "0.00"이 패널 divider에서 잘렸던 것 해결).
+  - `monitoring/index.vue`: 뷰어에 `:consultant="selectedConsultants[0]"` 전달 → 뷰어가 `resolveConsultantStatusLabel`로 monitorInfo 구성.
+
+### 검증(CDP 9222 실측)
+- 확대보기: 헤더 없음, 좌 상담내용 헤더=`●업무외 agent40 상담원` + VOC `일반 0.00`(안 잘림), 우 지식저장소, 레일 4종.
+- 상담코칭 플라이아웃(리치에디터+취소/전송) · 키워드 플라이아웃(빈 이슈어) · 청취 토글 · **레일 확대취소→멀티뷰 복귀** 전부 정상. (오프라인 계정이라 실통화 말풍선/청취/전송성공은 라이브 검증 몫)
+- 신규/수정 파일 `@vue/compiler-sfc` 컴파일 OK. 신규 B 파일 유효 enum만(새 콘솔경고 0). 잔여 g50/g30 경고=기존 리뉴얼 파일(RenualRailFlyout 등) 것.
+
+**A+B 완료 → §11-2 B "선택 상담사 모니터링 화면 구 UI" 최우선 미작업 해소.** 남음: 실통화 라이브 검증(사용자), 카드별 counselingCoaching/coaching 원본 AdminDrawerHost 모던화(선택).
+
+### 10-15 버그픽스 — 다중 선택 시 확대보기가 항상 첫 상담사로 열리던 문제 (2026-07-20)
+- 증상: agent40·41 둘 선택 후 **어느 카드의 '상담원페이지'를 눌러도 뷰어가 agent40(첫 번째)로만** 열림.
+- 원인: `monitoring/index.vue` `toggleConsultantView` 가 클릭한 카드의 id(2번째 인자, ChatAdminPanel `props.id`)를 **무시하고 `selectedConsultants.value[0]` 하드코딩**(원본 admin 오케스트레이션에서 그대로 딸려온 결함). `:consultant` prop 도 `selectedConsultants[0]` 고정.
+- 조치: **`viewingConsultantId` ref** 신설 — 진입 시 `clickedId` 로 `selectedConsultants.findIndex(c=>c.id===clickedId)` 해서 대상 인덱스 특정(못 찾으면 0 폴백), 그 인덱스의 상담사/chatInstance 로 `setForConsultantView`. 복귀 경로·`:consultant` prop 도 `viewingConsultant`(= id 매칭) 로 교체. 종료 시 `viewingConsultantId=null`.
+- 검증(CDP): 2명 선택 → 2번째(agent41) 페이지 클릭 → **agent41 상담원** 표시 / 1번째 → agent40 표시. 양방향 정상.
+
+### 10-15 후속 — 좌측 상담사 리스트 화이트리스트(다른 서버 대응) + 구조 Q&A (2026-07-20)
+- **증상(106 서버):** `/agents/assignable?assignable_type=permission` 는 계정 5개 반환하는데 좌측 상담사 목록이 텅 빔(로컬은 정상).
+- **원인:** 코드/권한 아님 → `RenualConsultantList.vue:273` **`VISIBLE_CONSULTANT_NAMES`(데모 이름 화이트리스트)**. 응답 상담사 중 **표시 이름(`consultant.name`)이 배열에 있는 사람만** 노출(`filteredConsultants`+검색경로). 106 상담사(나상담 등)는 이름 불일치 → 전부 걸러짐.
+  - ⚠️ 매칭 기준 = `name`("나상담") 이지 `ecp_account`("agent01") 아님.
+- **조치(사용자 지시 = 하드코딩 유지):** 배열에 **`"나상담"`, `"agent01"` 추가** + 함정 설명 주석. 106에서 나상담(role AGENT, cc_cti_id 56356659) 노출 확인. (운영 전환 시 `[]`+`role==="AGENT"` 필터로 교체가 정석 — 별도.) 메모리 `monitoring-consultant-whitelist` 기록.
+- **구조 Q&A(확대보기):** 상담원페이지=**라우팅/오버레이 아님** → `monitoring/index.vue` body 에서 `showConsultantView` **v-if/v-else 로 멀티뷰↔확대뷰어 통째 스왑**(컴포넌트 unmount/mount). 상단 RenualPageHeader 유지, URL 불변. 발화 상태는 컴포넌트가 파괴되므로 `chatDataStore`(전역)로 보존/복원. 원본 `advisor/admin/index.vue` 와 동일 패턴.
+
+### 10-16 다크모드 svc-web(임베드) 대응 착수 — 실측→2번 Toast 연결 (2026-07-20)
+- 방침(사용자 확정): 실측은 **작업 후 검증용**으로 미루고 문서 §F 우선순위대로 착수. 라이트 무손상 원칙 재확인(다크는 `html.dark {}` 게이팅 "덧칠", 라이트 CSS 무수정).
+- **현황 코드 실측(라이브 없이 확정):**
+  - **1번(flex+다크 스타일 임베드 로드) = 이미 완료.** MF expose 진입점 3개(`consultant/index.vue`, `admin/management/user/index.vue`, `advisor-renual/index.vue`) 전부 `global.scss`+`common.scss` import 있음(최근 `global css 보완` 커밋). `common.scss`가 `element-dark/element/devExtreme` scss 를 배럴 `@use` → 다크 규칙 임베드 경로 로드됨. → **패스.**
+  - **2번(Toast isDark) = 미완(쉬움).** `EditorComponent.vue:26` `ref(false)` 하드코딩. watch(클래스토글)·`new Editor({theme:isDark?...})` 는 이미 있어 초기/토글 자동. → **한 곳만 store 연결.**
+  - **3번(DevExtreme) = 미완(큼).** `main.ts:50` `dx.light.css` 만, `dx.dark.css` 없음.
+  - **4번(하드코딩색) = 극히 일부.** `element-dark.scss` 33줄(wangEditor/login/el-tree 만) → 카드·헤더 등 대량 잔여.
+- **2번 조치(완료):** `EditorComponent.vue` — `import {storeToRefs} from "pinia"` + `useLayoutStore` 추가, `const isDark=ref(false)` → `const {isDark}=storeToRefs(useLayoutStore())`. layout store isDark 는 이미 postMessage(App.vue:45)로 포털 다크토글 수신·저장 중. `@vue/compiler-sfc` 컴파일 OK. 라이트=isDark false 라 default 테마 그대로(무손상).
+  - `MemoEditorModal.vue` = EditorComponent 래퍼라 자동 커버.
+  - **추가 발견:** `ToastEditor.vue`(뷰어), `CoachingRequest/Editor.vue`(코칭요청) 는 Toast 직접 생성인데 다크 theme/ dark css import 아예 없음(원래 미대응). 처리 여부 사용자 결정 대기.
+- 남음: (a) 위 Toast 2개 추가 대응 여부 → (b) 3번 DevExtreme → (c) 4번 하드코딩색. 완료분 라이브 검증(포털 다크 토글)은 사용자 몫.
+
+### 10-16 후속 — (a) 에디터 2종 + ToastEditor(4번방식) + 3번 DevExtreme 재평가·버그픽스 (2026-07-20)
+- **(a) Toast 입력에디터 2개:**
+  - `CoachingRequest/Editor.vue`(코칭요청 입력): dark css import + Editor `theme:isDark?...` + `watch(isDark)` 로 defaultUI 클래스 토글. **전역 getElementsByClassName 대신 `editorRef.value.querySelector` 로 자기 인스턴스만** 토글(다중 에디터 간섭 방지). 컴파일 OK.
+  - `ToastEditor.vue`(읽기전용 뷰어): 입력에디터 아님 + `.is-readonly` 하드코딩색이 scoped :deep+!important 라 theme 스위칭 부적합 → **script 무수정, 4번 방식으로 처리**.
+- **ToastEditor 4번 처리:** `element-dark.scss` `html.dark` 블록에 `.toast-editor-wrapper.is-readonly` 오버라이드 추가(표 th/td 배경·글자, 코드블록, 텍스트, bullet, h1~6). 하드코딩 대신 **EP 다크변수(--el-bg-color/--el-text-color-*/--el-fill-color-*/--el-border-color)** 로. 원본이 !important 라 html.dark 명시도+!important 로 덮음([[global-flex-important-wins]]). sass 컴파일 OK.
+- **3번 DevExtreme 재평가(문서와 다름):** `devExtreme.scss` 403줄에 **이미 자체 다크 구현**됨 — 대부분 `var(--el-*)`(EP 다크 css-vars 자동 반영) + `.dark .dx-*` 게이팅 규칙 다수(`.dark`는 html.dark 도 매칭). → **문서의 dx.dark.css/themes.current 신규작성 불필요, `main.ts` 무수정**(추가하면 자체규칙과 충돌).
+- **3번 버그픽스(B안):** `devExtreme.scss:189~191` `.dark ...dx-selection:not(focused)>td { background: var(--el-color-primary-dark-9) }` = **EP 에 없는 변수**(다크는 dark-2 만, node_modules css-vars 확인) → 무효/투명이었음. 규칙 **삭제**해 아래 공용규칙(`--el-color-primary-light-9`, EP가 다크서 어두운톤 재정의)에 위임 → 라이트/다크 톤 일관. 설명 주석 남김. 컴파일 OK.
+- **정적 코드작업 사실상 완료**(1✅기존 / 2✅ / ToastEditor✅ / 3 이미구현+버그픽스). 남은 4번(하드코딩색 대량)·3번 색감은 **라이브 실측 필요** → 사용자가 먼저 106 확인 후 부족시 CDP 실측 요청 예정.
+- 이번 변경파일: `EditorComponent.vue`, `CoachingRequest/Editor.vue`, `element-dark.scss`, `devExtreme.scss`(+ 앞서 1번은 기존 커밋).
+
+### 10-17 4번 하드코딩색 — CDP 실측 후 '팔레트 반전' 방식 대응 (2026-07-20)
+- **실측 발단:** 사용자 "로컬에서 다크 적용 안 됨" → CDP(9222, localhost:8173 monitoring)로 확인. **결과: 다크는 정상 ON**(html.dark, --el-bg-color #141414). 단 **본문이 흰색으로 남는 "반쪽 다크"**.
+- **원인:** 리뉴얼 본문(renual-monitor__side/rcl/rcl-card/monitor-empty 등)이 `background: var(--color-white)` 사용. `--color-white`는 EP 변수 아닌 **asst 자체 팔레트**(global.scss:14~ :root)라 EP 다크 css-vars 로 안 뒤집힘. 화면 전반 대량사용(white 124/g60 116/g80 112…).
+- **함정(실측):** `--color-white` 가 배경 67곳 + **텍스트/테두리 57곳** 양방향 사용 → 팔레트 무작정 반전 시 primary/danger 버튼·말풍선·알림뱃지의 흰 글자가 깨짐.
+- **방식(사용자 확정=팔레트 반전):**
+  1. **보호:** background 아닌 라인의 `var(--color-white[...])` → `#ffffff` 리터럴로 분리(Python, background 라인 제외 조건). 23파일 57라인. background 67곳은 보존. (⚠️ sed 는 zsh `!` 히스토리확장과 충돌해 0건 → Python 으로 처리.)
+  2. **반전:** `global.scss` 에 `html.dark { }` 팔레트 재정의 추가 — 배경(white#1d1e1f/background#141414/table-bg), 그레이스케일 명도반전(g80→#e5eaf3 … g5→#363637, EP 다크 텍스트/보더 톤 정렬), black→#e5eaf3, border-input/divider/disabled, info. 라이트는 미적용(무손상).
+- **검증(CDP before/after):** 4개 주범 컨테이너 bg #1d1e1f 로 전환, 카드/텍스트 다크, 흰 글자(코칭버튼·알림뱃지) 보호 성공. 스샷 `v2_image/darkmode-monitoring-{current,after2}.png`.
+- **남은 잔여(팔레트 반전 미커버):** ①`--color-g05`(24곳, global.scss엔 g0-5만 정의·g05 없음 → 폴백 라이트) ②하드코딩 hex 직접(#fff/#333 등) ③임의매핑값(table-highlight/disabled) 미세톤. → 다른 리뉴얼 화면 실측하며 잔여 클래스 콕 집어 보정 예정(사용자 확인).
+- 이번 변경: `global.scss`(팔레트 html.dark 블록 + white텍스트 보호) + 리뉴얼/advisor 컴포넌트 23파일(white텍스트 #ffffff 보호).
+
+### 10-17 후속 — 리뉴얼 잔여 정적 전수스캔·보정 ('찾아줘' 요청) (2026-07-20)
+- 사용자 "나머지 화면 일일이 확인 어렵다, 네가 찾아줘" → CDP 순회는 오프라인 계정 리다이렉트로 불안정 → **정적 전수스캔이 더 포괄적**이라 그걸로 advisor-renual 트리 잔여 3종 처리.
+- **① 하드코딩 밝은배경:** 리뉴얼 vue 49~50건이 전부 `#fff`(나머지 #22c55e/#ef4444/보라 등은 상태·뱃지 의미색이라 유지). background 라인의 `#fff`(3자리만) → `var(--color-white)` 로 치환(Python, background 라인 한정) → 팔레트 반전에 편입돼 자동 다크. 50곳.
+- **② --color-g05 미정의:** 23곳(22 background/1 border) 폴백없는 `var(--color-g05)` 인데 global.scss 정의 0(g0-5 만 있고 g05 별개) → 무효였음. `:root --color-g05:#f5f7fa` + `html.dark --color-g05:#262727` 정의 추가 → 23곳 동시 해결.
+- **③ 어두운 글자 하드코딩:** `color:#1f2937` 4곳(index/notice/RenualPageHeader) → `var(--color-g80)` → 다크서 밝아짐.
+- **검증:** global.scss sass OK, 리뉴얼 47개 vue 전부 @vue/compiler-sfc 컴파일 OK. CDP bookmark 화면 밝은배경 스캔 0건.
+- **CDP 노이즈:** bookmark navigate 직후 스샷에 '레이아웃' 설정 드로어가 흰색으로 찍혔으나 → `layouts/components/ThemeDrawer/index.vue` = **단독실행(localhost) 전용**(layouts/index.vue 에서만 렌더, MF 진입점 미경유) + 배경 `var(--el-bg-color-overlay)` EP변수 사용(코드상 다크OK) → 화면전환 순간 html.dark flash 로 추정, 임베드 무관. 손 안 댐.
+- **남음(사용자 실증):** memo/todo/dashboard/notice/coaching/admin/* 실제 렌더 잔여는 오프라인 계정 라우팅 튐으로 CDP 실증 불가 → 사용자가 실계정 106에서 확인, 흰색 남는 클래스 알려주면 콕 집어 보정. 정적 미검출분(rgba 하드코딩·공용 components/·EP 특수케이스) 가능성 잔존.
+
+### 10-18 다크모드 마무리 — 106 실측 완료·종결 (2026-07-20)
+- 사용자 106 서버 배포 후 실측 → **대체로 정상**. 다크모드 1차 작업 **종결 확정**.
+- **잔여(나중 보완, 사소):** 공용헤더의 로그인 사용자 이름이 회색이라 다크 배경에서 대비 약함(잘 안 보임). 급하지 않아 후속 보완 대상. (공용헤더 자체는 다크 정상.)
+- 이대로 다크모드 마무리. 추가 변경 없이 기록만 정리(마무리 시 범위 한정 원칙).
+- **최종 변경 요약(10-16~10-18):** `EditorComponent.vue`/`CoachingRequest/Editor.vue`(Toast isDark) · `element-dark.scss`(ToastEditor 뷰어 오버라이드) · `devExtreme.scss`(무효변수 버그픽스) · `global.scss`(html.dark 팔레트 반전 + g05 정의 + white텍스트 보호) · 리뉴얼 vue 다수(하드코딩 hex→변수). 전부 html.dark 게이팅 → 라이트 무손상. 검증: sass·SFC 47개 컴파일 OK, CDP monitoring/bookmark 실측 확인.
+
+### 10-19 현행(비리뉴얼) advisor 대시보드 다크 대응 — 106 CDP 실측 (2026-07-20)
+- 사용자 지적: "상담 어드바이저(현행) 페이지 배경 흰색". 현행 = `src/view/advisor/`(MF expose `./AdvisorConsultantComponent` = advisor/consultant/index.vue). 내 다크작업이 advisor-renual 트리 위주라 현행 트리는 잔여스캔 밖이었음.
+- **106 CDP 실측**(사용자 제공 URL `http://106.242.165.142:32000/login#/advisor/consultant`, agent01/12345678 로그인). 디버그크롬 닫혀있어 재구동([[cdp-ipv6-proxy]]: 크롬9222+node IPv6프록시). 로그인 자동화(el-input native setter+input이벤트, '로그인' 버튼 click).
+- **실측 결과:** html.dark O, `--color-white:#1d1e1f`(팔레트반전 **106 임베드에도 로드됨** 확인), global.scss 로드 O. 화면 대부분 다크 정상. **단 현행 대시보드만 하드코딩색으로 흰 잔여**: `.dashboard-layout/.dashboard-container` #f5f5f5(842×733 큰 바탕), `.summary-item` 통계카드 #f9f9f9.
+- **원인 파일:** `advisor/agent/index.vue`(#f5f5f5), `advisor/agent/Dashboard.vue`(#f5f5f5/#f9f9f9/#f0f0f0/#f5f7fa 배경 + #333 글자). `#f56c6c`=danger 유지.
+- **조치(사용자 확정, 리뉴얼과 동일 방식):** 하드코딩→팔레트변수 치환(Python, background/color 맥락 한정). #f5f5f5→var(--color-background), #f9f9f9→var(--color-g05), #f0f0f0→var(--color-g10), #f5f7fa→var(--color-g05), color:#333→var(--color-g80). 16라인. danger 빨강 유지. SFC 컴파일 OK.
+- **검증:** 106 화면에서 매핑변수를 CDP 즉석 주입(배포 전 미리보기) → 통계카드/컨테이너 다크 전환 확인(`v2_image/dark-advisor-current-{106,preview}.png`). 배포 시 실반영 예정.
