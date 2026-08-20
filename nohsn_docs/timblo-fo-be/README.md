@@ -4,6 +4,7 @@
 |---|---|
 | [LOCAL_SETUP.md](./LOCAL_SETUP.md) | 로컬 개발 환경 구축. 설치 · 인프라 기동 · 환경변수 · 트러블슈팅 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 아키텍처와 핵심 플로우. 인증 · 콘텐츠 파이프라인 · 큐 · 알림 · 배치 |
+| [CONTENT_DETAIL_LATENCY.md](./CONTENT_DETAIL_LATENCY.md) | 회의록 상세 진입 지연 확인(2026-08-20). 상세 조회 · stream-grant 호출 체인 분석 |
 
 ## 빠른 참조
 
