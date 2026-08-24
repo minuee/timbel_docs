@@ -260,7 +260,7 @@
     </mxGraphModel>
   </diagram>
   <diagram id="tab2-new-layout" name="2. 신규 제안 레이아웃안">
-    <mxGraphModel dx="2716" dy="1827" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1780" pageHeight="1730" background="#FFFFFF" math="0" shadow="0">
+    <mxGraphModel dx="1438" dy="967" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1780" pageHeight="1730" background="#FFFFFF" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -360,7 +360,7 @@
         <mxCell id="b_title" parent="1" style="text;html=1;fontSize=28;fontStyle=1;align=left;verticalAlign=middle;fontColor=#1A1A1A;" value="SK Hynix AI회의록 Micro Service Architecture" vertex="1">
           <mxGeometry height="42" width="1300" x="40" y="12" as="geometry" />
         </mxCell>
-        <mxCell id="b_subtitle" parent="1" style="text;html=1;fontSize=15;align=left;verticalAlign=middle;fontColor=#666666;" value="신규 제안 레이아웃 — 6단 세분화(진입/프록시/FE·GW/BE/메시징/데이터)  ·  외곽선=관리주체(Timbel/HCP)  ·  배경색=성격(FE/BE/Infra)" vertex="1">
+        <mxCell id="b_subtitle" parent="1" style="text;html=1;fontSize=15;align=left;verticalAlign=middle;fontColor=#666666;" value="6단 세분화(진입/프록시/FE·GW/BE/메시징/데이터)  ·  외곽선=관리주체(Timbel/HCP/SKT)  ·  배경색=성격(FE/BE/Infra)" vertex="1">
           <mxGeometry height="24" width="1400" x="40" y="56" as="geometry" />
         </mxCell>
         <mxCell id="b_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="① 진입 (CLIENT)" vertex="1">
@@ -530,7 +530,7 @@
         <mxCell id="c_title" parent="1" style="text;html=1;fontSize=28;fontStyle=1;align=left;verticalAlign=middle;fontColor=#1A1A1A;" value="SK Hynix AI회의록 Micro Service Architecture — 구성요소 설명" vertex="1">
           <mxGeometry height="42" width="1300" x="40" y="12" as="geometry" />
         </mxCell>
-        <mxCell id="c_subtitle" parent="1" style="text;html=1;fontSize=15;align=left;verticalAlign=middle;fontColor=#666666;" value="탭2(신규 제안안) 순서를 그대로 따름  ·  헤더 색 = 성격(FE/BE/Infra)  ·  하단 텍스트 색 = 관리주체(검정=Timbel/빨강=HCP)  ·  (추정) = 제 추론이니 확인 부탁드려요" vertex="1">
+        <mxCell id="c_subtitle" parent="1" style="text;html=1;fontSize=15;align=left;verticalAlign=middle;fontColor=#666666;" value="헤더 색 = 성격(FE/BE/Infra)  ·  하단 텍스트 색 = 관리주체(검정=Timbel/빨강=HCP/파랑=SKT)&amp;nbsp;" vertex="1">
           <mxGeometry height="24" width="1400" x="40" y="56" as="geometry" />
         </mxCell>
         <mxCell id="c_sec_① 진입 (CLIENT)" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="① 진입 (CLIENT)" vertex="1">
