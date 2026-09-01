@@ -31,7 +31,9 @@
 - **검증 상태**:
   - ✅ Swift 구문 검사(`swiftc -parse`), JS 구문 검사(`node --check`) 통과
   - ⚠️ **전체 빌드 및 실동작 검증 미완료** (Xcode 라이선스 미동의로 `xcodebuild` 차단)
-  - 테스트 체크리스트: `docs/system_audio_capture_multinode.md` §7
+  - 테스트 체크리스트: `docs/system_audio_capture_multinode.md` §8
+  - ⚠️ macOS 화면 기록 권한(TCC) 수동 등록 필요 — 헬퍼가 백그라운드 프로세스라 권한 팝업이 자동으로 뜨지 않음.
+    증상/해결: `docs/system_audio_capture_multinode.md` §5
 
 ## 25.11.18
 

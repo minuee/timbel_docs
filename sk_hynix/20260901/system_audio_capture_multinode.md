@@ -141,7 +141,64 @@ Zoom / Webex / Teams / Meet / 유튜브 무엇이든, 스피커로 나가는 소
 
 ---
 
-## 5) 다중 노드 머지 설계 시 반드시 짚어야 할 문제
+## 5) macOS 화면 기록 권한(TCC) 이슈 ⚠️
+
+`SystemOnly`는 ScreenCaptureKit을 통해 동작하므로 **화면 기록 권한이 없으면 아예 작동하지 않는다.**
+그런데 이 앱 구조에서는 권한 팝업이 **자동으로 뜨지 않는다.** 실제로 겪은 증상과 해결법을 남긴다.
+
+### 증상
+- 시스템 오디오 캡처 실패, 마이크만 녹음됨
+- 헬퍼 로그에 다음 에러:
+  ```
+  SCStreamErrorDomain Code=-3801 "사용자가 응용 프로그램, 윈도우, 디스플레이 캡처의 TCC를 거절함"
+  ```
+- **시스템 설정 → 개인정보 보호 및 보안 → 화면 기록 목록에 앱이 아예 나타나지 않음**
+
+### 원인
+1. ScreenCaptureKit을 실제로 호출하는 주체는 Electron 앱이 아니라 **`AudioHelper`(`timbel.AudioHelper`)** 다.
+2. `AudioHelper.app`은 `LSBackgroundOnly = 1`, `LSUIElement = 1` 인 **UI 없는 백그라운드 프로세스**다.
+   macOS는 이런 프로세스에 권한 팝업을 띄우지 못해 **조용히 거부(-3801)** 하고, 목록에도 등록하지 않는다.
+3. **서명 주체(Team ID)가 바뀌면 기존 TCC 승인이 승계되지 않는다.**
+   개발용 인증서로 다시 빌드하면 이전에 허용해둔 권한이 무효가 된다.
+
+> 화면 기록은 마이크/카메라와 달리 `NSScreenCaptureUsageDescription`이 없어도 시스템 프롬프트가 뜬다.
+> 따라서 이 이슈의 원인은 설명 문구 누락이 아니다.
+
+### 해결 — 수동 등록
+1. 시스템 설정 → 개인정보 보호 및 보안 → **화면 기록**
+   (터미널에서 바로 열기: `open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"`)
+2. 목록 아래 **`+`** 클릭
+3. 파일 선택 창에서 `⌘ + ⇧ + G` 후 경로 입력 — **번들 안쪽의 헬퍼를 지정해야 한다**
+   ```
+   <설치경로>/timbloRecApp.app/Contents/helpers/macos/AudioHelper.app
+   ```
+4. 추가 후 토글 **켜기**
+5. **앱 완전 종료 후 재실행** (TCC는 재시작해야 반영됨)
+
+### TCC 상태 초기화 (권한이 꼬였을 때)
+```bash
+tccutil reset ScreenCapture timbel.AudioHelper
+tccutil reset ScreenCapture net.timbel.timblo.recapp
+```
+
+### 정상 동작 확인
+`~/Library/Application Support/timbel.AudioHelper/Logs/AudioHelper.log` 에서
+`-3801` 에러가 사라지고 아래 로그가 찍히면 성공이다.
+```
+{"category":"system","message":"시스템 오디오 캡처 시작 성공"}
+```
+
+### 개선 여지 (후속 과제)
+- 앱 최초 실행 시 화면 기록 권한 안내 UI 제공 (현재는 사용자가 원인을 알 방법이 없음)
+- 헬퍼 대신 **부모 앱(timbloRecApp)이 먼저 권한을 트리거**하도록 하여 정상적으로 팝업이 뜨게 하는 방안 검토
+- `AudioHelper`에 `NSScreenCaptureUsageDescription`을 넣으려면 주의가 필요하다.
+  현재 Xcode 프로젝트는 `GENERATE_INFOPLIST_FILE = YES`라 `AudioHelper/Info.plist` 파일이 **무시되며**,
+  `INFOPLIST_KEY_NSScreenCaptureUsageDescription` 빌드 설정도 Xcode의 자동 매핑 대상이 아니라 **생성된 plist에 반영되지 않는다.**
+  넣으려면 `INFOPLIST_FILE` 방식으로 전환해야 한다.
+
+---
+
+## 6) 다중 노드 머지 설계 시 반드시 짚어야 할 문제
 
 캡처 자체보다 **머지 쪽이 실제 난제**다. 아래 4가지는 설계 단계에서 정책을 정해야 한다.
 
@@ -171,7 +228,7 @@ Zoom 너머에 3명이 있으면 **3명이 한 트랙에 섞여** 들어온다.
 
 ---
 
-## 6) 한 PC를 몇 개 노드로 볼 것인가 (미결정)
+## 7) 한 PC를 몇 개 노드로 볼 것인가 (미결정)
 
 현재 구조는 **헬퍼 1개 = 출력 스트림 1개**(믹스된 결과)다.
 
@@ -187,7 +244,7 @@ Zoom 너머에 3명이 있으면 **3명이 한 트랙에 섞여** 들어온다.
 
 ---
 
-## 7) 검증 필요 항목 (미완료)
+## 8) 검증 필요 항목 (미완료)
 
 > **현재 코드 검증 수준**: Swift 구문 검사(`swiftc -parse`) 및 JS 구문 검사(`node --check`) 통과.
 > **전체 빌드 및 실동작 검증은 아직 수행하지 못했다.**
@@ -217,7 +274,7 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
 ---
 
-## 8) 남은 과제 (후속)
+## 9) 남은 과제 (후속)
 
 | 항목 | 내용 | 우선순위 |
 |---|---|---|
@@ -233,7 +290,7 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
 ---
 
-## 9) 한 줄 요약
+## 10) 한 줄 요약
 
 > 회사 요구는 무리한 것이 아니라 **이 앱이 원래 그렇게 설계된 것**이다.
 > Windows는 이미 되어 있었고, macOS와 UI의 하드코딩만 풀면 되는 작업이었다.
