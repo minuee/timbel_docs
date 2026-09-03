@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/audio-sync-merge-manifest.schema.json",
+  "title": "Audio Sync Merge Manifest",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sessionId",
+    "generatedAt",
+    "canonicalFormat",
+    "recommendedSttInput",
+    "tracks",
+    "qaSummary"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "minLength": 1 },
+    "canonicalFormat": {
+      "type": "object",
+      "required": ["sampleRateHz", "channels", "sampleFormat"],
+      "properties": {
+        "sampleRateHz": { "type": "integer", "minimum": 1 },
+        "channels": { "type": "integer", "minimum": 1 },
+        "sampleFormat": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "recommendedSttInput": {
+      "type": "string",
+      "enum": ["tracks", "mixdown"]
+    },
+    "alignmentConfidence": { "type": "number" },
+    "tracks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "trackId",
+          "participantId",
+          "alignedArtifact",
+          "offsetMs",
+          "driftPpm",
+          "gainDb",
+          "weight"
+        ],
+        "properties": {
+          "trackId": { "type": "string", "minLength": 1 },
+          "participantId": { "type": "string", "minLength": 1 },
+          "alignedArtifact": { "type": "string", "minLength": 1 },
+          "originalArtifact": { "type": "string" },
+          "offsetMs": { "type": "number" },
+          "driftPpm": { "type": "number" },
+          "gainDb": { "type": "number" },
+          "weight": { "type": "number" },
+          "durationMs": { "type": "integer", "minimum": 0 },
+          "loudness": { "type": "object" },
+          "metadata": { "type": "object" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "listeningMix": {
+      "type": "object",
+      "required": ["path", "format", "codec", "targetLufs"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "format": { "type": "string", "minLength": 1 },
+        "codec": { "type": "string", "minLength": 1 },
+        "targetLufs": { "type": "number" },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "qaSummary": {
+      "type": "object"
+    },
+    "artifactsBundle": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": true
+}
