@@ -4,11 +4,31 @@
 
 ## 빠른 시작
 
+### 전체 파일 한 번에 받은 경우
+
 ```bash
 tar xzf uptime-kuma-offline.tar.gz
 cd uptime-kuma-offline
 ./install.sh
 ```
+
+### 분할 파일로 받은 경우
+
+분할 파일 6개 (`uptime-kuma-part.aa` ~ `uptime-kuma-part.af`)를 모두 같은 폴더에 놓은 후:
+
+```bash
+# 파일 합치기
+cat uptime-kuma-part.* > uptime-kuma-offline.tar.gz
+
+# 압축 풀기
+tar xzf uptime-kuma-offline.tar.gz
+
+# 설치
+cd uptime-kuma-offline
+./install.sh
+```
+
+---
 
 설치가 완료되면 다음 주소로 접속하세요:
 ```

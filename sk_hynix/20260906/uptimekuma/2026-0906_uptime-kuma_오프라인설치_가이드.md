@@ -62,13 +62,45 @@ amd64 / arm64 를 모두 담았고 `install.sh` 가 `uname -m` 으로 자동 판
 2. **외부 전송 설정** — `docker-compose.yml` 에서 알림 기능이 비활성화되어 있는지 확인 (기본값)
 3. `uptime-kuma-offline.tar.gz` 를 USB 등으로 복사
 
+> **대용량 전송 시:** 메일 등에서 용량 제한이 있으면, 분할 파일 사용 (→ 3-2-B)
+
 ### 3-2. 서버에서
+
+#### **3-2-A. 전체 파일 한 번에 전송한 경우**
 
 ```bash
 tar xzf uptime-kuma-offline.tar.gz
 cd uptime-kuma-offline
 ./install.sh
 ```
+
+#### **3-2-B. 분할 파일로 전송한 경우** (메일 등 용량 제한 회피)
+
+**분할 파일:** `uptime-kuma-part.aa`, `uptime-kuma-part.ab`, ... `uptime-kuma-part.af` (6개)
+
+**서버에서:**
+
+```bash
+# 1단계: 6개 파일을 모두 같은 폴더에 놓는다
+ls uptime-kuma-part.*
+
+# 2단계: 파일들 합치기
+cat uptime-kuma-part.* > uptime-kuma-offline.tar.gz
+
+# 3단계: 합친 파일 확인 (선택사항)
+ls -lh uptime-kuma-offline.tar.gz
+# → 296MB 정도 나와야 함
+
+# 4단계: 압축 풀기
+tar xzf uptime-kuma-offline.tar.gz
+
+# 5단계: 설치
+cd uptime-kuma-offline
+./install.sh
+```
+
+> **주의:** 분할 파일 합칠 때 **순서가 중요합니다**.
+> `cat uptime-kuma-part.*` 명령은 파일명의 알파벳 순서대로 자동 정렬되므로 안전합니다.
 
 `install.sh` 가 순서대로 수행하는 것:
 
