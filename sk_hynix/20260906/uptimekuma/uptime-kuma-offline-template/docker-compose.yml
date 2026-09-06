@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "${UPTIME_KUMA_PORT}:3001"
+    volumes:
+      - ./app-data:/app/data
+    environment:
+      - NODE_ENV=production
+    networks:
+      - uptime-network
+
+networks:
+  uptime-network:
+    driver: bridge
