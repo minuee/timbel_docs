@@ -1,0 +1,53 @@
+# docker-compose.yml — recog-backend deployment
+#
+# Layout on the deploy host (default: /home/jwpark/timblo-hynix/recog-backend):
+#   docker-compose.yml   <-- this file (copied once by first deploy)
+#   .env.recog           <-- from .env.recog.example; CI updates RECOG_VERSION
+#   runtime/             <-- persistent session/artifact data (bind-mounted)
+#
+# Manual bring-up:
+#   cp deploy/.env.recog.example /home/jwpark/timblo-hynix/recog-backend/.env.recog
+#   docker compose --env-file .env.recog up -d
+#
+# CI bring-up (see .gitlab-ci.yml):
+#   docker compose --env-file .env.recog up -d --no-deps recog-backend
+
+services:
+  recog-backend:
+    image: ${IMAGE_NAME:-ghcr.io/timbel-timblo-onpremise/recog-backend}:${RECOG_VERSION:-skHynix-latest}
+    # Offline installs load the image from a tar; there is no registry to
+    # reach. `never` makes a missing image fail loudly instead of hanging
+    # on a pull. CI sets PULL_POLICY=missing to keep pulling.
+    pull_policy: ${PULL_POLICY:-missing}
+    container_name: aimm-recog-backend
+    restart: unless-stopped
+    env_file:
+      - .env.recog
+    ports:
+      - "${HOST_PORT:-28080}:${CONTAINER_PORT:-8080}"
+    volumes:
+      # Session data, merge scratch space and merge.db live here. This path
+      # is on the host, so rebuilding the image or recreating the container
+      # leaves it untouched. Point RUNTIME_DIR outside the source tree if
+      # the sources get replaced wholesale on each deploy.
+      - ${RUNTIME_DIR:-./runtime}:/var/lib/recog/runtime
+    # /v1/merge downloads from presigned URLs whose host is an internal DNS
+    # name (timblo-minio), and master-api polls this container back. Both
+    # directions need the shared network.
+    networks:
+      - timblo-net-package
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${CONTAINER_PORT:-8080}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  timblo-net-package:
+    external: true

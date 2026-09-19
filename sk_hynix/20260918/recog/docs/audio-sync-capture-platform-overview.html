@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Audio Sync Capture Platform Overview</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2e;
+      --panel2: #1a2240;
+      --line: #2b3966;
+      --text: #eef2ff;
+      --muted: #aab4d6;
+      --accent: #7dd3fc;
+      --accent2: #86efac;
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #0b1020 0%, #11192f 100%);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    .wrap { max-width: 1320px; margin: 0 auto; padding: 28px 20px 64px; }
+    h1, h2, h3 { margin: 0 0 12px; line-height: 1.2; }
+    h1 { font-size: 34px; }
+    h2 { font-size: 24px; margin-top: 28px; }
+    h3 { font-size: 18px; margin-top: 18px; }
+    p, li { color: var(--muted); }
+    .lead { font-size: 18px; color: #d9e6ff; max-width: 980px; }
+    .card {
+      background: rgba(19, 26, 46, 0.96);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+    }
+    .grid { display: grid; gap: 16px; }
+    .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 960px) { .cols-2, .cols-3 { grid-template-columns: 1fr; } }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #1e2b52;
+      border: 1px solid #3a4b82;
+      color: #cad5ff;
+      margin-bottom: 10px;
+    }
+    .diagram {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+      align-items: stretch;
+    }
+    @media (max-width: 1100px) { .diagram { grid-template-columns: 1fr; } }
+    .node {
+      background: var(--panel2);
+      border: 1px solid #384a82;
+      border-radius: 18px;
+      padding: 16px;
+      min-height: 220px;
+    }
+    .node h3 { color: #e8f3ff; }
+    .arrow {
+      text-align: center;
+      align-self: center;
+      color: var(--accent);
+      font-size: 28px;
+      font-weight: 700;
+    }
+    @media (max-width: 1100px) { .arrow { transform: rotate(90deg); } }
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    @media (max-width: 1200px) { .timeline { grid-template-columns: 1fr; } }
+    .step {
+      background: var(--panel2);
+      border: 1px solid #324375;
+      border-radius: 16px;
+      padding: 14px;
+      min-height: 180px;
+    }
+    .num {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 800; background: var(--accent); color: #041321; margin-bottom: 10px;
+    }
+    table {
+      width: 100%; border-collapse: collapse; margin-top: 12px;
+      border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #151d35; color: #dce6ff; }
+    tr:last-child td { border-bottom: none; }
+    code {
+      background: #101735; border: 1px solid #24325d; color: #dce7ff;
+      border-radius: 6px; padding: 2px 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .callout {
+      border-left: 4px solid var(--warn);
+      background: rgba(251, 191, 36, 0.08);
+      color: #fae7ac;
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin-top: 14px;
+    }
+    .small { font-size: 14px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Audio Sync Capture Platform — 전체 시스템 개요</h1>
+    <p class="lead">
+      이 문서는 현재 프로젝트를 <strong>녹음 앱 + 세션/제어 서버 + 오디오 처리 엔진</strong>으로 재정의한 뒤,
+      실제 구현과 연구를 어떤 구조로 진행해야 하는지 한 장에서 이해할 수 있도록 만든 개요입니다.
+    </p>
+
+    <h2>1. 시스템 3층 구조</h2>
+    <div class="diagram">
+      <div class="node">
+        <div class="badge">Capture Layer</div>
+        <h3>모바일 녹음 앱</h3>
+        <ul>
+          <li>room create / join / ready / start</li>
+          <li>연구 모드 규칙 강제</li>
+          <li>녹음 시작 telemetry 기록</li>
+          <li>파일 업로드</li>
+        </ul>
+        <p class="small">Flutter 앱 셸 + native recorder bridge</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="badge">Control Plane</div>
+        <h3>세션/제어 서버</h3>
+        <ul>
+          <li>room lifecycle</li>
+          <li>minimum_ready_participants</li>
+          <li>server-authoritative start</li>
+          <li>metadata persistence</li>
+        </ul>
+        <p class="small">여기서 start는 acoustic truth가 아니라 control prior</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="badge">Processing Layer</div>
+        <h3>오디오 처리 엔진</h3>
+        <ul>
+          <li>canonicalization</li>
+          <li>metadata prior narrowing</li>
+          <li>anchor detection</li>
+          <li>audio fine alignment / drift correction</li>
+          <li>mixdown + manifests</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>2. 왜 backend-only가 부족했나</h2>
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="badge">문제</div>
+        <h3>파일만 받는 구조의 한계</h3>
+        <ul>
+          <li>누가 언제 눌렀는지 알기 어려움</li>
+          <li>앱/기기/route 차이를 수집하지 못함</li>
+          <li>연구용 ground truth를 만들기 어려움</li>
+          <li>실험 규칙이 흔들림</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="badge">해결</div>
+        <h3>앱 기반 capture protocol</h3>
+        <ul>
+          <li>room 기반 세션 관리</li>
+          <li>ready/start rule 통제</li>
+          <li>telemetry 수집</li>
+          <li>연구 모드 규칙 강제</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>3. End-to-End 시퀀스</h2>
+    <div class="timeline">
+      <div class="step"><div class="num">1</div><h3>Room 생성</h3><p>방장이 room 생성, room code 공유</p></div>
+      <div class="step"><div class="num">2</div><h3>참가자 Join</h3><p>device/app/os 정보와 함께 room 참가</p></div>
+      <div class="step"><div class="num">3</div><h3>Ready</h3><p>mic route / processing flags 점검 후 Ready</p></div>
+      <div class="step"><div class="num">4</div><h3>Start</h3><p>서버가 start_command_id와 issued_at 발급</p></div>
+      <div class="step"><div class="num">5</div><h3>Record</h3><p>앱이 start received → record invoked → recording started 기록</p></div>
+      <div class="step"><div class="num">6</div><h3>Upload / Process</h3><p>업로드 후 backend가 정렬/믹스/manifest 생성</p></div>
+    </div>
+
+    <div class="callout">
+      핵심 규칙: <strong>server start는 control prior</strong>이고, 최종 정렬 진실값은 <strong>anchor + 오디오</strong>에서 얻습니다.
+    </div>
+
+    <h2>4. 연구 모드 기준</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>연구 모드</th>
+          <th>이유</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>포맷</td>
+          <td><code>wav / pcm / 48kHz / mono</code></td>
+          <td>재현성 확보</td>
+        </tr>
+        <tr>
+          <td>마이크 경로</td>
+          <td><code>built_in_mic only</code></td>
+          <td>route variability 제거</td>
+        </tr>
+        <tr>
+          <td>anchor</td>
+          <td><code>mandatory</code></td>
+          <td>정량 검증용 기준점 확보</td>
+        </tr>
+        <tr>
+          <td>pause/resume</td>
+          <td><code>disallowed</code></td>
+          <td>session drift 해석 단순화</td>
+        </tr>
+        <tr>
+          <td>시작 규칙</td>
+          <td><code>host start + minimum_ready_participants</code></td>
+          <td>동일 세션 정의 명확화</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>5. 꼭 수집해야 하는 정보</h2>
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>필수 metadata</h3>
+        <ul>
+          <li><code>room_id</code></li>
+          <li><code>session_id</code></li>
+          <li><code>participant_id</code></li>
+          <li><code>device_id</code></li>
+          <li><code>recording_started_at</code></li>
+          <li><code>sample_rate_hz</code>, <code>channels</code>, <code>codec</code></li>
+          <li><code>mic_route</code></li>
+          <li><code>audio_processing_flags</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>연구 모드 telemetry</h3>
+        <ul>
+          <li><code>start_command_id</code></li>
+          <li><code>server_start_issued_at</code></li>
+          <li><code>start_command_received_at</code></li>
+          <li><code>client_record_invoked_at</code></li>
+          <li><code>local_monotonic_start_tick</code></li>
+          <li><code>anchor_type</code></li>
+          <li><code>anchor_expected_at</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>6. 테스트 층</h2>
+    <div class="grid cols-3">
+      <div class="card">
+        <div class="badge">Layer 1</div>
+        <h3>Synthetic</h3>
+        <p>ground truth가 있는 offset/drift benchmark</p>
+      </div>
+      <div class="card">
+        <div class="badge">Layer 2</div>
+        <h3>Controlled-device</h3>
+        <p>실제 스마트폰 + 연구 규칙 + anchor</p>
+      </div>
+      <div class="card">
+        <div class="badge">Layer 3</div>
+        <h3>Field validation</h3>
+        <p>실제 회의 + STT 품질 + listening review</p>
+      </div>
+    </div>
+
+    <h2>7. 측정해야 할 핵심 지표</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>설명</th>
+          <th>주요 목적</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>M1</td><td>start command latency</td><td>제어 신호 지연 측정</td></tr>
+        <tr><td>M3</td><td>effective record start latency</td><td>실제 파일 시작 지연 측정</td></tr>
+        <tr><td>M5</td><td>offset error p95</td><td>정렬 정량 평가</td></tr>
+        <tr><td>M6</td><td>drift residual</td><td>장시간 품질 평가</td></tr>
+        <tr><td>M8</td><td>anchor detection success rate</td><td>anchor 정책 평가</td></tr>
+        <tr><td>M9</td><td>loudness spread</td><td>청취 균질성 평가</td></tr>
+        <tr><td>M13</td><td>STT quality delta vs baseline</td><td>실제 제품 가치 평가</td></tr>
+      </tbody>
+    </table>
+
+    <h2>8. 남은 핵심 의사결정</h2>
+    <div class="card">
+      <ul>
+        <li>앱 전략: <strong>Flutter shell + native recorder bridge</strong>로 확정할지</li>
+        <li>연구 모드 기본 anchor를 <strong>beep</strong>로 확정할지</li>
+        <li>Phase 1에서 <strong>BLE assist 없이 server-authoritative start only</strong>로 갈지</li>
+      </ul>
+    </div>
+
+    <h2>9. 지금 가장 자연스러운 다음 단계</h2>
+    <div class="card">
+      <p>
+        문서와 계약은 충분히 준비되었습니다. 다음 단계는 <strong>Epic 0 첫 슬라이스 구현</strong>입니다.
+      </p>
+      <ol>
+        <li><code>src/recog/models.py</code></li>
+        <li><code>src/recog/rooms.py</code></li>
+        <li><code>src/recog/store.py</code></li>
+        <li><code>tests/test_rooms.py</code></li>
+      </ol>
+      <p class="small">즉, 이제는 planning보다 implementation readiness가 더 높은 상태입니다.</p>
+    </div>
+  </div>
+</body>
+</html>

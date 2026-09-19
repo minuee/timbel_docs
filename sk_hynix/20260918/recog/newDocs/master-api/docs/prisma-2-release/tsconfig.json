@@ -1,0 +1,25 @@
+{
+	"compilerOptions": {
+		"target": "ES2020",
+		"module": "ESNext",
+		"moduleResolution": "node",
+		"allowSyntheticDefaultImports": true,
+		"esModuleInterop": true,
+		"allowJs": true,
+		"declaration": true,
+		"declarationMap": false,
+		"sourceMap": false,
+		"outDir": "./dist",
+		"rootDir": "./src",
+		"strict": false,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"isolatedModules": false,
+		"noEmit": false,
+		"emitDeclarationOnly": true,
+		"checkJs": false
+	},
+	"include": ["src/base.database.js"],
+	"exclude": ["node_modules", "dist", "scripts", "schema", "src/libs"]
+}

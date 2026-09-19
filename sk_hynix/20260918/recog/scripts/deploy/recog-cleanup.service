@@ -1,0 +1,19 @@
+[Unit]
+Description=recog-backend cleanup + reconciliation (host-side)
+Documentation=https://github.com/skhynix/recog/blob/main/docs/implementation/recording-cleanup-streaming-history-plan.md
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/recog/etc/cleanup.env
+ExecStart=/usr/bin/python3 /opt/recog/bin/cleanup.py
+StandardOutput=journal
+StandardError=journal
+Nice=10
+IOSchedulingClass=idle
+# Fail fast if RUNTIME_DIR is not set by the EnvironmentFile.
+ExecStartPre=/bin/sh -c 'test -n "$RUNTIME_DIR" || { echo "RUNTIME_DIR is required"; exit 2; }'
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,284 @@
+enum Provider {
+  timblo
+  google
+  apple
+}
+
+enum SupportLang {
+  none
+  ko
+  en
+  ja
+  zh
+  enko
+}
+
+enum Engine {
+  CLOVA
+  RTZ
+  HAIV
+}
+
+enum Summarizer {
+  OPENAI
+  SLLM
+}
+
+enum OS {
+  IOS
+  ANDROID
+}
+
+enum LoginDevice {
+  PC
+  Mobile
+}
+
+enum UserNotificationChannel {
+  PUSH
+  EMAIL
+}
+
+enum UserNotificationEventType {
+  CONTENT_CREATE
+  CONTENT_SHARE
+  CONTENT_RECYCLE
+  CONTENT_RESUMMARY
+  CALENDAR_REMIND
+}
+
+model User {
+  pid       String    @id
+  domain    String?   @default("public") @db.VarChar(256)
+  password  String    @default("OAuthLoginAccount") @db.VarChar(512)
+  provider  Provider  @default(timblo)
+  lastLogin DateTime?
+
+  profile                UserProfile?
+  config                 UserConfig?
+  notificationSetting    UserNotificationSetting?
+  devices                MobileDevice[]
+  searchContentHistories SearchContentHistory[]
+  searchKeywordHistories SearchKeywordHistory[]
+  reSummaryHistories     ReSummaryHistory[]
+
+  ownedWorkspaces    Workspace[]         @relation("OwnerRelation")
+  memberWorkspaces   Member[]
+  calendarIntegrates CalendarIntegrate[]
+
+  notifications UserNotificationManagement[]
+  totpAuthLogs  TotpAuthLog[]
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  @@index([pid], name: "idx_pid")
+  @@index([domain], name: "idx_domain")
+  @@index([provider], name: "idx_provider")
+}
+
+model UserProfile {
+  User User   @relation(fields: [pid], references: [pid], onDelete: Cascade)
+  pid  String @unique
+
+  company     Company? @relation(fields: [empno, companyCode], references: [empno, companyCode])
+  empno       String?  @db.VarChar(128)
+  companyCode String?  @db.VarChar(128)
+
+  name         String? @db.VarChar(128)
+  nickName     String  @unique @db.VarChar(128)
+  email        String? @unique @db.VarChar(256)
+  thumbnailUrl String? @default("") @db.VarChar(512)
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  ContactOwner  Contact[] @relation("ContactOwner")
+  ContactTarget Contact[] @relation("ContactTarget")
+  FolderOwner   Folder[]  @relation("FolderOwner")
+
+  CreatorMenu Menu[] @relation("CreatorMenuRelation")
+  UpdaterMenu Menu[] @relation("UpdaterMenuRelation")
+  CreatorRole Role[] @relation("CreatorRoleRelation")
+  UpdaterRole Role[] @relation("UpdaterRoleRelation")
+
+  CreatorPolicy Policy[] @relation("CreatePolicyRelation")
+  UpdaterPolicy Policy[] @relation("UpdatePolicyRelation")
+
+  CreatorNotice Notice[] @relation("CreatorNoticeRelation")
+  UpdaterNotice Notice[] @relation("UpdaterNoticeRelation")
+
+  ContactLabel ContactLabel[] @relation("ContactLabelOwner")
+
+  @@index([pid], name: "idx_pid")
+  @@index([email], name: "idx_email")
+  @@index([nickName], name: "idx_nickName")
+}
+
+model UserConfig {
+  User             User        @relation(fields: [pid], references: [pid], onDelete: Cascade)
+  pid              String      @unique
+  statusMessage    String?     @db.VarChar(256)
+  locale           SupportLang @default(ko)
+  transcribeLang   SupportLang @default(none)
+  transcribeEngine Engine      @default(CLOVA)
+  summarizer       Summarizer  @default(OPENAI)
+
+  // TOTP 2차 인증 관련 필드
+  totpSecret       String?   @db.VarChar(512) // 암호화된 TOTP secret
+  totpEnabled      Boolean   @default(false)  // TOTP 활성화 여부
+  totpRegisteredAt DateTime? @db.DateTime(3)  // TOTP 등록 일시
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  @@index([pid], name: "idx_pid")
+  @@index([locale], name: "idx_locale")
+  @@index([transcribeLang], name: "idx_transcribeLang")
+  @@index([transcribeEngine], name: "idx_transcribeEngine")
+}
+
+model UserNotificationSetting {
+  User               User     @relation(fields: [pid], references: [pid], onDelete: Cascade)
+  pid                String   @unique
+  allowNotification  Boolean  @default(true)
+  allowPush          Boolean  @default(true)
+  allowEmail         Boolean  @default(true)
+  allowContentCreate Boolean  @default(true)
+  allowContentShare  Boolean  @default(true)
+  allowContentError  Boolean  @default(true)
+  createAt           DateTime @default(now())
+  updateAt           DateTime @updatedAt
+
+  @@index([pid], name: "idx_pid")
+}
+
+model UserNotificationManagement {
+  id        String                    @id @default(cuid())
+  User      User                      @relation(fields: [pid], references: [pid], onDelete: Cascade)
+  pid       String
+  channel   UserNotificationChannel
+  eventType UserNotificationEventType
+  isUsed    Boolean                   @default(true)
+  createAt  DateTime                  @default(now())
+  updateAt  DateTime                  @updatedAt
+
+  @@unique([pid, channel, eventType])
+  @@index([pid], name: "idx_pid")
+}
+
+view UserView {
+  pid              String      @unique
+  domain           String?
+  provider         Provider
+  lastLogin        DateTime?
+  name             String?
+  nickName         String
+  email            String?
+  thumbnailUrl     String
+  statusMessage    String?
+  locale           SupportLang
+  transcribeLang   SupportLang
+  transcribeEngine Engine
+  summarizer       Summarizer
+}
+
+model MobileDevice {
+  id          Int      @id @default(autoincrement())
+  User        User     @relation(fields: [pid], references: [pid], onDelete: Cascade)
+  pid         String
+  OS          OS       @default(ANDROID)
+  AppVersion  String?  @db.VarChar(30)
+  AppLanguage String?  @db.VarChar(10)
+  deviceModel String?  @db.VarChar(128)
+  createAt    DateTime @default(now())
+  updateAt    DateTime @updatedAt
+
+  pushToken PushToken?
+
+  @@index([OS], name: "idx_OS")
+  @@index([pid], name: "idx_pid")
+}
+
+model PushToken {
+  id Int @id @default(autoincrement())
+
+  device   MobileDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId Int          @unique
+
+  token    String   @unique @db.VarChar(1024)
+  expires  DateTime
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  @@index([deviceId], name: "idx_deviceId")
+}
+
+model LoginHistory {
+  id            BigInt      @id @default(autoincrement())
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId   String      @db.VarChar(36)
+  userName      String
+  email         String
+  ip            String      @db.VarChar(128)
+  device        LoginDevice
+  loginAt       DateTime    @default(now())
+  logoutAt      DateTime?
+  failureReason String?     @map("failure_reason") @db.Text
+
+  @@index([ip], name: "idx_ip")
+  @@index([device], name: "idx_device")
+  @@index([loginAt], name: "idx_loginAt")
+  @@index([logoutAt], name: "idx_logoutAt")
+}
+
+// TOTP 인증 액션 타입
+enum TotpActionType {
+  SETUP       // TOTP 설정 시작 (QR 생성)
+  REGISTER    // TOTP 등록 완료
+  VERIFY      // TOTP 코드 검증 (로그인 시)
+  DISABLE     // TOTP 비활성화
+  RESET       // TOTP 재설정
+}
+
+// TOTP 인증 결과
+enum TotpResultType {
+  SUCCESS           // 성공
+  FAILED            // 실패 (코드 불일치)
+  EXPIRED           // 만료
+  BLOCKED           // 차단 (시도 횟수 초과)
+  ERROR             // 시스템 오류
+}
+
+// TOTP 인증 로그
+model TotpAuthLog {
+  id          BigInt         @id @default(autoincrement())
+  
+  // 사용자 정보
+  User        User?          @relation(fields: [pid], references: [pid], onDelete: SetNull)
+  pid         String?        @db.VarChar(128)
+  email       String         @db.VarChar(256)
+  
+  // 인증 정보
+  action      TotpActionType
+  result      TotpResultType
+  
+  // 클라이언트 정보
+  ip          String         @db.VarChar(128)
+  userAgent   String?        @db.VarChar(512)
+  device      LoginDevice?
+  
+  // 상세 정보
+  failureReason String?      @db.Text          // 실패 사유
+  attemptCount  Int          @default(1)       // 시도 횟수 (해당 세션에서)
+  
+  // 시간 정보
+  createdAt   DateTime       @default(now())
+  
+  @@index([pid], name: "idx_totp_log_pid")
+  @@index([email], name: "idx_totp_log_email")
+  @@index([action], name: "idx_totp_log_action")
+  @@index([result], name: "idx_totp_log_result")
+  @@index([createdAt], name: "idx_totp_log_createdAt")
+  @@index([ip], name: "idx_totp_log_ip")
+}

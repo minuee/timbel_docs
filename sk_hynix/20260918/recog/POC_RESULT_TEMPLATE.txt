@@ -1,0 +1,9 @@
+iOS: PASS / PARTIAL / FAIL
+Android: PASS / PARTIAL / FAIL
+route detection: 가능 / 불가
+timestamp capture: 가능 / 불가
+baseline checker JSON:
+{
+  "ios": {},
+  "android": {}
+}

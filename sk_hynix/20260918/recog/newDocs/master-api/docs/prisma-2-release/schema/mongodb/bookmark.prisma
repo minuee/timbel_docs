@@ -1,0 +1,65 @@
+model Bookmarks {
+    id              String    @id @default(auto()) @map("_id") @db.ObjectId
+    contentId       String
+    fileId          String   
+    key             BookmarksKeys
+    itemIds         String[]
+    isAll           YesNo               @default(N)
+    time            DateTime            @updatedAt
+}
+
+model Memo {
+    id              String    @id @default(auto()) @map("_id") @db.ObjectId
+    contentId       String
+    fileId          String   
+    key             MemoKeys
+    itemId          String?
+    text            String
+    time            DateTime            @updatedAt
+}
+
+view BookMarkedView {
+    id              String   @map("_id") @db.ObjectId
+    contentId       String   
+    key             BookmarksKeys 
+    isAll           YesNo                @default(N)
+    time            DateTime 
+    data            Json[]
+}
+
+view MemoView {
+    id              String   @map("_id") @db.ObjectId
+    contentId       String   
+    key             MemoKeys 
+    itemId          String?
+    text            String
+    time            DateTime 
+    data            Json[]
+}
+
+enum BookmarksKeys {
+    segments
+    mergedSegments
+    speakerInfo
+    summaryTime
+    topics
+    keywords
+    summary
+    tasks
+    issues
+    content
+}
+
+enum MemoKeys {
+    segments
+    mergedSegments
+    speakerInfo
+    summaryTime
+    summaryTimeTotal
+    topics
+    keywords
+    summary
+    tasks
+    issues
+    content
+}

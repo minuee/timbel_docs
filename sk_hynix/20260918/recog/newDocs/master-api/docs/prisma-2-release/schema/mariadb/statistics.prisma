@@ -1,0 +1,201 @@
+view MonthlyWorkspaceStats {
+    workspaceId             String
+    domain                  String
+    month                   String
+    totalDuration           Int       @default(0)
+    totalCount              Int       @default(0)
+    doneTotalDuration       Int       @default(0)
+    doneCount               Int       @default(0)
+    errorTotalDuration     Int       @default(0)
+    errorCount              Int       @default(0)
+    llmTotalToken           Int       @default(0)
+    llmTotalCount           Int       @default(0)
+    llmDoneCount            Int       @default(0)
+    llmErrorCount           Int       @default(0)
+}
+
+view HourlyMemberStats {
+    member                  Member      @relation("MemberRelation", fields: [memberId], references: [id])
+    memberId                String
+    date                    String
+    hour                    Int       @default(0)
+    contentTotalDuration    Int       @default(0)
+    contentCount            Int       @default(0)
+    llmTotalToken           Int       @default(0)
+    llmCount                Int       @default(0)
+}
+
+view DailyMemberStats {
+    member                  Member      @relation("MemberRelation", fields: [memberId], references: [id])
+    memberId                String
+    date                    String
+    contentTotalDuration    Int       @default(0)
+    contentCount            Int       @default(0)
+    llmTotalToken           Int       @default(0)
+    llmCount                Int       @default(0)
+}
+
+view WeeklyMemberStats {
+    member                  Member      @relation("MemberRelation", fields: [memberId], references: [id])
+    memberId                String
+    month                   String
+    week                    Int       @default(1)
+    contentTotalDuration    Int       @default(0)
+    contentCount            Int       @default(0)
+    llmTotalToken           Int       @default(0)
+    llmCount                Int       @default(0)
+}
+
+view MonthlyMemberStats {
+    member                  Member      @relation("MemberRelation", fields: [memberId], references: [id])
+    memberId                String
+    month                   String
+    contentTotalDuration    Int       @default(0)
+    contentCount            Int       @default(0)
+    llmTotalToken           Int       @default(0)
+    llmCount                Int       @default(0)
+}
+
+model ContentDailyStats {
+  id                    Int @id     @default(autoincrement())
+  statDate              DateTime    @db.Date
+
+  Workspace             Workspace?  @relation(fields: [workspaceId], references: [id])
+  workspaceId           String?
+
+  Member                Member?     @relation(fields: [memberId], references: [id])
+  memberId              String?
+
+  successContentCount   Int       @default(0)
+  failContentCount      Int       @default(0)
+  totalContentCount     Int       @default(0)
+  successDurationSum    Int       @default(0)
+  failDurationSum       Int       @default(0)
+  totalDurationSum      Int       @default(0)
+  successLLMUsageSum    Int       @default(0)
+  failLLMUsageSum       Int       @default(0)
+  totalLLMUsageSum      Int       @default(0)
+  createdAt             DateTime  @default(now())
+
+  @@index([workspaceId], name: "idx_workspaceId")
+  @@index([memberId], name: "idx_memberId")
+  @@index([statDate], name: "idx_statDate")
+
+}
+
+view WorkspaceYearlyStats {
+    workspaceId             String      @db.VarChar(36)
+    workspaceName           String?     @db.VarChar(128)
+    yyyy                    String      @db.VarChar(4)
+    totalSTTCount           Int         @default(0)
+    totalSTTDuration        Int         @default(0)
+    successSTTCount         Int         @default(0)
+    successSTTDuration      Int         @default(0)
+    failSTTCount            Int         @default(0)        
+    failSTTDuration         Int         @default(0)
+    totalLLMCount           Int         @default(0)
+    totalLLMToken           Int         @default(0)
+    successLLMCount         Int         @default(0)
+    failLLMCount            Int         @default(0)
+}
+
+view WorkspaceMonthlyStats {
+    workspaceId             String      @db.VarChar(36)
+    workspaceName           String?     @db.VarChar(128)
+    yyyymm                  String      @db.VarChar(7)
+    totalSTTCount           Int         @default(0)
+    totalSTTDuration        Int         @default(0)
+    successSTTCount         Int         @default(0)
+    successSTTDuration      Int         @default(0)
+    failSTTCount            Int         @default(0)        
+    failSTTDuration         Int         @default(0)
+    totalLLMCount           Int         @default(0)
+    totalLLMToken           Int         @default(0)
+    successLLMCount         Int         @default(0)
+    failLLMCount            Int         @default(0)
+}
+
+view MemberStats {
+    createDate              String      @db.VarChar(10)
+    workspaceId             String      @db.VarChar(36)
+    workspaceName           String?     @db.VarChar(128)
+    memberId                String      @db.VarChar(36) 
+    userName                String?     @db.VarChar(128)
+    email                   String?     @db.VarChar(256)
+    totalContentCount       Int         @default(0)
+    totalContentDuration    Int         @default(0)
+    totalLLMCount           Int         @default(0)
+    totalLLMToken           Int         @default(0)
+}
+
+model DailyStats {
+    id                      BigInt      @id @default(autoincrement())
+    createDate              String      @db.VarChar(10)
+    yyyy                    String      @db.VarChar(4)
+    yyyymm                  String      @db.VarChar(7)
+    workspaceId             String      @db.VarChar(36)
+    memberId                String      @db.VarChar(36) 
+    totalContentCount       Int         @default(0)
+    totalContentDuration    Int         @default(0)
+    totalSTTCount           Int         @default(0)
+    totalSTTDuration        Int         @default(0)
+    successSTTCount         Int         @default(0)
+    successSTTDuration      Int         @default(0)
+    failSTTCount            Int         @default(0)        
+    failSTTDuration         Int         @default(0)
+    totalLLMCount           Int         @default(0)
+    totalLLMToken           Int         @default(0)
+    successLLMCount         Int         @default(0)
+    failLLMCount            Int         @default(0)
+    createAt                DateTime    @default(now())
+
+    @@unique([createDate, memberId])
+    @@index([createDate], name: "idx_createDate")
+    @@index([yyyy], name: "idx_yyyy")
+    @@index([yyyymm], name: "idx_yyyymm")
+    @@index([workspaceId], name: "idx_workspaceId")
+    @@index([memberId], name: "idx_memberId")
+}
+
+model Statistics {
+    id                      BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+
+    yearKst                 Int
+    monthKst                Int
+    dayKst                  Int
+    weekNumber              Int
+    dateKst                 String    
+
+    workspace               Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+    workspaceId             String?      @db.VarChar(191)
+
+    creator                 Member?      @relation(fields: [creatorId], references: [id], onDelete: SetNull)
+    creatorId               String?      @db.VarChar(191)
+
+    totalContentCount       Int         @default(0) @db.UnsignedInt
+    totalSeconds            Int         @default(0) @db.UnsignedInt
+    mobileContentCount      Int         @default(0) @db.UnsignedInt
+    mobileSeconds           Int         @default(0) @db.UnsignedInt
+
+    transcribeDoneCount     Int         @default(0) @db.UnsignedInt
+    transcribeErrorCount    Int         @default(0) @db.UnsignedInt
+    transcribeOtherCount    Int         @default(0) @db.UnsignedInt
+
+    duration0_1Min          Int         @default(0) @db.UnsignedInt
+    duration1_30Min         Int         @default(0) @db.UnsignedInt
+    duration30_60Min        Int         @default(0) @db.UnsignedInt
+    duration60_120Min       Int         @default(0) @db.UnsignedInt
+    duration120_180Min      Int         @default(0) @db.UnsignedInt
+    durationOver180Min      Int         @default(0) @db.UnsignedInt
+
+    createAt               DateTime    @default(now())
+    updateAt               DateTime    @updatedAt
+
+    @@index([dateKst], name: "idx_dateKst")
+    @@index([workspaceId], name: "idx_statistics_workspaceId")
+    @@index([creatorId], name: "idx_statistics_creatorId")
+    @@index([yearKst], name: "idx_statistics_yearKst")
+    @@index([monthKst], name: "idx_statistics_monthKst")
+    @@index([yearKst, monthKst], name: "idx_statistics_yearMonth")
+    @@index([yearKst, weekNumber], name: "idx_statistics_yearWeek")
+}

@@ -1,0 +1,332 @@
+enum ContentType {
+  NOTE
+  CALL
+  AUDIO
+  VIDEO
+  RECORD
+  MEETING
+  OTHER
+  MERGED_CONTENT
+  TEXT
+}
+
+enum ContentShareRole {
+  OWNER
+  EDITOR
+  VIEWER
+  DOWNLOADER
+}
+
+enum DownloadType {
+  MEDIA_FILE
+  DOCUMENT_TXT
+  DOCUMENT_PDF
+  DOCUMENT_DOCX
+  DOCUMENT_HWP
+}
+
+enum DownloadDevice {
+  PC
+  Mobile
+}
+
+enum DownloadDeviceMobile {
+  iOS
+  Android
+}
+
+enum ReSummarySize {
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+enum MemoItem {
+  segments
+  mergedSegments
+  speakerInfo
+  summaryTime
+  topics
+  keywords
+  summary
+  tasks
+  issues
+  content
+}
+
+model Content {
+  contentId   String    @id @default(uuid()) @map("id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  creator   Member  @relation("CreatorRelation", fields: [creatorId], references: [id], onDelete: Cascade)
+  creatorId String
+  editor    Member? @relation("EditorRelation", fields: [editorId], references: [id], onDelete: SetNull)
+  editorId  String?
+
+  folder   Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  folderId String? @db.VarChar(36)
+
+  fileName         String      @default("") @db.VarChar(512)
+  title            String      @db.VarChar(256)
+  editedTitle      String?     @db.VarChar(256)
+  hashTag          Json
+  manualTag        Json?
+  duration         Int         @default(0) @db.UnsignedInt
+  meetingStartTime DateTime?   @default(now())
+  meetingEndTime   DateTime?
+  type             ContentType @default(NOTE)
+  transcribeStatus String      @default("WAITING") @db.VarChar(50)
+  isMobile         Boolean     @default(false)
+  isRecord         Boolean     @default(false)
+  isDeleted        Boolean     @default(false)
+  isRecycle        Boolean     @default(false)
+  isLocked         Boolean     @default(false)
+  saveCount        Int         @default(0)
+  createAt         DateTime    @default(now())
+  updateAt         DateTime    @updatedAt
+
+  chatbots Chatbot[] @relation("ChatbotContent")
+  attachedCalendars Calendar[] @relation("CalendarContent")
+
+  shareUsers             ContentShareUser[]
+  searchContentHistories SearchContentHistory[]
+  downloadHistories      DownloadHistory[]
+  reSummaryHistories     ReSummaryHistory[]
+  contentHistories       ContentHistory[]
+  memo                   Memo[]
+  calendars              Calendar[]
+
+  linkedContents linkedContent[] @relation("LinkedContentRelation")
+  linkedFromContents linkedContent[] @relation("LinkedFromContentRelation")
+
+  @@index([creatorId, transcribeStatus, createAt], name: "idx_creator_status_createAt")
+  @@index([creatorId, createAt], name: "idx_creator_createAt")
+  @@index([transcribeStatus], name: "idx_transcribeStatus")
+}
+
+model linkedContent {
+  contentId String @db.VarChar(36)
+  content Content @relation("LinkedContentRelation", fields: [contentId], references: [contentId], onDelete: Cascade)
+
+  linkedContentId String @db.VarChar(36)
+  linkedContent Content @relation("LinkedFromContentRelation", fields: [linkedContentId], references: [contentId], onDelete: Cascade)
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  @@id([contentId, linkedContentId])
+
+  @@index([contentId], name: "idx_contentId")
+  @@index([linkedContentId], name: "idx_linkedContentId")
+}
+
+model ContentShareUser {
+  content   Content @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  contentId String
+
+  email String @db.VarChar(256)
+
+  role ContentShareRole @default(VIEWER)
+
+  folder   Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  folderId String? @db.VarChar(36)
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  @@id([contentId, email])
+  @@index([contentId], name: "idx_contentId")
+  @@index([email], name: "idx_email")
+}
+
+model ContentCapture {
+  captureId        String      @id @default(uuid()) @map("id")
+  captureType      String      @db.VarChar(32)
+  captureAction    String      @db.VarChar(32)
+  contentId        String      @db.VarChar(36)
+  contentType      ContentType
+  title            String      @db.VarChar(128)
+  duration         Int         @default(0) @db.UnsignedInt
+  meetingStartTime DateTime?
+  attendeeCount    Int         @db.UnsignedInt
+  shareEmail       String?     @db.VarChar(256)
+  creatorId        String      @db.VarChar(36)
+  creatorNickName  String      @db.VarChar(128)
+  serverId         String      @db.VarChar(36)
+  createAt         DateTime    @default(now())
+
+  inbox Inbox[] @relation("ContentCaptureRelation")
+
+  @@index([createAt, captureType, captureAction], name: "idx_createAt_type_action")
+  @@index([shareEmail, createAt], name: "idx_shareEmail_createAt")
+  @@index([creatorId, createAt], name: "idx_creatorId_createAt")
+  @@index([captureType, captureAction], name: "idx_type_action")
+}
+
+model ContentHistory {
+  id                String    @id @default(cuid())
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId       String    @db.VarChar(36)
+  content           Content?  @relation(fields: [contentId], references: [contentId], onDelete: SetNull)
+  contentId         String?   @db.VarChar(36)
+  contentType       ContentType
+  contentTitle      String    @db.VarChar(256)
+  meetingStartTime  DateTime?
+  meetingEndTime    DateTime?
+  duration          Int       @default(0) @db.UnsignedInt
+  transcribeStatus  String    @db.VarChar(50)
+  userName          String    @db.VarChar(128)
+  email             String    @db.VarChar(128)
+  createAt          DateTime  @default(now())
+}
+
+model DownloadHistory {
+  id                 String         @id @default(cuid())
+  type               DownloadType
+  workspace          Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId        String         @db.VarChar(36)
+  content            Content?       @relation(fields: [contentId], references: [contentId], onDelete: SetNull)
+  contentId          String?        @db.VarChar(36)
+  contentTitle       String
+  fileName           String
+  userName           String
+  email              String
+  device             DownloadDevice @default(PC)
+  size               Int            @default(0)
+  downloadAt         DateTime       @default(now())
+
+  @@index([contentId], name: "idx_contentId")
+  @@index([downloadAt], name: "idx_downloadAt")
+  @@index([device], name: "idx_device")
+  @@index([type], name: "idx_type")
+  @@index([email, downloadAt], name: "idx_email_downloadAt")
+}
+
+model ReSummaryHistory {
+  id          String        @id @default(cuid())
+  content     Content       @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  contentId   String        @db.VarChar(36)
+  requester   User          @relation(fields: [requesterId], references: [pid], onDelete: Cascade)
+  requesterId String        @db.VarChar(36)
+  summarySize ReSummarySize @default(MEDIUM)
+  requestedAt DateTime      @default(now())
+
+  @@index([contentId], name: "idx_contentId")
+  @@index([requesterId], name: "idx_requesterId")
+  @@index([requestedAt], name: "idx_requestedAt")
+  @@index([summarySize], name: "idx_summarySize")
+  @@index([requesterId, requestedAt], name: "idx_requesterId_requestedAt")
+}
+
+view ContentWithUserProfiles {
+  contentId           String      @unique
+  folderId            String?
+  title               String
+  editedTitle         String?
+  fileName            String?
+  type                ContentType
+  hashTag             Json
+  manualTag           Json?
+  isRecord            Boolean
+  duration            Int
+  creatorPID          String
+  creatorEmail        String
+  creatorNickName     String
+  creatorThumbnailUrl String
+  transcribeStatus    String
+  meetingStartTime    DateTime?
+  meetingEndTime      DateTime?
+  isShared            Boolean
+  createAt            DateTime
+  updateAt            DateTime
+}
+
+view SharedUserProfile {
+  contentId    String           @unique
+  role         ContentShareRole
+  folderId     String?
+  folderName   String?
+  email        String
+  nickName     String?
+  thumbnailUrl String?
+  createAt     DateTime
+}
+
+model SearchKeywordHistory {
+  keywordId Int      @id @default(autoincrement()) @map("id")
+  User      User     @relation(fields: [pid], references: [pid], onDelete: Cascade)
+  pid       String
+  keyword   String   @db.VarChar(512)
+  searchAt  DateTime @updatedAt
+
+  @@index([pid], name: "idx_pid")
+  @@index([keyword], name: "idx_keyword")
+}
+
+model SearchContentHistory {
+  id        Int      @id @default(autoincrement())
+  User      User     @relation(fields: [pid], references: [pid], onDelete: Cascade)
+  pid       String
+  Content   Content  @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  contentId String
+  viewAt    DateTime @updatedAt
+
+  @@index([pid], name: "idx_pid")
+  @@index([contentId], name: "idx_contentId")
+}
+
+view InboxContent {
+  inboxId          String   @unique
+  receiverId       String
+  captureId        String
+  captureType      String
+  captureAction    String
+  contentId        String
+  contentType      String
+  title            String
+  duration         Int
+  meetingStartTime DateTime
+  attendeeCount    Int
+  isRead           Boolean
+  creatorId        String
+  creatorNickName  String
+  createAt         DateTime
+}
+
+model Memo {
+  id        String    @id @default(uuid()) @db.VarChar(36)
+  content   Content   @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  contentId String    @db.VarChar(36)
+  item      MemoItem  
+  itemId    String?   @db.VarChar(36)
+  startTime Int?
+  text      String?   @db.VarChar(2048)
+  isSecret  Boolean   @default(false)
+  creator   Member?   @relation("CreatorMemoRelation", fields: [creatorId], references: [id], onDelete: SetNull)
+  creatorId String?   @db.VarChar(36)
+  createAt  DateTime  @default(now())
+  updateAt  DateTime  @updatedAt
+  deleteAt  DateTime?
+
+  comments MemoComment[]
+
+  @@index([contentId], name: "idx_contentId")
+  @@index([creatorId], name: "idx_creatorId")
+}
+
+
+model MemoComment {
+  id        String    @id @default(uuid()) @db.VarChar(36)
+  memo      Memo      @relation(fields: [memoId], references: [id], onDelete: Cascade)
+  memoId    String    @db.VarChar(36)
+  text      String?   @db.VarChar(2048)
+  creator   Member?   @relation("CreatorMemoCommentRelation", fields: [creatorId], references: [id], onDelete: SetNull)
+  creatorId String?   @db.VarChar(36)
+  createAt  DateTime  @default(now())
+  updateAt  DateTime  @updatedAt
+  deleteAt  DateTime?
+  
+  @@index([memoId], name: "idx_memoId")
+  @@index([creatorId], name: "idx_creatorId")
+}

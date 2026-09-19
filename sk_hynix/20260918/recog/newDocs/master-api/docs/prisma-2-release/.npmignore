@@ -1,0 +1,60 @@
+# 소스 파일
+src/
+examples/
+scripts/
+
+# 개발 의존성
+node_modules/
+package-lock.json
+
+# 빌드 도구
+rollup.config.js
+rollup.config.obfuscate.js
+babel.config.json
+.eslintrc.js
+.prettierrc.json
+
+# 로그 및 임시 파일
+logs/
+*.log
+*.tmp
+
+# IDE 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# 테스트
+test/
+tests/
+__tests__/
+*.test.js
+*.spec.js
+
+# 문서 (선택적)
+docs/
+*.md
+README.md
+
+# 환경 파일
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# GitHub 관련
+.github/
+env.example
+
+# Babel 빌드 파일 (lib 디렉토리 제외)
+lib/

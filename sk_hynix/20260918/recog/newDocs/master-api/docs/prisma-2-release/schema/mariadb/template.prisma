@@ -1,0 +1,73 @@
+model Template {
+    id String @db.VarChar(36)
+
+    workspaceId String? @db.VarChar(36)
+    workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+    
+    key String @db.VarChar(128)
+    version String @default("")
+    categoryId String? @db.VarChar(36)
+    category TemplateCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+    
+    name String @db.VarChar(512)
+    description String? @db.VarChar(2048)
+    preview String @db.LongText
+    inputType String @db.VarChar(128)
+
+    options Json?
+
+    isUsed YesNo @default(N)
+    isDeleted YesNo @default(N)
+
+    creatorId String? @db.VarChar(36)
+    creator Member? @relation("CreatorTemplateRelation", fields: [creatorId], references: [id], onDelete: SetNull)
+
+    editorId String? @db.VarChar(36)
+    editor Member? @relation("UpdaterTemplateRelation", fields: [editorId], references: [id], onDelete: SetNull)
+
+    createAt DateTime @default(now())
+    updateAt DateTime @updatedAt
+
+    favorites TemplateFavorite[]
+
+    @@id([id, version])
+    @@unique([id, version])
+    @@index([id, version], name: "idx_id_version")
+
+    @@index([workspaceId], name: "idx_workspaceId")
+    @@index([categoryId], name: "idx_categoryId")
+    @@index([creatorId], name: "idx_creatorId")
+    @@index([editorId], name: "idx_editorId")
+    @@index([name], name: "idx_name")
+}
+
+model TemplateCategory {
+    id String @id @default(cuid())
+    workspaceId String @db.VarChar(36)
+    workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+    name String @db.VarChar(128)
+    createAt DateTime @default(now())
+    updateAt DateTime @updatedAt
+
+    templates Template[]
+
+    @@index([workspaceId], name: "idx_workspaceId")
+    @@index([name], name: "idx_name")
+}
+
+model TemplateFavorite {
+    idx Int @id @default(autoincrement())
+    templateId String @db.VarChar(36)
+    version String @db.VarChar(128)
+    template Template @relation(fields: [templateId, version], references: [id, version], onDelete: Cascade)
+
+    memberId String @db.VarChar(36)
+    member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+    createAt DateTime @default(now())
+    updateAt DateTime @updatedAt
+    
+    @@index([templateId], name: "idx_templateId")
+    @@index([memberId], name: "idx_memberId")
+}

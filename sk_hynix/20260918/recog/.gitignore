@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Runtime data produced by the service
+.runtime/
+runtime/
+/var/lib/recog/
+
+# Build / distribution
+build/
+dist/
+
+# IDE / editor
+.vscode/
+.idea/
+*.iml
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env
+.env
+.env.*
+!.env.recog.example
+!.env.example
+
+# Verification artifacts (evidence bundles, large outputs)
+verification/evidence/
+verification/runs/
+
+# CI scratch
+.gitlab-ci-local/
+
+# Local agent / session state (never committed)
+.omc/
+.omx/
+.claude/

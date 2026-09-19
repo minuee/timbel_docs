@@ -1,0 +1,81 @@
+# recog-backend — GitLab CI/CD
+#
+# Runner      : shared timblo runner (shell executor, docker CLI on host)
+# Trigger     : pushes to the `skHynix` branch only (dev happens on `main`)
+# Image       : ghcr.io/timbel-timblo-onpremise/recog-backend
+# Deploy host : same host as the timblo runner (expected to be 192.168.0.146)
+# Deploy path : /home/jwpark/timblo-hynix/recog-backend
+
+stages:
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: "ghcr.io/timbel-timblo-onpremise/recog-backend"
+  COMPOSE_SERVICE: "recog-backend"
+  CONTAINER_NAME: "aimm-recog-backend"
+  ENV_KEY: "RECOG_VERSION"
+  DEPLOY_PATH: "/home/jwpark/timblo-hynix/recog-backend"
+
+before_script:
+  - echo "recog-backend CI — branch=${CI_COMMIT_REF_NAME} sha=${CI_COMMIT_SHORT_SHA}"
+
+build:
+  stage: build
+  script:
+    - export DOCKER_BUILDKIT=1
+    - docker pull ${IMAGE_NAME}:skHynix-latest || true
+    - >
+      docker build
+      --build-arg BUILDKIT_INLINE_CACHE=1
+      --cache-from ${IMAGE_NAME}:skHynix-latest
+      -t ${IMAGE_NAME}:skHynix-${CI_COMMIT_SHORT_SHA}
+      .
+    - docker tag ${IMAGE_NAME}:skHynix-${CI_COMMIT_SHORT_SHA} ${IMAGE_NAME}:skHynix-latest
+    - docker push ${IMAGE_NAME}:skHynix-${CI_COMMIT_SHORT_SHA}
+    - docker push ${IMAGE_NAME}:skHynix-latest
+  only:
+    - skHynix
+
+deploy:
+  stage: deploy
+  script:
+    # Sanity: deploy path must be prepared on the runner host (one-time setup).
+    - |
+      if [ ! -d "${DEPLOY_PATH}" ]; then
+        echo "ERROR: ${DEPLOY_PATH} does not exist on the runner host."
+        echo "First-time setup: mkdir -p ${DEPLOY_PATH}/runtime && cp .env.recog.example ${DEPLOY_PATH}/.env.recog"
+        exit 1
+      fi
+    - |
+      if [ ! -f "${DEPLOY_PATH}/.env.recog" ]; then
+        echo "ERROR: ${DEPLOY_PATH}/.env.recog missing — copy from deploy/.env.recog.example and fill values."
+        exit 1
+      fi
+    # Keep compose file in sync with the repo on every deploy (cheap, idempotent).
+    - install -m 0644 deploy/docker-compose.yml ${DEPLOY_PATH}/docker-compose.yml
+    - mkdir -p ${DEPLOY_PATH}/runtime
+    # Ensure runtime dir is writable by the in-container recog user (uid 10001).
+    # Idempotent — does nothing if ownership is already correct.
+    - sudo chown -R 10001:10001 ${DEPLOY_PATH}/runtime
+    # Pin the version that was just built.
+    - sed -i "s|^${ENV_KEY}=.*|${ENV_KEY}=skHynix-${CI_COMMIT_SHORT_SHA}|" ${DEPLOY_PATH}/.env.recog
+    - cd ${DEPLOY_PATH}
+    - docker compose --env-file .env.recog pull ${COMPOSE_SERVICE}
+    - docker compose --env-file .env.recog up -d --no-deps ${COMPOSE_SERVICE}
+    # Verify.
+    - sleep 5
+    - docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Names}} {{.Status}}' | grep ${CONTAINER_NAME}
+    - HOST_PORT=$(grep '^HOST_PORT=' ${DEPLOY_PATH}/.env.recog | cut -d= -f2)
+    - HEALTH_URL="http://127.0.0.1:${HOST_PORT}/health"
+    - |
+      ATTEMPTS=20
+      for i in $(seq 1 ${ATTEMPTS}); do
+        if curl -fsS ${HEALTH_URL} >/dev/null; then
+          echo "health OK (${HEALTH_URL}) after ${i} attempt(s)"; exit 0
+        fi
+        echo "health attempt ${i}/${ATTEMPTS} pending (${HEALTH_URL})..."; sleep 3
+      done
+      echo "ERROR: ${HEALTH_URL} never returned 200"; docker logs --tail 80 ${CONTAINER_NAME} || true; exit 1
+  only:
+    - skHynix

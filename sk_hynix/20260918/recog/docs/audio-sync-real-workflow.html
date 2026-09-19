@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Audio Sync Merge 프로젝트 워크플로우</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2e;
+      --panel-2: #1a2240;
+      --text: #eef2ff;
+      --muted: #aab4d6;
+      --accent: #7dd3fc;
+      --accent-2: #86efac;
+      --warn: #fbbf24;
+      --danger: #fca5a5;
+      --line: #2a355f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1020 0%, #10172b 100%);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+    }
+    h1, h2, h3 { line-height: 1.2; margin: 0 0 12px; }
+    h1 { font-size: 34px; }
+    h2 { font-size: 24px; margin-top: 32px; }
+    h3 { font-size: 18px; margin-top: 20px; }
+    p, li { color: var(--muted); }
+    .lead {
+      font-size: 18px;
+      color: #dbe7ff;
+      max-width: 980px;
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+    .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 900px) {
+      .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: rgba(19, 26, 46, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .card strong { color: var(--text); }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      margin-bottom: 10px;
+      background: #1e2b52;
+      color: #c7d2fe;
+      border: 1px solid #35437a;
+    }
+    .ok { color: var(--accent-2); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--danger); }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(180px, 1fr));
+      gap: 14px;
+      align-items: stretch;
+      margin-top: 16px;
+    }
+    @media (max-width: 1100px) {
+      .flow { grid-template-columns: 1fr; }
+    }
+    .step {
+      background: var(--panel-2);
+      border: 1px solid #31406f;
+      border-radius: 18px;
+      padding: 16px;
+      position: relative;
+      min-height: 190px;
+    }
+    .step .num {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #041220;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .arrow {
+      align-self: center;
+      text-align: center;
+      color: var(--accent);
+      font-size: 28px;
+      font-weight: 700;
+    }
+    @media (max-width: 1100px) {
+      .arrow { transform: rotate(90deg); }
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #151d35;
+      color: #dbe7ff;
+      font-weight: 700;
+    }
+    tr:last-child td { border-bottom: none; }
+    code {
+      background: #0f1530;
+      color: #d6e4ff;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid #243056;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.95em;
+    }
+    .note {
+      border-left: 4px solid var(--warn);
+      padding: 12px 14px;
+      background: rgba(251,191,36,0.08);
+      border-radius: 10px;
+      color: #f8e7b1;
+      margin-top: 14px;
+    }
+    .small { font-size: 14px; color: var(--muted); }
+    .list-tight li { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Audio Sync Merge 프로젝트: 실제 워크플로우와 현재 구현 상태</h1>
+    <p class="lead">
+      이 문서는 <strong>처음 요청한 프로젝트 목표</strong>와 <strong>현재 구현된 MVP</strong> 사이의 차이를 정리하고,
+      실제 스마트폰 녹음 파일로 어떤 방식으로 알고리즘을 테스트해야 하는지 전체 흐름을 그림처럼 설명합니다.
+    </p>
+
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="badge">원래 요청</div>
+        <h3>원래 만들고 싶었던 것</h3>
+        <ul class="list-tight">
+          <li>iOS / Android 스마트폰으로 같은 회의를 각자 녹음</li>
+          <li>파일 타임스탬프나 녹음 시작 정보 등을 참고해서 정렬</li>
+          <li>싱크 / drift 보정 / loudness 보정 후 믹스</li>
+          <li>최종 결과를 STT에 넣거나 사람이 다시 들어봄</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="badge">현재 구현</div>
+        <h3>지금 실제로 구현된 것</h3>
+        <ul class="list-tight">
+          <li>Python 기반 서버형 MVP</li>
+          <li>세션 생성 → 파일 업로드 → 비동기 처리 → 결과물 export</li>
+          <li>오디오 기반 offset/drift 추정과 mix/export</li>
+          <li>synthetic fixture와 자동 검증 도구 다수 포함</li>
+        </ul>
+        <p class="small">현재 구현은 “녹음 앱 + 현장 운영 프로토콜”보다 “업로드 후 처리 엔진”에 더 가깝습니다.</p>
+      </div>
+    </div>
+
+    <h2>1. 왜 지금 약간 동떨어져 보이는가</h2>
+    <div class="card">
+      <ul class="list-tight">
+        <li><strong class="warn">현재 서버는 녹음 앱을 만들지 않았습니다.</strong> 업로드된 파일을 처리하는 MVP입니다.</li>
+        <li><strong class="warn">현재 정렬은 파일 타임스탬프 중심이 아닙니다.</strong> 오디오 내용 기반 정렬이 중심입니다.</li>
+        <li><strong class="warn">현장 운영 규칙</strong> — 예: 같은 앱을 써야 하는지, 시작 박수/비프를 넣는지, recording_started_at을 어떻게 저장하는지 — 가 아직 제품 워크플로우로 고정되지 않았습니다.</li>
+      </ul>
+      <p class="small">
+        코드 근거: 현재 업로드 API는 <code>participant_id</code>와 <code>filename</code>만 받고 있고
+        (<code>src/recog/api.py:52-67</code>), 정렬은 <code>estimate_alignment_and_drift(...)</code>로 오디오 기반 추정을 합니다
+        (<code>src/recog/pipeline.py:88-145</code>, <code>src/recog/audio.py:231-258</code>).
+      </p>
+    </div>
+
+    <h2>2. 실제 프로젝트로 보정한 전체 워크플로우</h2>
+    <div class="flow">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>회의 시작 전</h3>
+        <ul class="list-tight">
+          <li>세션 생성</li>
+          <li>참가자별 session code 공유</li>
+          <li>녹음 앱/설정 통일</li>
+          <li>가능하면 WAV, 48kHz, mono</li>
+        </ul>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>녹음</h3>
+        <ul class="list-tight">
+          <li>각자 스마트폰으로 같은 공간 녹음</li>
+          <li>시작 시 박수 1회 또는 짧은 비프 권장</li>
+          <li>앱이 recording_started_at 저장</li>
+        </ul>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>업로드</h3>
+        <ul class="list-tight">
+          <li>audio file 업로드</li>
+          <li>session_id / participant_id 첨부</li>
+          <li>recording_started_at / device_id / OS 정보 첨부</li>
+        </ul>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="num">4</div>
+        <h3>서버 처리</h3>
+        <ul class="list-tight">
+          <li>canonicalize</li>
+          <li>timestamp 기반 coarse prior</li>
+          <li>오디오 기반 fine alignment</li>
+          <li>drift correction + loudness normalization</li>
+          <li>aligned tracks + mixdown + manifests</li>
+        </ul>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="num">5</div>
+        <h3>검증</h3>
+        <ul class="list-tight">
+          <li>STT 결과 비교</li>
+          <li>listening review 작성</li>
+          <li>싱크 / loudness / artifact 확인</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>3. 실제 녹음 파일에 꼭 필요한 정보</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>필수 여부</th>
+          <th>설명</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>session_id</code></td>
+          <td><strong class="ok">필수</strong></td>
+          <td>같은 회의의 파일들을 한 세트로 묶기 위한 키</td>
+          <td>서버 세션과 직접 연결</td>
+        </tr>
+        <tr>
+          <td><code>participant_id</code></td>
+          <td><strong class="ok">필수</strong></td>
+          <td>누가 녹음한 파일인지 식별</td>
+          <td>현재 API도 이 값은 이미 받음</td>
+        </tr>
+        <tr>
+          <td><code>recording_started_at</code></td>
+          <td><strong class="warn">강력 권장</strong></td>
+          <td>사용자가 녹음 버튼을 누른 시각</td>
+          <td>최종 정렬 기준이 아니라 <strong>coarse prior</strong>로 사용</td>
+        </tr>
+        <tr>
+          <td>파일 duration / sample rate / channels</td>
+          <td><strong class="ok">필수</strong></td>
+          <td>canonicalization과 drift 계산에 필요</td>
+          <td>서버가 <code>ffprobe</code>로 추출 가능</td>
+        </tr>
+        <tr>
+          <td>시작 박수/비프 marker</td>
+          <td><strong class="warn">강력 권장</strong></td>
+          <td>동기화 anchor를 명확하게 잡는 데 유리</td>
+          <td>타임스탬프보다 실제 음향 marker가 더 안정적일 수 있음</td>
+        </tr>
+        <tr>
+          <td>파일 수정 시각(mtime)</td>
+          <td><strong class="bad">비권장</strong></td>
+          <td>복사/전송 과정에서 바뀔 수 있음</td>
+          <td>정렬 기준으로 쓰기 위험</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      결론: <strong>타임스탬프는 있으면 좋지만, 그것만으로 맞추면 안 됩니다.</strong><br/>
+      가장 좋은 구조는 <strong>recording_started_at + 시작 박수/비프 + 오디오 기반 fine alignment</strong>의 조합입니다.
+    </div>
+
+    <h2>4. 지금 구현 기준에서 “무엇이 이미 있고 / 무엇이 비어 있는지”</h2>
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="badge">이미 있음</div>
+        <ul class="list-tight">
+          <li>세션 생성 / 파일 업로드 / 처리 API</li>
+          <li>파일 canonicalization (48kHz mono PCM)</li>
+          <li>오디오 기반 offset / drift 추정</li>
+          <li>aligned tracks / mixdown / manifest export</li>
+          <li>synthetic fixture, benchmark, verification scaffold</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="badge">비어 있음</div>
+        <ul class="list-tight">
+          <li>iOS / Android 녹음 앱 자체</li>
+          <li>업로드 시 <code>recording_started_at</code>를 받는 스키마</li>
+          <li>session join code 기반 모바일 업로드 흐름</li>
+          <li>marker(beep/clap) 활용 프로토콜</li>
+          <li>실제 현장 녹음 데이터 수집/운영 절차</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>5. 실제 테스트는 어떤 시나리오로 해야 하나</h2>
+    <div class="card">
+      <h3>권장 시나리오 A — 빠른 현장 검증</h3>
+      <ol>
+        <li>같은 회의실에 3~5명 앉음</li>
+        <li>같은 앱 / 같은 설정(WAV, 48kHz, mono 권장)으로 녹음</li>
+        <li>녹음 시작 직후 모두 들리게 박수 1회</li>
+        <li>10~15분 회의 진행</li>
+        <li>파일 업로드</li>
+        <li>서버는 <code>recording_started_at</code>로 후보 범위 축소 → 박수/오디오로 fine align → drift correction</li>
+        <li>STT 결과와 listening review 둘 다 평가</li>
+      </ol>
+
+      <h3>권장 시나리오 B — 목표형 검증</h3>
+      <ol>
+        <li>5명 / 1시간 녹음</li>
+        <li>중간에 발화 겹침, 작은 목소리, 멀리 있는 화자 포함</li>
+        <li>결과물 3개를 비교</li>
+        <ul>
+          <li>중앙 마이크 1개 녹음</li>
+          <li>그냥 단순 믹스한 결과</li>
+          <li>현재 알고리즘 처리 결과</li>
+        </ul>
+        <li>STT 누락률과 청취 품질을 비교</li>
+      </ol>
+    </div>
+
+    <h2>6. 지금 바로 수정해야 할 제품 정의</h2>
+    <div class="card">
+      <p><strong>지금 프로젝트는 “녹음 파일 처리 엔진”까지는 왔지만, “실제 운영 워크플로우”는 아직 제품화되지 않았습니다.</strong></p>
+      <p>그래서 다음처럼 정의를 보정해야 합니다.</p>
+      <ul class="list-tight">
+        <li><strong>Step 1:</strong> 녹음 앱 자체를 새로 만들지, 기존 앱을 쓸지 결정</li>
+        <li><strong>Step 2:</strong> 업로드 payload에 <code>recording_started_at</code>, <code>device_id</code>, <code>os</code>를 추가</li>
+        <li><strong>Step 3:</strong> marker(박수/비프) 프로토콜을 명문화</li>
+        <li><strong>Step 4:</strong> 실제 현장 테스트 시나리오를 운영 문서로 고정</li>
+      </ul>
+    </div>
+
+    <h2>7. 지금 남은 핵심 작업</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>우선순위</th>
+          <th>작업</th>
+          <th>이유</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>업로드 스키마에 <code>recording_started_at</code> 추가</td>
+          <td>원래 요청했던 “타임스탬프 참고” 흐름을 진짜로 반영해야 함</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>현장 녹음 프로토콜 문서화</td>
+          <td>앱/설정/시작 marker 규칙이 없으면 테스트가 흔들림</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>실제 5명 / 1시간 evidence 생성</td>
+          <td>현재 릴리스 blocker인 AC1 해결</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>사람이 듣는 listening review sign-off</td>
+          <td>현재 릴리스 blocker인 AC7 해결</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>8. 한 줄 결론</h2>
+    <div class="card">
+      <p>
+        당신 느낌이 맞습니다. <strong>현재 프로젝트는 “업로드 후 정렬/믹스 엔진” 쪽은 많이 진척됐지만,</strong>
+        <strong>“현장에서 어떤 앱으로 어떤 메타데이터를 붙여 녹음하고 업로드할지”라는 실제 제품 워크플로우는 아직 덜 연결돼 있습니다.</strong>
+      </p>
+      <p>
+        따라서 다음 단계는 코드를 더 복잡하게 만드는 게 아니라,
+        <strong>녹음 앱/메타데이터/테스트 시나리오를 프로젝트 정의에 다시 붙이는 일</strong>입니다.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

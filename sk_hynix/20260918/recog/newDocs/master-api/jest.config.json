@@ -1,0 +1,37 @@
+{
+    "verbose": true,
+    "automock": false,
+    "collectCoverage": true,
+    "coveragePathIgnorePatterns": [
+        "/doc/",
+        "/configs",
+        "__test__",
+        "app.handler.js",
+        "app.module.js"
+    ],
+    "moduleFileExtensions": [
+        "js",
+        "json",
+        "jsx",
+        "ts",
+        "tsx",
+        "json"
+    ],
+    "transform": {
+        "^.+\\.(js|jsx)?$": "babel-jest"
+    },
+    "unmockedModulePathPatterns": [
+        "<rootDir>/__test__/testBase.js",
+        "<rootDir>/node_modules/@baronote/logger"
+    ],
+    "setupFiles": [
+        "jest-googleapi-mock"
+    ],
+    "transformIgnorePatterns": [
+        "<rootDir>/node_modules/",
+        "node_modules/(?!(@baronote/tool)/)"
+    ],
+    "globals": {
+        "isFirst": false
+    }
+}

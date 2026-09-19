@@ -1,0 +1,47 @@
+model Template {
+    id          String      @id @map("_id") @default(uuid())
+    workspaceId String
+    version     String      @default("")
+    title       String      
+    template    Module[]      
+    description String?     @default("")
+    creatorPID  String
+    editorPID   String
+    preview     String      
+    isUsed      YesNo       @default(N)
+    isDeleted   YesNo       @default(N)
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+}
+
+model TemplateRevision {
+    id              String      @id @map("_id") @default(uuid())
+    templateId      String
+    version         String      @default("")
+    title           String
+    template        Module[]    
+    description     String?     @default("")
+    editorPID       String
+    createAt        DateTime    @default(now())
+}
+
+model TemplateModule {
+    id          String      @id @map("_id") @default(uuid())
+    workspaceId String
+    modules     Module[]
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt      
+}
+
+type Module {
+    index      Int
+    moduleKey  String
+    displayName String?
+    items    SubModuleItems[]
+}
+
+type SubModuleItems {
+    index      Int
+    type       String
+    value      String
+}

@@ -1,0 +1,11 @@
+generator mariaDBClient {
+  provider = "prisma-client-js"
+  output   = env("PRISMA_MARIA_OUTPUT_PATH")
+  previewFeatures = ["views"]
+  binaryTargets = ["native","linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("MARIA_DATABASE_URL")
+}

@@ -1,0 +1,90 @@
+enum CalendarProvider {
+    GOOGLE
+    OUTLOOK
+    TIMBLO
+}
+
+model Calendar {
+    id                  String              @id @default(uuid())
+
+    creatorId           String              @db.VarChar(36)
+    creator             Member              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+    workspaceId         String              @db.VarChar(36)
+    workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+    contentId           String?             @db.VarChar(36)
+    content             Content?            @relation(fields: [contentId], references: [contentId], onDelete: SetNull)
+
+    title               String?             @db.VarChar(256)
+    meetingStartDate    DateTime
+    provider            CalendarProvider    @default(TIMBLO)
+    summary             String?             @db.LongText 
+    reminderMinutes     Int?                @default(0)
+    
+    createAt            DateTime            @default(now())
+    updateAt            DateTime            @updatedAt
+    
+    attachedContents    Content[]   @relation("CalendarContent")
+
+    @@index([meetingStartDate], name: "idx_meetingStartDate")
+    @@index([provider], name: "idx_provider")
+    @@index([workspaceId], name: "idx_workspaceId")
+    @@index([creatorId], name: "idx_creatorId")
+    @@index([contentId], name: "idx_contentId")
+}
+
+enum IntegrateType {
+    WEBCAL
+    GOOGLE
+    OUTLOOK
+}
+
+model CalendarIntegrate {
+    id                  String              @id @default(uuid())
+
+    user                User                @relation(fields: [pid], references: [pid], onDelete: Cascade)
+    pid                 String              @db.VarChar(36)
+
+    url                 String              @db.VarChar(1024)
+    type                IntegrateType       @default(WEBCAL)
+    provider            CalendarProvider   
+
+    lastSyncedAt        DateTime?
+    createAt            DateTime            @default(now())
+    updateAt            DateTime            @updatedAt
+
+    syncs               CalendarIntegrateSync[]
+
+    @@unique([pid, provider])
+
+    @@index([pid], name: "idx_pid")
+    @@index([url], name: "idx_url")
+    @@index([type], name: "idx_type")
+    @@index([provider], name: "idx_provider")
+    @@index([lastSyncedAt], name: "idx_lastSyncedAt")
+}
+
+model CalendarIntegrateSync {
+    id                  String              @id @default(uuid())
+
+    integrateId         String              @db.VarChar(36)
+    integrate           CalendarIntegrate   @relation(fields: [integrateId], references: [id], onDelete: Cascade)
+
+    uid                 String              @db.VarChar(256)
+    provider            CalendarProvider    
+    description         String?             @db.LongText
+    start               DateTime
+    summary             String?             @db.LongText
+    isLoaded            Boolean             @default(false)
+
+    createAt            DateTime            @default(now())
+    updateAt            DateTime            @updatedAt
+
+    @@unique([integrateId, uid])
+
+    @@index([integrateId], name: "idx_integrateId")
+    @@index([uid], name: "idx_uid")
+    @@index([provider], name: "idx_provider")
+    @@index([start], name: "idx_start")
+}

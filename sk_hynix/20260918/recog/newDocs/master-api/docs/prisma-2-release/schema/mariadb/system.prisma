@@ -1,0 +1,275 @@
+enum NotifyType {
+    EVENT
+    SHARE
+    INVITE
+    CONTENT
+    VERIFICATION
+    INVITEWORKSPACE
+    REMINDER
+    RECYCLE
+}
+
+enum UsageType {
+    TRANSCRIBE
+    STORAGE
+    LLM
+}
+
+
+enum DomainType {
+    ALLOW
+    DENY
+    SOCIAL
+}
+
+enum AdminType {
+    GLOBAL
+    SYSTEM
+    WORKSPACE
+}
+
+enum MenuGroup {
+    SYSTEM
+    SYSTEM_ADDON
+    WORKSPACE
+    DETAIL
+    HISTORY
+    WORKSPACE_ADDON
+}
+
+model Notification {
+    id          String      @id @default(uuid())
+    to          String      @db.VarChar(256)
+    type        NotifyType
+    message     Json        @db.Json
+    status      Boolean     @default(false)
+    createAt    DateTime    @default(now())
+
+    @@index([to], name: "idx_to")
+    @@index([type], name: "idx_type")
+}
+
+model Inbox {
+    inboxId         String          @id @default(uuid())
+    contentCapture  ContentCapture  @relation("ContentCaptureRelation", fields: [captureId], references: [captureId], onDelete: Cascade)
+    captureId       String          @db.VarChar(36)
+    receiver        Member          @relation("ReceiverRelation", fields: [receiverId], references: [id], onDelete: Cascade)
+    receiverId      String          @db.VarChar(36)
+    isRead          Boolean         @default(false)
+    isVisible       Boolean         @default(false)
+    isDeleted       Boolean         @default(false)
+    createAt        DateTime        @default(now())
+    updateAt        DateTime        @updatedAt
+
+    @@index([receiverId], name: "idx_receiverId")
+    
+    @@unique([captureId, receiverId])
+}
+
+model Usage {
+    id              Int         @id @default(autoincrement())
+    member          Member      @relation("MemberRelation", fields: [memberId], references: [id])
+    memberId        String
+    workspaceId     String
+    contentId       String
+    type            UsageType
+    count           Decimal     @default(0) @db.Decimal(11, 3)
+    createAt        DateTime    @default(now())
+    updateAt        DateTime    @updatedAt
+
+    @@index([workspaceId], name: "idx_workspaceId")
+    @@index([contentId], name: "idx_contentId")
+    @@index([memberId], name: "idx_memberId")
+}
+
+model webHookLog{
+    id          Int         @id @default(autoincrement())
+    url         String      @db.VarChar(512)
+    path        String      @db.VarChar(512)
+    method      MethodType  @default(POST)
+    body        Json?
+    result      Json?
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+    
+    @@index([url], name: "idx_url")
+    @@index([path], name: "idx_path")
+    @@index([method], name: "idx_method")
+}
+
+model CommonCode{
+    id          String      @id @default(uuid())
+    code        String      @unique @db.VarChar(128)
+    name        String      @db.VarChar(128)
+
+    isUsed      String      @db.VarChar(2) @default("Y")
+    description String      @db.VarChar(512)
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+
+    codeDetails CommonCodeDetail[]
+
+    @@index([code], name: "idx_code")
+}
+
+model CommonCodeDetail{
+    code        CommonCode  @relation(fields: [codeId], references: [id], onDelete: Cascade)
+    codeId      String
+    detailCode  String      @unique @db.VarChar(128)
+    detailName  String      @db.VarChar(128)
+
+    isUsed      String      @db.VarChar(2) @default("Y")
+    sortIdx     Int         @default(1)
+    description String      @db.VarChar(512)
+    info        Json?
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+
+    @@index([codeId], name: "idx_codeId")
+    @@index([detailCode], name: "idx_detailCode")
+
+    @@id([detailCode, codeId])
+}
+
+model AuthEmailDomain {
+    id          Int      @id @default(autoincrement())
+    domain      String   @unique @db.VarChar(512)
+    domainType  DomainType @default(DENY)
+    isUsed      YesNo    @default(Y)
+    createAt    DateTime @default(now())
+
+    @@index([domain], name: "idx_domain")
+}
+
+model TranscribeEngine {
+    id          String      @id @default(uuid())
+    provider    String      @default("HAIV")
+    tag         String      @default("HAIV")
+    url         String
+    params      Json?
+    maxQueue    Int         @default(3)
+    isDefault   Boolean     @default(false)
+
+    workspaces  WorkspaceConfig[]
+
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+}
+
+model Notice {
+  id            String          @id @default(uuid())
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId   String          @db.VarChar(36)
+  title         String          @db.VarChar(128)
+  content       String          @db.LongText
+  postAt        DateTime
+  withdrawalAt  DateTime 
+  ignoreDays    Int             @default(0)
+  creator       UserProfile?    @relation("CreatorNoticeRelation", fields: [creatorId], references: [pid], onDelete: SetNull)
+  creatorId     String?         @db.VarChar(36)
+  createAt      DateTime        @default(now())
+  updater       UserProfile?    @relation("UpdaterNoticeRelation", fields: [updaterId], references: [pid], onDelete: SetNull)
+  updaterId     String?         @db.VarChar(36)
+  updateAt      DateTime        @updatedAt
+}
+
+view NoticeView {
+    id              String
+    workspaceId     String
+    title           String
+    content         String
+    status          String
+    postAt          DateTime
+    withdrawalAt    DateTime
+    ignoreDays      Int
+    creatorName     String?
+    updaterName     String?
+    createAt        DateTime
+    updateAt        DateTime
+}
+
+model Menu {
+    id              String          @id @default(uuid())
+    group           MenuGroup 
+    code            String          @db.VarChar(36) @default(cuid())
+    workspace       Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+    workspaceId     String?         @db.VarChar(36)
+    name            String          @db.VarChar(32)
+    urlPath         String          @db.VarChar(512)
+    isUsed          Boolean         @default(false)
+    creator         UserProfile?    @relation("CreatorMenuRelation", fields: [creatorId], references: [pid], onDelete: SetNull)
+    creatorId       String?         @db.VarChar(36)
+    createAt        DateTime        @default(now())
+    updater         UserProfile?    @relation("UpdaterMenuRelation", fields: [updaterId], references: [pid], onDelete: SetNull)
+    updaterId       String?         @db.VarChar(36)
+    updateAt        DateTime        @updatedAt
+
+    roles           Role[]
+
+    @@unique([workspaceId, code])
+    @@unique([workspaceId, group, name])
+    @@unique([workspaceId, urlPath])
+}
+
+model Role {
+    id              String          @id @default(cuid())
+    workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+    workspaceId     String          @db.VarChar(36)
+    adminType       AdminType       
+    name            String          @db.VarChar(32)
+    description     String          @db.VarChar(512)
+    creator         UserProfile?    @relation("CreatorRoleRelation", fields: [creatorId], references: [pid], onDelete: SetNull)
+    creatorId       String?         @db.VarChar(36)
+    createAt        DateTime        @default(now())
+    updater         UserProfile?    @relation("UpdaterRoleRelation", fields: [updaterId], references: [pid], onDelete: SetNull)
+    updaterId       String?         @db.VarChar(36)
+    updateAt        DateTime        @updatedAt
+
+    menus           Menu[]
+    members         Member[]
+
+    @@unique([name])
+}
+
+model SettingHistory {
+    id              BigInt          @id @default(autoincrement())
+    workspaceId     String?         @db.VarChar(36)
+    workspaceName   String?         @db.VarChar(128)
+    userName        String          @db.VarChar(128)
+    email           String          @db.VarChar(128)
+    ip              String          @db.VarChar(128)
+    menuCode        String          @db.VarChar(36)
+    menuName        String          @db.VarChar(32)        
+    changeItem      String          @db.VarChar(32)
+    tableName       String          @db.VarChar(32)
+    tableKey        String          @db.VarChar(36)
+    beforeData      Json?
+    afterData       Json?
+    requiredFields  Json?
+    createAt        DateTime        @default(now())
+}
+
+model HaivTranscribeLog {
+    idx             Int         @id @default(autoincrement())
+    contentId       String      @db.VarChar(36)
+    ticketId        String      @db.VarChar(36)
+    transcribeId    String      @db.VarChar(36)
+    sessionId       String      @db.VarChar(36)
+    filename        String      @db.VarChar(512)
+    startAt         DateTime?
+    endAt           DateTime?
+    status          String      @default("RUNNING")
+    percentage      Int         @default(0)
+    apiResult       Json?
+    createAt        DateTime    @default(now())
+    updateAt        DateTime    @updatedAt
+
+    @@unique([contentId, ticketId, transcribeId])
+    @@index([contentId], name: "idx_contentId")
+    @@index([ticketId], name: "idx_ticketId")
+    @@index([transcribeId], name: "idx_transcribeId")
+    @@index([sessionId], name: "idx_sessionId")
+    @@index([filename], name: "idx_fileame")
+    @@index([status], name: "idx_status")
+    @@index([percentage], name: "idx_percentage")
+}

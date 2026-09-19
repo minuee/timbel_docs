@@ -1,0 +1,77 @@
+{
+	"name": "@timbel-timblo-onpremise/prisma",
+	"type": "module",
+	"version": "2.0.0",
+	"description": "Timblo Prisma Modules",
+	"main": "dist/index.cjs",
+	"module": "dist/index.esm.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.esm.js",
+			"require": "./dist/index.cjs",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist/",
+		"libs/",
+		"README.md",
+		"scripts/README.md"
+	],
+	"scripts": {
+		"build": "npm run clean && npm run build:rollup && npm run build:types && npm run copy:libs",
+		"build:rollup": "rollup -c",
+		"build:types": "tsc --emitDeclarationOnly --outDir dist",
+		"copy:libs": "node scripts/copy-libs.js",
+		"clean": "rimraf dist",
+		"prismaBuild": "npm run prismaBuild:maria && npm run prismaBuild:mongo && npm run updateEnums",
+		"prismaBuild:maria": "npx prisma generate --schema=./schema/mariadb",
+		"prismaBuild:mongo": "npx prisma generate --schema=./schema/mongodb",
+		"updateEnums": "node scripts/update-enums.js",
+		"version:patch": "npm version patch --no-git-tag-version",
+		"publish:github": "node scripts/publish.js",
+		"package": "npm run prismaBuild && npm run build"
+	},
+	"keywords": [
+		"timblo",
+		"timbel",
+		"prisma",
+		"@timbel-timblo-onpremise/prisma",
+		"prisma-modules"
+	],
+	"author": "timbel",
+	"license": "MIT",
+	"dependencies": {
+		"@baronote/logger": "^1.2.22",
+		"@prisma/client": "^6.15.0",
+		"prisma": "^6.15.0"
+	},
+	"devDependencies": {
+		"@rollup/plugin-commonjs": "^28.0.1",
+		"@rollup/plugin-node-resolve": "^15.3.0",
+		"@types/node": "^22.10.1",
+		"rimraf": "^6.0.1",
+		"rollup": "^4.28.1",
+		"typescript": "^5.7.2"
+	},
+	"homepage": "",
+	"bugs": {
+		"email": "jwpark@timbel.net"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com/"
+	},
+	"prisma": {
+		"binaryTargets": [
+			"windows",
+			"linux-musl-openssl-3.0.x",
+			"linux-musl-arm64-openssl-3.0.x",
+			"linux-arm64-openssl-3.0.x",
+			"debian-openssl-3.0.x",
+			"debian-openssl-1.1.x",
+			"rhel-openssl-1.1.x",
+			"rhel-openssl-3.0.x"
+		]
+	}
+}

@@ -1,0 +1,17 @@
+enum YesNo {
+    Y
+    N
+}
+enum TranslateType {
+    All
+    ai
+    summary
+}
+
+enum SupportLang {
+    ko
+    en
+    ja
+    zh
+    enko
+}

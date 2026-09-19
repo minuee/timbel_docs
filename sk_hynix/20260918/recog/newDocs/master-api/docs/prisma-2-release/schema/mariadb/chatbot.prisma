@@ -1,0 +1,55 @@
+
+model Chatbot {
+    id                  String      @id @default(uuid())
+    chatId              String      @db.VarChar(36) @default(uuid())
+    title               String      @db.VarChar(100)
+    pid                 String      @db.VarChar(36)
+    conversationId      String?     @db.VarChar(255)
+    isDeleted           Boolean     @default(false)
+    createAt            DateTime    @default(now())
+    updateAt            DateTime    @updatedAt
+    attachedContents    Content[]   @relation("ChatbotContent")
+
+    messages ChatMessage[]
+
+    @@unique([chatId, pid])
+    @@index([isDeleted], name: "idx_isDeleted")
+    @@index([conversationId], name: "idx_conversationId")
+}
+
+model ChatMessage {
+    chatbot     Chatbot     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+    chatId      String      @db.VarChar(36)
+    idx         Int         @db.UnsignedInt
+    message     String      @db.Text
+    isBot       Boolean     @default(false)
+    createAt    DateTime    @default(now())
+
+    citations ChatCitation[]
+
+    @@unique([chatId, idx])
+    @@index([chatId], name: "idx_chatId")
+    @@index([idx], name: "idx_idx")
+}
+
+model ChatCitation {
+    id              String          @id @default(cuid())
+    chatMessage     ChatMessage     @relation(fields: [chatId, messageIdx], references: [chatId, idx], onDelete: Cascade)
+    chatId          String          @db.VarChar(36)
+    messageIdx      Int             @db.UnsignedInt
+    label           String          @db.VarChar(100)
+    quote           String          @db.Text
+    linkContentId   String          @db.VarChar(36)
+    type            String?         @db.VarChar(50)
+    text            String?         @db.Text
+    segmentId       String?         @db.VarChar(36)
+    speaker         String?         @db.VarChar(100)
+    index           Int?            @db.UnsignedInt
+    topic           String?         @db.VarChar(255)
+
+    @@index([chatId], name: "idx_chatId")
+    @@index([messageIdx], name: "idx_messageIdx")
+    @@index([linkContentId], name: "idx_linkContentId")
+    @@index([label], name: "idx_label")
+    @@index([type], name: "idx_type")
+}

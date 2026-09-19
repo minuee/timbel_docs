@@ -1,0 +1,29 @@
+# docker-compose.build.yml — build the image from source on the deploy host.
+#
+# Use this when the host can reach Docker Hub (python:3.11-slim) and the Debian
+# package mirrors (ffmpeg, curl). Building here sidesteps the registry entirely
+# and produces an image for this machine's architecture, so there is no
+# arm64/x86_64 mismatch to worry about.
+#
+#   cd deploy
+#   cp .env.recog.example .env.recog
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml \
+#       --env-file .env.recog up -d --build
+#
+# If the host cannot reach those mirrors, use the offline bundle instead —
+# see OFFLINE_DEPLOY.md.
+#
+# This file only overrides how the image is obtained. Ports, volumes, network,
+# healthcheck and logging all stay as docker-compose.yml defines them.
+
+services:
+  recog-backend:
+    build:
+      # The Dockerfile lives at the repo root, one level above deploy/.
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: "3.11"
+    # `build` produces the image locally under this tag; never consult a registry.
+    image: ${IMAGE_NAME:-recog-backend}:${RECOG_VERSION:-local}
+    pull_policy: never

@@ -1,0 +1,160 @@
+model File {
+    id                  String              @id @default(auto()) @map("_id") @db.ObjectId
+    contentId           String              @map("content_id")
+    fileName            String              @default("")
+    fileKey             String              @default("")
+    mimeType            String              @default("")
+    sttStatus           String              @default("WAITING")
+    duration            Int                 @default(0)
+    isLock              Boolean             @default(false)
+
+    note                Note?               @relation(fields: [linkNoteId], references: [id])
+    linkNoteId          String?             @unique @db.ObjectId
+
+    createAt            DateTime            @default(now())
+    updateAt            DateTime            @updatedAt
+
+    transcribeResult    TranscribeResult?
+    highlights          Highlight[]
+
+    @@index([contentId], name: "file_contentId_index")
+    @@index([updateAt], name: "file_updateAt_index")
+}
+
+model Note {
+    id          String          @id @default(auto()) @map("_id") @db.ObjectId
+    contentId   String          @map("content_id")
+    pid         String?         @default("")
+    noteName    String          @default("")
+    content     String          @default("")
+
+    createAt    DateTime        @default(now())
+    updateAt    DateTime        @updatedAt
+
+    files       File?
+    revisions   NoteRevision[]
+
+    @@index([contentId], name: "note_contentId_index")
+}
+
+model NoteRevision {
+    id              String      @id @default(auto()) @map("_id") @db.ObjectId
+    lastUpdateUser  String?     @default("")
+    note            Note        @relation(fields: [noteId], references: [id])
+    noteId          String      @db.ObjectId
+
+    version         Int         @default(0)
+    content         String      @default("")
+    
+    createAt        DateTime    @default(now())
+}
+
+model TranscribeResult {
+    id              String              @id @default(auto()) @map("_id") @db.ObjectId
+
+    file            File?               @relation(fields: [fileId], references: [id])
+    fileId          String?             @unique @db.ObjectId
+
+    ticket          String              @unique @default("")
+    status          String              @default("WAITING")
+    clientLanguage  SupportLang         @default(ko)
+    lastOpenLang    SupportLang         @default(ko)
+    summarySize     String              @default("large")
+    engine          String
+    segments        Segment[]
+    mergedSegments  Segment[]
+    speakerInfo     SpeakerInfo[]
+    aiResult        Json?
+    summaryTime     SummaryTime[]
+
+    completeAt      DateTime?
+    createAt        DateTime            @default(now())
+    updateAt        DateTime            @updatedAt  
+
+    translateResult TranslateResult?
+
+    @@index([updateAt], name: "transcribe_updateAt_index")
+    @@index([segments], name: "transcribe_segments_index")
+}
+
+model TranslateResult {
+    id            String            @id @default(auto()) @map("_id") @db.ObjectId
+
+    original      TranscribeResult  @relation(fields: [originalId], references: [id])
+    originalId    String            @unique @db.ObjectId
+
+    ticket        String            @unique @default("")
+    type          TranslateType     @default(All)
+
+    status        String            @default("WAITING")
+    transLanguage SupportLang       @default(en)
+
+    results       Json?
+
+    createAt      DateTime          @default(now())
+    updateAt      DateTime          @updatedAt
+    completeAt    DateTime?
+
+}
+
+model Highlight {
+  id          String         @id @default(auto()) @map("_id") @db.ObjectId  
+  file        File           @relation(fields: [fileId], references: [id])
+  fileId      String         @unique @db.ObjectId
+  category    HighlightCategory
+  text        String         @default("")
+  start       Int            @default(0)
+  end         Int            @default(0)
+  createAt    DateTime       @default(now())
+  updateAt    DateTime       @updatedAt
+
+  @@index([start], name: "idx_start")
+  @@index([end], name: "idx_end")   
+}
+
+
+type Segment {
+    segmentId String
+    speakerId Int
+    text     String
+    startTime Int
+    endTime   Int
+    duration  Int
+}
+
+type SummaryTime {
+    index Int
+    time String?
+    topic String
+    summary Json[]
+    issues Json[]
+    tasks Json[]
+}
+
+type SpeakerInfo {
+    speakerId Int
+    name String
+    displayName String?
+    pid String?
+}
+
+type HighlightCategory {
+    key String
+    idx Int
+    sub Json?
+}
+
+enum Engine {
+    CLOVA
+    RTZ
+    HAIV
+}
+
+model ClientErrorLog {
+    id          String      @id @default(auto()) @map("_id") @db.ObjectId
+    email       String
+    group       String
+    transaction Json[]      @default([])
+    createAt    DateTime    @default(now())
+}
+

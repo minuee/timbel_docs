@@ -1,0 +1,48 @@
+# VCS / local tooling
+.git
+.gitignore
+.gitlab-ci-local
+.github
+
+# Python caches
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.venv
+venv
+env
+
+# Build artifacts / runtime data
+build
+dist
+.runtime
+runtime
+/var/lib/recog
+
+# Docs and planning material (not needed at runtime)
+docs
+verification
+apps
+testkit
+tests
+tools
+scripts/deploy
+*.md
+!README.md
+
+# Deploy scaffolding (built inside compose/CI, not shipped in image)
+deploy
+
+# IDE / OS noise
+.idea
+.vscode
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local env files
+.env
+.env.*
+!.env.recog.example

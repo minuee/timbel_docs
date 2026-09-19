@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "session-123",
+  "generatedAt": "2026-04-07T07:45:00Z",
+  "canonicalFormat": {
+    "sampleRateHz": 48000,
+    "channels": 1,
+    "sampleFormat": "float32"
+  },
+  "recommendedSttInput": "tracks",
+  "alignmentConfidence": 0.9823,
+  "tracks": [
+    {
+      "trackId": "track-a",
+      "participantId": "alice",
+      "alignedArtifact": "aligned/alice.wav",
+      "originalArtifact": "raw/alice.m4a",
+      "offsetMs": 42.125,
+      "driftPpm": -3.5,
+      "gainDb": 1.5,
+      "weight": 1.0,
+      "durationMs": 1000,
+      "loudness": {
+        "integratedLufs": -18.2,
+        "truePeakDbfs": -0.7
+      }
+    }
+  ],
+  "listeningMix": {
+    "path": "mix/listening_mix.wav",
+    "format": "wav",
+    "codec": "pcm_f32le",
+    "targetLufs": -16.0
+  },
+  "qaSummary": {
+    "loudnessSpreadDb": 2.1,
+    "clippedSamples": 0,
+    "syncErrorP95Ms": 8.7
+  },
+  "artifactsBundle": "bundle/session-123.zip"
+}

@@ -1,0 +1,182 @@
+enum TermsStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AgreementStatus {
+  CONSENTED
+  DECLINED
+}
+
+enum PolicyCategory {
+  TERMS
+  PRIVACY
+}
+
+enum PolicyStatus {
+  PUBLISHED
+  DRAFT
+  ARCHIVED
+}
+
+enum BatchType {
+  RESIGN
+}
+
+enum BatchStatus {
+  WAITING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model Agreement {
+  id String @id @default(uuid())
+
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  workspaceId String?    @db.VarChar(36)
+
+  terms   Terms  @relation(fields: [termsId], references: [id], onDelete: Cascade)
+  termsId String
+
+  userName String @db.VarChar(128)
+  email    String @db.VarChar(256)
+
+  ipAddress String @db.VarChar(128)
+  userAgent String @db.VarChar(1024)
+
+  status   AgreementStatus @default(CONSENTED)
+  createAt DateTime        @default(now())
+
+  @@unique([termsId, email], name: "idx_termsId_email")
+}
+
+model Terms {
+  id String @id @default(uuid())
+
+  Workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  workspaceId String?    @db.VarChar(36)
+
+  category   TermsCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId String?        @db.VarChar(36)
+
+  version     String?     @db.VarChar(20)
+  title       String      @db.VarChar(128)
+  content     String      @db.LongText
+  status      TermsStatus @default(DRAFT)
+  isRequired  Boolean     @default(false)
+  publishedAt DateTime?
+  archivedAt  DateTime?
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  creator   Member? @relation("CreatorTermsRelation", fields: [creatorId], references: [id], onDelete: SetNull)
+  creatorId String? @db.VarChar(36)
+
+  /**
+   * 현재 초안 수정시, 시행시, 보관시, 삭제 기능을 이용하는 마지막 수정자 덮어씌어짐
+   */
+  updater   Member? @relation("UpdaterTermsRelation", fields: [updaterId], references: [id], onDelete: SetNull)
+  updaterId String? @db.VarChar(36)
+
+  Agreement Agreement[]
+}
+
+model TermsCategory {
+  id String @id @default(uuid())
+
+  Workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  workspaceId String?    @db.VarChar(36)
+
+  priority    Int?
+  name        String   @db.VarChar(128)
+  description String?  @default("") @db.VarChar(1000)
+  isEnabled   Boolean  @default(true)
+  createAt    DateTime @default(now())
+  updateAt    DateTime @updatedAt
+  terms       Terms[]
+}
+
+model Policy {
+  id          String       @id @default(uuid())
+  category    String
+  status      PolicyStatus @default(DRAFT)
+  title       String       @db.VarChar(128)
+  version     String?      @db.VarChar(20)
+  content     String       @db.LongText
+  isRequired  Boolean      @default(true)
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  creator     UserProfile? @relation("CreatePolicyRelation", fields: [creatorId], references: [pid], onDelete: SetNull)
+  creatorId   String?
+  createAt    DateTime     @default(now())
+  updater     UserProfile? @relation("UpdatePolicyRelation", fields: [updaterId], references: [pid], onDelete: SetNull)
+  updaterId   String?
+  updateAt    DateTime     @default(now()) @updatedAt
+
+  agreements PolicyAgreement[]
+
+  @@index([creatorId], name: "idx_creatorId")
+  @@index([updaterId], name: "idx_updaterId")
+}
+
+model PolicyAgreement {
+  id       String   @id @default(cuid())
+  policy   Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  policyId String
+  userName String   @db.VarChar(128)
+  email    String   @db.VarChar(256)
+  createAt DateTime @default(now())
+
+  @@unique([policyId, email])
+  @@index([policyId], name: "idx_policyId")
+  @@index([userName], name: "idx_userName")
+  @@index([email], name: "idx_email")
+  @@index([createAt], name: "idx_createAt")
+}
+
+model Batch {
+  id          String         @id @default(uuid())
+  name        String         @db.VarChar(32)
+  type        BatchType      @default(RESIGN)
+  cron        String         @db.VarChar(32)
+  params      Json
+  description String         @db.VarChar(1000)
+  isActive    Boolean        @default(true)
+  createAt    DateTime       @default(now())
+  updateAt    DateTime       @updatedAt
+  history     BatchHistory[]
+}
+
+model BatchHistory {
+  id          String      @id @default(cuid())
+  batch       Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchId     String
+  status      BatchStatus @default(RUNNING)
+  updateCount Int         @default(0)
+  lockKey     String      @unique
+  createAt    DateTime    @default(now())
+  updateAt    DateTime    @updatedAt
+}
+
+model Resign {
+  empno       String   @db.VarChar(128)
+  companyCode String   @db.VarChar(128)
+  createAt    DateTime @default(now())
+  deleteAt    DateTime @default(now())
+  isDeleted   Boolean  @default(false)
+
+  @@id([empno, companyCode])
+  @@index([empno], name: "idx_empno")
+  @@index([companyCode], name: "idx_companyCode")
+}
+
+model UserLoginLog {
+  empno   String   @id @map("EMP_NO") @db.VarChar(30)
+  loginAt DateTime @default(now()) @map("LOGON_DT")
+
+  @@index([empno], name: "idx_empno")
+  @@map("USER_LOGIN_LOG")
+}

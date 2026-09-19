@@ -1,0 +1,61 @@
+model APIKey {
+    key         String      @id @default(cuid())
+    comment     String      @db.VarChar(512)
+    hookKey     String?     @db.VarChar(512)
+    expireAt    DateTime?
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+
+    accessLogs  AccessLog[]
+    permissions Permission[]
+
+    @@index([key], name: "idx_key")
+}
+
+enum MethodType {
+    GET
+    POST
+    PUT
+    PATCH
+    DELETE
+}
+
+model AccessLog{
+    id          Int         @id @default(autoincrement())
+    ip          String      @db.VarChar(512)
+    origin      String      @db.VarChar(1024)
+    APIKey      APIKey      @relation(fields: [apiKey], references: [key], onDelete: Cascade)
+    apiKey      String
+    path        String      @db.VarChar(512)
+    method      MethodType
+    message     String?     @db.VarChar(1024) @default("Success")
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+
+    @@index([apiKey], name: "idx_apiKey")
+}
+
+model Permission {
+    id          Int         @id @default(autoincrement())
+    group       String      @db.VarChar(128)
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+
+    apiKey     APIKey[]
+    details    PermissionDetail[]
+
+    @@index([group], name: "idx_group")
+}
+
+model PermissionDetail {
+    id          Int         @id @default(autoincrement())
+    permission  Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+    permissionId Int
+    method      MethodType
+    path        String      @db.VarChar(512)
+    createAt    DateTime    @default(now())
+    updateAt    DateTime    @updatedAt
+    
+    @@index([permissionId], name: "idx_permissionId")
+}
+

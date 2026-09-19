@@ -1,0 +1,293 @@
+enum WorkspaceRole {
+  ADMIN
+  OWNER
+  MEMBER
+  GUEST
+}
+
+enum PlatformType {
+  WEB
+}
+
+enum PermissionType {
+  DOCS_EXPORT
+  MEDIA_DOWNLOAD
+  TEMPLATE
+  SUMMARIZE
+  EMAIL
+  SSO_ACTIVATED
+}
+
+enum PolicyType {
+  ALL
+  SEGMENT
+  META
+  SUMMARY
+  FILE
+  NOTE
+}
+
+enum Unit {
+  DAYS
+  HOURS
+}
+
+model Workspace {
+  id            String    @id @default(uuid())
+  name          String    @unique @db.VarChar(128)
+  thumbnailUrl  String?   @default("") @db.VarChar(512)
+  domain        String    @unique @db.VarChar(256)
+  description   String?   @default("") @db.VarChar(2048)
+
+  owner         User?     @relation("OwnerRelation", fields: [ownerId], references: [pid])
+  ownerId       String?    
+
+  config          WorkspaceConfig?
+
+  members         Member[]
+  contents        Content[]
+  invites         Invite[]
+  corpus          Corpus[]
+  keywordBoostings KeywordBoosting[]
+
+  policy          WorkspacePolicy[]
+  workspaceSetting WorkspaceSetting[]
+
+  terms           Terms[]
+  Agreement        Agreement[] 
+  termsCategory   TermsCategory[]
+
+  notices          Notice[]
+
+  loginHistories  LoginHistory[]
+  downloadHistory DownloadHistory[]
+  contentHistory ContentHistory[]
+
+  stats           ContentDailyStats[]
+  statistics      Statistics[]
+  calendars Calendar[]
+
+  templateCategories TemplateCategory[]
+  templates Template[]
+
+  menus           Menu[]
+  roles           Role[]
+
+  inviteCode    String?       @default("") @db.VarChar(128)
+
+  createAt      DateTime  @default(now())
+  updateAt      DateTime  @updatedAt
+
+  @@index([name], name: "idx_name")
+  @@index([domain], name: "idx_domain")
+  @@index([id], name: "idx_workspaceId")
+}
+
+model WorkspaceConfig {
+    workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+    workspaceId     String        @unique
+
+    memberMaxCount  Int           @default(120)
+    ownerMaxCount   Int           @default(4)
+    guestMaxCount   Int           @default(40)
+
+    transcribeEngine      TranscribeEngine?     @relation(fields: [transcribeEngineId], references: [id])
+    transcribeEngineId    String?
+
+    inviteCode      String?       @default("") @db.VarChar(128)
+    disableAt      DateTime?     
+}
+
+model WorkspacePolicy {
+    id              String       @id @default(cuid())
+    workspace       Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+    workspaceId     String       
+
+    policyType      PolicyType   @default(ALL)
+    value           String       @default("-1")
+    unit            Unit         @default(DAYS)
+
+    description     String?
+    createAt        DateTime      @default(now())
+    updateAt        DateTime      @updatedAt
+
+    task            LifecycleTask[] 
+    executionLog    LifecyclePolicyExecutionLog[]
+
+  @@index([workspaceId], name: "idx_workspaceId")
+  @@unique([workspaceId, policyType], name: "uniq_workspace_policy_type")
+}
+
+model Invite {
+  id            String        @id @default(uuid())
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId   String        
+
+  email         String        @db.VarChar(256)
+  role          WorkspaceRole @default(GUEST)
+  expireAt      DateTime
+
+  createAt      DateTime      @default(now())
+  updateAt      DateTime      @updatedAt
+
+  @@index([email], name: "idx_email")
+  @@index([workspaceId], name: "idx_workspaceId")
+}
+
+model Member {
+  id                  String        @id @default(uuid())
+  workspace           Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId         String
+
+  user                User          @relation(fields: [pid], references: [pid], onDelete: Cascade)
+  pid                 String
+
+  creatorContent      Content[]     @relation("CreatorRelation")
+  editorContent       Content[]     @relation("EditorRelation")
+  usage               Usage[]       @relation("MemberRelation")
+  inbox               Inbox[]       @relation("ReceiverRelation")
+  creatorCorpus       Corpus[]      @relation("CreatorCorpusRelation")
+  updaterCorpus       Corpus[]      @relation("UpdaterCorpusRelation")
+
+  creatorTerms   Terms[]     @relation("CreatorTermsRelation")
+  updaterTerms   Terms[]     @relation("UpdaterTermsRelation")
+
+  calendars Calendar[]
+    
+  creatorMemo Memo[] @relation("CreatorMemoRelation")
+  creatorMemoComment MemoComment[] @relation("CreatorMemoCommentRelation")
+
+  role                WorkspaceRole @default(MEMBER)
+  menuRole            Role? @relation(fields: [menuRoleId], references: [id], onDelete: SetNull)
+  menuRoleId          String? @db.VarChar(36)
+  createAt            DateTime      @default(now())
+  updateAt            DateTime      @updatedAt
+
+  DailyMemberStats DailyMemberStats[] @relation("MemberRelation")
+  HourlyMemberStats HourlyMemberStats[] @relation("MemberRelation")
+  MonthlyMemberStats MonthlyMemberStats[] @relation("MemberRelation")
+  WeeklyMemberStats WeeklyMemberStats[] @relation("MemberRelation")
+  stats               ContentDailyStats[]
+  statistics      Statistics[]
+
+  templateFavorites TemplateFavorite[]
+  createdTemplates Template[] @relation("CreatorTemplateRelation")
+  updatedTemplates Template[] @relation("UpdaterTemplateRelation")
+
+  creatorKeywordBoostings KeywordBoosting[] @relation("CreatorKeywordBoostingRelation")
+  
+  @@index([pid], name: "idx_pid")
+  @@index([workspaceId], name: "idx_workspaceId")
+}
+
+
+enum SettingValueType {
+  BOOLEAN
+  STRING
+  NUMBER
+  
+}
+
+enum WorkspaceSettingUiType {
+  NUMBER_INPUT
+  TEXT_INPUT
+  SWITCH
+  CHECKBOX
+  RADIO
+  SELECT
+}
+
+enum WorkspaceSettingGroup {
+  GENERAL
+  PERSONAL
+  RECORDING
+  UPLOAD
+  CONTENT
+  DOWNLOAD
+  EXPIRATION
+  CALENDAR
+}
+
+model WorkspaceSettingItem {
+  id           Int                    @id @default(autoincrement())
+  group        WorkspaceSettingGroup
+  key          String                 @unique
+  name         String
+  description  String?
+  valueType    SettingValueType
+  uiType       WorkspaceSettingUiType
+  defaultValue String
+  options      Json?
+  validation   Json?
+  priority     Int
+
+
+  parentId Int?
+  parent   WorkspaceSettingItem?  @relation("Hierarchy", fields: [parentId], references: [id])
+  children WorkspaceSettingItem[] @relation("Hierarchy")
+
+  workspaceSettings WorkspaceSetting[]
+}
+
+model WorkspaceSetting {
+  id Int @id @default(autoincrement())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String    @db.VarChar(36)
+
+  settingItem WorkspaceSettingItem @relation(fields: [key], references: [key], onDelete: Cascade)
+  key         String
+  value       String
+
+  @@unique([workspaceId, key])
+}
+
+model LifecycleTask {
+  id            String   @id @default(cuid())
+
+  workspaceId   String
+  policyId      String?
+  policy        WorkspacePolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  policyValue   String
+  policyUnit    Unit
+
+  targetId      String
+  targetType    String
+
+  pendingAt     DateTime  @default(now())
+  processingAt  DateTime?
+  completedAt   DateTime?
+  failedAt      DateTime?
+  failureReason String?
+
+  createAt      DateTime  @default(now())
+  updateAt      DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([pendingAt])
+  @@index([completedAt])
+  @@index([failedAt])
+  @@index([policyId])
+  @@index([targetId, targetType])
+
+  @@unique([policyId, targetId, targetType]) 
+}
+
+model LifecyclePolicyExecutionLog {
+  id             Int   @id @default(autoincrement())
+
+  policy         WorkspacePolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  policyId       String?
+  workspaceId    String
+
+  executedAt     DateTime  @default(now())
+
+  totalCount     Int?      @default(0)
+  successCount   Int?      @default(0)
+  failedCount    Int?      @default(0)
+  failureReason  String?
+
+  durationMs     Int?
+
+  createAt       DateTime  @default(now())
+}

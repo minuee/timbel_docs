@@ -1,0 +1,27 @@
+services:
+  consul:
+    image: ghcr.io/timbel-timblo-onpremise/minio:latest
+    container_name: timblo-minio
+    restart: unless-stopped
+    #    ports:
+    #      - "38555:9090"
+    environment:
+      BUCKET_NAME: "default.timblo.io"
+      PUB_BUCKET_NAME: "default.public.timblo.io"
+
+      MINIO_ROOT_USER: timbloAdmin
+      MINIO_ROOT_PASSWORD: "adminAdmin"
+      MINIO_REGION: ap-northeast-2
+      MINIO_NOTIFY_WEBHOOK_ENABLE: "off"
+      MINIO_NOTIFY_AMQP_ENALBE: "off"
+      MINIO_VOLUMES: /data/minio_data
+      MINIO_CONSOLE_ADDRESS: ":9090"
+
+    volumes:
+      - ./data:/data/minio_data
+    networks:
+      - timblo-net-package
+
+networks:
+  timblo-net-package:
+    external: true

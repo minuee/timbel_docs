@@ -1,0 +1,15 @@
+node_modules
+logs
+
+.vscode
+.npmrc
+.env
+
+package-lock.json
+.github/
+dist/
+examples/
+lib/
+*.md
+!README.md
+src/libs

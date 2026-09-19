@@ -1,0 +1,101 @@
+# Public 이미지 기반 Dockerfile (ghcr.io 의존성 제거)
+# 사용법: docker build -f master-api/Dockerfile.public -t aimm-master-api . (monorepo root에서)
+
+FROM node:20-alpine AS builder
+
+# 시스템 의존성 설치
+RUN apk add --no-cache dumb-init python3 make g++
+
+WORKDIR /usr/src/app
+
+# 로컬 패키지 복사
+COPY prisma ./packages/prisma
+COPY notify ./packages/notify
+COPY license ./packages/license
+COPY tracely ./packages/tracely
+COPY minio-js ./packages/minio-js
+
+# 로컬 패키지 빌드
+WORKDIR /usr/src/app/packages/prisma
+RUN npm install && npm run build || true
+
+WORKDIR /usr/src/app/packages/license
+RUN npm install && npm run build:all || true
+
+WORKDIR /usr/src/app/packages/minio-js
+RUN npm install && npm run build || true
+
+WORKDIR /usr/src/app/packages/notify
+RUN npm install
+
+WORKDIR /usr/src/app/packages/tracely
+RUN npm install
+
+# 서비스 디렉토리로 이동
+WORKDIR /usr/src/app/service
+
+# 패키지 파일 복사
+COPY master-api/package*.json ./
+
+# package.json에서 private 패키지를 로컬 경로로 변경
+RUN sed -i 's|"@timbel-timblo-onpremise/prisma": "[^"]*"|"@timbel-timblo-onpremise/prisma": "file:../packages/prisma"|g' package.json && \
+    sed -i 's|"@timbel-timblo-onpremise/notify": "[^"]*"|"@timbel-timblo-onpremise/notify": "file:../packages/notify"|g' package.json && \
+    sed -i 's|"@timbel-timblo-onpremise/license": "[^"]*"|"@timbel-timblo-onpremise/license": "file:../packages/license"|g' package.json && \
+    sed -i 's|"@timbel-timblo-onpremise/tracely": "[^"]*"|"@timbel-timblo-onpremise/tracely": "file:../packages/tracely"|g' package.json && \
+    sed -i 's|"@timbel-timblo-onpremise/minio-js": "[^"]*"|"@timbel-timblo-onpremise/minio-js": "file:../packages/minio-js"|g' package.json
+
+# 의존성 설치
+RUN npm install --omit=dev
+
+# Production stage
+FROM node:20-alpine
+
+# 시스템 의존성 설치 (ffmpeg: 오디오 처리용)
+RUN apk add --no-cache dumb-init ffmpeg
+
+# PM2 전역 설치
+RUN npm install -g pm2
+
+WORKDIR /usr/src/app
+
+# 패키지 파일 복사
+COPY master-api/package*.json ./
+
+# 빌드된 소스 복사
+COPY master-api/dist/ ./
+COPY master-api/assets/ ./assets/
+COPY master-api/src/docs/ ./docs/
+
+# PM2 ecosystem 설정 파일 복사
+COPY master-api/ecosystem.config.cjs ./
+
+# node_modules 복사
+COPY --from=builder /usr/src/app/service/node_modules ./node_modules
+
+# symlink를 실제 패키지로 대체
+RUN rm -rf ./node_modules/@timbel-timblo-onpremise
+COPY --from=builder /usr/src/app/packages/prisma ./node_modules/@timbel-timblo-onpremise/prisma
+COPY --from=builder /usr/src/app/packages/notify ./node_modules/@timbel-timblo-onpremise/notify
+COPY --from=builder /usr/src/app/packages/license ./node_modules/@timbel-timblo-onpremise/license
+COPY --from=builder /usr/src/app/packages/tracely ./node_modules/@timbel-timblo-onpremise/tracely
+COPY --from=builder /usr/src/app/packages/minio-js ./node_modules/@timbel-timblo-onpremise/minio-js
+
+# 임시 디렉토리 생성 (오디오 처리용)
+RUN mkdir -p /usr/src/app/tmp/pcm /usr/src/app/tmp/flac
+
+# 환경변수 설정
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV SYS_NAME=be-master-service
+ENV APP_NAME=master
+ENV PCM_DIR=/usr/src/app/tmp/pcm/
+ENV FLAC_DIR=/usr/src/app/tmp/flac/
+
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
+
+EXPOSE 3000
+
+# PM2로 프로세스 관리
+ENTRYPOINT ["sh", "-c", "node ./utils/fetchEnv.js && pm2-runtime ecosystem.config.cjs"]

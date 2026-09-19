@@ -1,0 +1,168 @@
+enum YesNo {
+  Y
+  N
+}
+
+enum CorrectionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ERROR
+}
+
+model Company {
+  empno       String   @db.VarChar(128)
+  userId      String   @unique @db.VarChar(256)
+  companyCode String   @db.VarChar(128)
+  platform    String   @default("gbaa")
+  deptCode    String?  @db.VarChar(128)
+  deptName    String?  @db.VarChar(128)
+  createAt    DateTime @default(now())
+  updateAt    DateTime @updatedAt
+
+  userProfiles UserProfile[]
+
+  @@id([empno, companyCode])
+  @@index([empno], name: "idx_empno")
+  @@index([userId], name: "idx_userId")
+  @@index([companyCode], name: "idx_companyCode")
+}
+
+model Contact {
+  id String @id @default(uuid())
+
+  user UserProfile @relation("ContactOwner", fields: [pid], references: [pid], onDelete: Cascade)
+  pid  String      @db.VarChar(36)
+
+  targetUser UserProfile? @relation("ContactTarget", fields: [email], references: [email], onDelete: SetNull)
+  email      String?      @db.VarChar(256)
+
+  department String? @db.VarChar(64)
+  position   String? @db.VarChar(64)
+  memo       String? @db.VarChar(512)
+
+  isFavorite Boolean @default(false)
+  isRecycle  Boolean @default(false)
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  labels LabelOnContact[]
+
+  @@unique([pid, email])
+  @@index([pid, createAt], name: "idx_pid_createAt")
+}
+
+model ContactLabel {
+  id String @id @default(cuid())
+
+  user UserProfile @relation("ContactLabelOwner", fields: [pid], references: [pid], onDelete: Cascade)
+  pid  String      @db.VarChar(36)
+
+  name  String @db.VarChar(128)
+  color String @default("#FFFFFF") @db.VarChar(7)
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  contacts LabelOnContact[]
+
+  @@unique([pid, name])
+}
+
+model LabelOnContact {
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contactId String  @db.VarChar(36)
+
+  label   ContactLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  labelId String       @db.VarChar(36)
+
+  createAt DateTime @default(now())
+
+  @@id([contactId, labelId])
+}
+
+model Folder {
+  id String @id @default(uuid())
+
+  user UserProfile @relation("FolderOwner", fields: [pid], references: [pid], onDelete: Cascade)
+  pid  String      @db.VarChar(36)
+
+  name     String   @db.VarChar(64)
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  Content          Content[]
+  ContentShareUser ContentShareUser[]
+}
+
+model Correction {
+  id        String           @id @default(uuid())
+  contentId String           @db.VarChar(36)
+  version   DateTime         @default(now())
+  status    CorrectionStatus @default(IN_PROGRESS)
+  creatorId String           @db.VarChar(36)
+
+  correctionResult CorrectionResult[]
+
+  @@unique([contentId, version])
+}
+
+model CorrectionResult {
+  id                 String     @id @default(uuid())
+  correction         Correction @relation(fields: [correctionId], references: [id])
+  correctionId       String     @db.VarChar(36)
+  mergedSegmentIndex Int
+  startTime          String     @db.VarChar(8)
+  startIndex         Int
+  endIndex           Int
+  originalText       String     @db.Text
+  correctionText     String     @db.Text
+  type               String     @db.VarChar(30)
+  typeDetail         String     @db.Text
+  actionType         String     @db.VarChar(6) //apply, ignore 여부
+  createAt           DateTime   @default(now())
+
+  @@unique([correctionId, mergedSegmentIndex, startIndex, createAt])
+}
+
+model Corpus {
+  id          BigInt    @id @default(autoincrement())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String    @db.VarChar(36)
+  source      String    @db.VarChar(50)
+  target      String    @db.VarChar(50)
+  memo        String?   @db.VarChar(255)
+  lang        String    @default("ko") @db.VarChar(5)
+  isUsed      Boolean   @default(true)
+  creator     Member    @relation("CreatorCorpusRelation", fields: [creatorId], references: [id], onDelete: Cascade)
+  creatorId   String    @db.VarChar(36)
+  createAt    DateTime  @default(now())
+  updater     Member?   @relation("UpdaterCorpusRelation", fields: [updaterId], references: [id], onDelete: SetNull)
+  updaterId   String?   @db.VarChar(36)
+  updateAt    DateTime  @updatedAt
+
+  @@unique([source, creatorId])
+  @@index([creatorId, createAt], name: "idx_creatorId_createAt")
+}
+
+model KeywordBoosting {
+  id Int @id @default(autoincrement())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String @db.VarChar(36)
+
+  creator Member @relation("CreatorKeywordBoostingRelation", fields: [creatorId], references: [id], onDelete: Cascade)
+  creatorId String @db.VarChar(36)
+
+  keyword String @db.VarChar(128)
+  isPostProcess Boolean @default(false)
+  weight Float @default(0.0)
+  isUsed Boolean @default(true)
+
+  createAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  @@unique([creatorId, keyword])
+  @@index([workspaceId], name: "idx_workspaceId")
+  @@index([creatorId], name: "idx_creatorId")
+  @@index([keyword], name: "idx_keyword")
+}

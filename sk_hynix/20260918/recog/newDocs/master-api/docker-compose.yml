@@ -1,0 +1,19 @@
+services:
+  master:
+    container_name: ${CONTAINER_NAME}
+    image: docker.timblo.io/master-api:${IMAGE_TAG}
+    restart: always
+    environment:
+      - PINPOINT_AGENT_ID=${PINPOINT_AGENT_ID}
+    networks:
+      - app-net
+    volumes:
+      - ${VOLUME_TMP_PATH}:/usr/src/app/tmp
+      - ${VOLUME_BACKUP_PATH}:/usr/src/app/failedUploadFile
+
+networks:
+  # 고정 별칭(app-net) + 실제 docker 네트워크명은 name 으로 파라미터화
+  # (네트워크명을 키로 직접 변수치환하면 service 참조와 불일치 → undefined network)
+  app-net:
+    name: ${DOCKER_NETWORK_NAME}
+    external: true
