@@ -1,0 +1,70 @@
+# mobile-sync-server — 망분리 서버 기동 정의
+#
+# 이미지는 docker load 로 이미 적재되어 있다고 가정한다.
+# 레지스트리는 쳐다보지 않는다 (pull_policy: never).
+#
+# 기동:
+#   docker compose --env-file .env up -d
+#
+# 같은 디렉터리에 있어야 하는 것:
+#   docker-compose.yml   이 파일
+#   .env                 .env.example 을 복사해서 값만 채운 것
+
+services:
+  mobile-sync-server:
+    # docker load 로 적재한 이미지 이름과 정확히 같아야 한다.
+    # install.sh 가 .env 의 두 값을 적재된 이미지로 자동으로 맞춰준다.
+    image: ${IMAGE_NAME:-mobile-sync-server}:${IMAGE_VERSION:-latest}
+
+    # 망분리에서 pull 을 시도하면 타임아웃까지 멈춰 있다가 실패한다.
+    # never 로 두면 이미지가 없을 때 즉시 "이미지 없음"으로 죽어서 원인이 바로 보인다.
+    pull_policy: never
+
+    container_name: mobile-sync-server
+    restart: unless-stopped
+
+    # 컨테이너를 서버 계정(aimm)의 uid:gid 로 돌린다.
+    # 이미지 기본값은 10001 이지만, 그대로 두면 호스트에서 데이터 파일을
+    # 읽거나 지울 수 없다. install.sh 가 .env 에 실제 값을 써준다.
+    user: "${RUN_UID:-10001}:${RUN_GID:-10001}"
+
+    env_file:
+      - .env
+
+    ports:
+      - "${HOST_PORT:-9995}:${CONTAINER_PORT:-8080}"
+
+    volumes:
+      # 세션 데이터, 병합 작업 디렉터리, merge.db 가 전부 여기 쌓인다.
+      # 호스트 경로라서 컨테이너를 지우거나 이미지를 갈아끼워도 남는다.
+      # 소유권은 위 user: 와 같아야 한다 (install.sh 가 맞춰준다).
+      - ${RUNTIME_DIR:-./runtime}:/var/lib/recog/runtime
+
+    # /v1/merge 는 양방향 통신이 필요하다.
+    #   recog  → MinIO       presigned URL 의 호스트명(timblo-minio)을 해석해야 한다
+    #   master-api → recog   상태를 폴링으로 가져간다
+    networks:
+      - timblo-net
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('RECOG_PORT','8080')+'/health',timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  # MinIO 와 master-api 가 이미 쓰고 있는 네트워크다. 여기서 만들지 않는다.
+  # 없으면: docker network create timblo-net
+  timblo-net:
+    external: true
