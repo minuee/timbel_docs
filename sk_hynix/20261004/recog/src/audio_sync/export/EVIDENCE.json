@@ -1,0 +1,68 @@
+{
+  "task_id": "4",
+  "worker": "worker-3",
+  "generated_at": "2026-04-07T07:58:06.271185+00:00",
+  "files": [
+    "src/audio_sync/export/README.md",
+    "src/audio_sync/export/__init__.py",
+    "src/audio_sync/export/compat.py",
+    "src/audio_sync/export/manifest.py",
+    "src/audio_sync/export/mixdown.py",
+    "src/audio_sync/export/models.py",
+    "src/audio_sync/export/package.py",
+    "src/audio_sync/export/recog_adapter.py",
+    "src/audio_sync/export/service.py",
+    "src/audio_sync/export/validation.py",
+    "tests/export/__init__.py",
+    "tests/export/test_compat.py",
+    "tests/export/test_integration_contract.py",
+    "tests/export/test_manifest.py",
+    "tests/export/test_mixdown.py",
+    "tests/export/test_package.py",
+    "tests/export/test_recog_adapter.py",
+    "tests/export/test_service.py",
+    "tests/export/test_validation.py",
+    "src/audio_sync/export/EVIDENCE.json"
+  ],
+  "verification": [
+    {
+      "name": "export_unittest",
+      "command": "PYTHONPATH=src python3 -m unittest discover -s tests/export -v",
+      "status": "PASS",
+      "summary": "11 tests OK"
+    },
+    {
+      "name": "py_compile",
+      "command": "python3 -m py_compile $(find src/audio_sync/export tests/export -name '*.py')",
+      "status": "PASS",
+      "summary": "all export-lane python files compile"
+    },
+    {
+      "name": "lsp_diagnostics_directory",
+      "command": "lsp_diagnostics_directory(directory=src)",
+      "status": "PASS",
+      "summary": "0 errors, 0 warnings; tsc skipped because no tsconfig found"
+    }
+  ],
+  "git": {
+    "status": "unavailable",
+    "note": "workspace is not a git repository, so worker commit step could not be executed"
+  },
+  "followups": [
+    {
+      "timestamp": "2026-04-07T07:55:34.728566+00:00",
+      "change": "artifact bundles now include optional recog-compatible manifest alongside the canonical manifest",
+      "verification": "export suite still PASS 10/10; py_compile PASS"
+    },
+    {
+      "timestamp": "2026-04-07T07:56:45.369057+00:00",
+      "change": "bundle checksum manifest now records sizeBytes for canonical manifest, compat manifest, mixdown, and tracks",
+      "verification": "export suite still PASS 10/10; py_compile PASS"
+    },
+    {
+      "timestamp": "2026-04-07T07:58:06.271185+00:00",
+      "change": "added build_file_record_session_export(...) one-call helper for FileRecord -> manifests/bundle flow",
+      "verification": "export suite now PASS 11/11; py_compile PASS"
+    }
+  ]
+}
