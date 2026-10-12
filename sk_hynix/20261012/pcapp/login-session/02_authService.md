@@ -1,0 +1,294 @@
+# 작업 2 — 인증 서비스 교체 (세션, 사번 로그인, 토큰 갱신)
+
+**손대는 파일**: `src/main/services/authService.js` — **통째 교체**
+**다른 파일은 건드리지 않는다.**
+**선행 작업**: 작업 1 (`authConfig.js`) 이 있어야 한다.
+
+## 왜 필요한가
+기존 파일은 딥링크 code 교환만 할 수 있었고, 토큰 갱신은 "지원 안 함"으로 비어 있었다.
+이번에 아래 기능을 넣는다. 기존 함수 이름은 모두 그대로 유지하므로 다른 파일은 영향이 없다.
+
+- `loginWithEmpno(empno, password)` : 사번으로 HMP API 로그인 (새 기능)
+- `refreshAccessToken()` : refreshToken 으로 accessToken 재발급. 동시에 여러 번 불려도 서버 요청은 1번만 보낸다.
+- `ensureFreshToken()` : 만료 60초 전이면 미리 갱신
+- `expireSession()` / `onSessionExpired()` : 갱신까지 실패하면 세션을 버리고 알림
+- 토큰은 **메모리에만** 둔다(디스크 저장 없음). 앱을 끄면 다시 로그인해야 한다.
+
+## 할 일
+`src/main/services/authService.js` 의 **기존 내용을 전부 지우고** 아래 내용으로 바꾼다.
+
+```js
+// 인증 세션 보관 및 토큰 발급/갱신 담당
+// - accessToken 은 이 모듈 밖으로 노출하지 않는다(렌더러에도 전달하지 않는다).
+//   외부에서는 apiService 를 통해 요청만 보내고, 헤더 부착은 apiService 가 처리한다.
+// - 세션은 메모리에만 둔다. 앱을 끄면 사라지고, 다시 켜면 로그인부터 한다.
+//   (디스크에 남기지 않으므로 PC를 같이 쓰는 사람이 토큰을 꺼내 갈 수 없다)
+// - 로그인 경로는 두 가지다.
+//   1) MyAccess(SSO) → 딥링크 timbloRecApp://connect 로 받은 code 교환  : exchangeToken()
+//   2) 사번 직접 입력 → HMP API                                       : loginWithEmpno()
+
+const { EventEmitter } = require('events');
+const logger = require('../logger');
+const authConfig = require('./authConfig');
+
+let accessToken = null;
+let refreshToken = null;
+let endpoint = '';
+// accessToken 만료 시각(ms). JWT 가 아니라서 알 수 없으면 null → 401 을 받은 뒤에만 갱신한다.
+let accessTokenExpiresAt = null;
+// 갱신 요청이 동시에 여러 번 나가지 않도록 진행 중인 Promise 를 공유한다.
+let refreshInFlight = null;
+
+// 'changed'  : 로그인/갱신/로그아웃으로 세션이 바뀜
+// 'expired'  : 갱신까지 실패해서 세션을 버림 → 로그인 화면으로 보내야 함
+const events = new EventEmitter();
+
+// TODO(Q5-2): 서버가 기대하는 deviceId 형식 확인 후 실제 기기 식별자로 교체.
+//             현재는 기존 동작을 그대로 유지하기 위해 '1' 고정.
+const DEVICE_ID = '1';
+
+// JWT 의 exp(초)를 읽어 ms 로 돌려준다. JWT 가 아니거나 exp 가 없으면 null.
+// 서명 검증은 서버 몫이고, 여기서는 "언제 갱신할지" 판단에만 쓴다.
+function readJwtExpiry(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// 세션 저장. 토큰 교환/로그인/갱신 성공 시 호출한다.
+function setSession({ accessToken: nextAccessToken, refreshToken: nextRefreshToken, endpoint: nextEndpoint } = {}) {
+  if (nextAccessToken) {
+    accessToken = nextAccessToken;
+    accessTokenExpiresAt = readJwtExpiry(nextAccessToken);
+  }
+  if (nextRefreshToken) refreshToken = nextRefreshToken;
+  if (nextEndpoint) endpoint = nextEndpoint;
+  events.emit('changed', { authenticated: true });
+}
+
+function clearSession() {
+  accessToken = null;
+  refreshToken = null;
+  endpoint = '';
+  accessTokenExpiresAt = null;
+  events.emit('changed', { authenticated: false });
+}
+
+function getAccessToken() {
+  return accessToken;
+}
+
+function getRefreshToken() {
+  return refreshToken;
+}
+
+function getEndpoint() {
+  return endpoint;
+}
+
+function getDeviceId() {
+  return DEVICE_ID;
+}
+
+function isAuthenticated() {
+  return !!accessToken;
+}
+
+function onSessionExpired(listener) {
+  events.on('expired', listener);
+}
+
+// 서버 공통 응답 봉투 { message, httpCode, data } 에서 토큰을 꺼낸다.
+// - exchange 응답 : data.accessToken / data.refreshToken
+// - hmp, refresh  : data.tokens.accessToken / data.tokens.refreshToken
+function pickTokens(data) {
+  const src = (data && data.tokens) || data || {};
+  return { accessToken: src.accessToken || null, refreshToken: src.refreshToken || null };
+}
+
+// 딥링크로 받은 1회용 code 를 accessToken 으로 교환한다.
+// GET {endpoint}/api/auth/recorder/exchange/{code}
+async function exchangeToken(targetEndpoint, code) {
+  // apiService 와 상호 참조 관계라 호출 시점에 지연 로딩한다.
+  const { client } = require('./apiService');
+
+  try {
+    const res = await client.get(`/api/auth/recorder/exchange/${encodeURIComponent(code)}`, {
+      baseURL: targetEndpoint,
+      skipAuth: true, // 교환 시점에는 아직 토큰이 없다
+      headers: { 'content-type': 'application/json' },
+      // 상태코드와 무관하게 응답 본문을 그대로 해석한다(서버가 httpCode 를 본문에 담아 보냄)
+      validateStatus: () => true,
+    });
+
+    const result = res && res.data;
+    if (!result || typeof result !== 'object') {
+      try { logger.logError('exchange_token_invalid_response', { status: res && res.status }); } catch (_) {}
+      return { success: false, error: 'network_error' };
+    }
+
+    if (result.message !== 'Success') {
+      try { logger.logError('exchange_token_failed', { httpCode: result.httpCode, message: result.message }); } catch (_) {}
+      return { success: false, error: `httpCode : ${result.httpCode}` };
+    }
+
+    const tokens = pickTokens(result.data);
+
+    // 토큰 값 자체는 로그에 남기지 않는다(로그 파일은 평문으로 7일간 보존됨).
+    try {
+      logger.logInfo('exchange_token_success', {
+        accessTokenLength: tokens.accessToken ? String(tokens.accessToken).length : 0,
+        refreshTokenIssued: !!tokens.refreshToken,
+      });
+    } catch (_) {}
+
+    return { success: true, result: tokens.accessToken, refreshToken: tokens.refreshToken };
+  } catch (err) {
+    try { logger.logError('exchange_token_network_error', { message: err && err.message }); } catch (_) {}
+    return { success: false, error: 'network_error' };
+  }
+}
+
+// 사번으로 직접 로그인한다(모바일앱의 HMP 로그인과 같은 API).
+// POST {HMP_BASE_URL}{HMP_LOGIN_PATH}  body { empno }
+// 응답: { httpCode, message, data: { is2FA, tokens: { accessToken, refreshToken } } }
+//
+// ⚠️ 이 API 는 비밀번호를 받지 않는다. 모바일은 사내 HMP 앱이 이미 본인 인증을 끝낸 뒤
+//    사번을 넘겨주기 때문에 사번만으로 충분했지만, PC 에서는 아무 사번이나 입력할 수 있다.
+//    서버가 비밀번호 검증을 추가하기 전까지는 운영 배포에서 이 경로를 막아야 한다.
+async function loginWithEmpno(empno, password) {
+  const { client } = require('./apiService');
+  const baseURL = authConfig.HMP_BASE_URL;
+  const body = { empno: String(empno || '').trim() };
+  // 서버가 비밀번호 필드를 받게 되면 이름만 맞춰 여기서 보낸다. 그 전에는 보내지 않는다
+  // (검증하지 않는 서버로 평문 비밀번호를 흘려보낼 이유가 없다).
+  if (authConfig.HMP_PASSWORD_FIELD && password) body[authConfig.HMP_PASSWORD_FIELD] = password;
+
+  if (!body.empno) return { success: false, error: 'empno_required' };
+
+  try {
+    try { logger.logInfo('hmp_login_begin', { baseURL }); } catch (_) {}
+    const res = await client.post(authConfig.HMP_LOGIN_PATH, body, {
+      baseURL,
+      skipAuth: true,
+      headers: { 'content-type': 'application/json' },
+      // 모바일(dio followRedirects: true)과 같게 리다이렉트를 따라간다. axios 기본값도 따라감.
+      maxRedirects: 5,
+      validateStatus: () => true,
+    });
+
+    const result = res && res.data;
+    if (!result || typeof result !== 'object') {
+      try { logger.logError('hmp_login_invalid_response', { status: res && res.status }); } catch (_) {}
+      return { success: false, error: 'invalid_response', status: res && res.status };
+    }
+
+    const tokens = pickTokens(result.data);
+    if (result.httpCode !== 200 || !tokens.accessToken) {
+      try { logger.logWarn('hmp_login_failed', { httpCode: result.httpCode, message: result.message }); } catch (_) {}
+      // 모바일 기준 404/422 는 "약관 동의 필요". 서버 메시지를 그대로 보여준다.
+      return { success: false, error: 'login_rejected', httpCode: result.httpCode, message: result.message };
+    }
+
+    setSession({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, endpoint: baseURL });
+    try {
+      logger.logInfo('hmp_login_success', {
+        refreshTokenIssued: !!tokens.refreshToken,
+        expiresAt: accessTokenExpiresAt ? new Date(accessTokenExpiresAt).toISOString() : null,
+      });
+    } catch (_) {}
+    return { success: true };
+  } catch (err) {
+    try { logger.logError('hmp_login_network_error', { message: err && err.message, code: err && err.code }); } catch (_) {}
+    return { success: false, error: 'network_error', message: err && err.message };
+  }
+}
+
+// refreshToken 으로 accessToken 을 새로 받는다.
+// 동시에 여러 요청이 401 을 받아도 갱신은 한 번만 나가고, 모두 그 결과를 기다린다.
+function refreshAccessToken() {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = doRefresh().finally(() => { refreshInFlight = null; });
+  return refreshInFlight;
+}
+
+async function doRefresh() {
+  if (!refreshToken || !endpoint) {
+    // exchange 응답에 refreshToken 이 없으면 갱신 수단이 없다 → 재로그인 대상.
+    return { success: false, error: 'no_refresh_token' };
+  }
+
+  const { client } = require('./apiService');
+  try {
+    const res = await client.request({
+      method: authConfig.REFRESH_METHOD,
+      url: authConfig.REFRESH_PATH,
+      baseURL: endpoint,
+      data: { token: refreshToken, fcmToken: '' },
+      skipAuth: true,     // 아래에서 만료된 토큰을 직접 붙인다(모바일과 동일)
+      skipRefresh: true,  // 갱신 요청이 401 을 받아도 다시 갱신하러 들어가지 않게
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      validateStatus: () => true,
+    });
+
+    const result = res && res.data;
+    const tokens = pickTokens(result && result.data);
+    if (!result || result.httpCode !== 200 || !tokens.accessToken) {
+      try { logger.logWarn('token_refresh_failed', { status: res && res.status, httpCode: result && result.httpCode }); } catch (_) {}
+      return { success: false, error: 'refresh_rejected' };
+    }
+
+    setSession({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+    try { logger.logInfo('token_refresh_success', { refreshTokenRotated: !!tokens.refreshToken }); } catch (_) {}
+    return { success: true };
+  } catch (err) {
+    try { logger.logError('token_refresh_network_error', { message: err && err.message }); } catch (_) {}
+    // 네트워크 오류는 토큰 문제가 아니므로 세션을 버리지 않는다(호출부가 실패 처리).
+    return { success: false, error: 'network_error' };
+  }
+}
+
+// 요청 직전에 호출. 만료가 임박했으면 미리 갱신한다.
+// 만료 시각을 모르거나(JWT 아님) refreshToken 이 없으면 아무것도 하지 않는다.
+async function ensureFreshToken() {
+  if (!accessToken || !refreshToken || !accessTokenExpiresAt) return;
+  if (Date.now() < accessTokenExpiresAt - authConfig.REFRESH_BEFORE_EXPIRY_MS) return;
+  await refreshAccessToken();
+}
+
+// 갱신까지 실패해서 더는 쓸 수 없는 세션을 정리하고 알린다.
+function expireSession(reason) {
+  if (!accessToken) return;
+  try { logger.logWarn('session_expired', { reason }); } catch (_) {}
+  clearSession();
+  events.emit('expired', { reason });
+}
+
+module.exports = {
+  setSession,
+  clearSession,
+  getAccessToken,
+  getRefreshToken,
+  getEndpoint,
+  getDeviceId,
+  isAuthenticated,
+  onSessionExpired,
+  exchangeToken,
+  loginWithEmpno,
+  refreshAccessToken,
+  ensureFreshToken,
+  expireSession,
+};
+```
+
+## 확인 방법
+```bash
+node -e "new (require('vm').Script)(require('fs').readFileSync('src/main/services/authService.js','utf8')); console.log('문법OK')"
+node -e "const s=require('fs').readFileSync('src/main/services/authService.js','utf8'); ['loginWithEmpno','refreshAccessToken','ensureFreshToken','expireSession','onSessionExpired','exchangeToken'].forEach(n=>console.log(n, s.includes('function '+n)))"
+```
+문법OK 가 나오고 6줄 모두 `true` 면 성공.

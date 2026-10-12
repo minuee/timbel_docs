@@ -1,0 +1,15 @@
+{
+  "name": "pcapp-log-server",
+  "version": "0.0.1",
+  "description": "PC 녹음앱(timbloRecApp) 로그 수집 서버 — 외부 패키지 없음",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "LOG_DIR=./runtime node src/server.js",
+    "smoke": "node deploy/smoke_test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
