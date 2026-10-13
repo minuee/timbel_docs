@@ -10,7 +10,7 @@
   "DEFAULT_API_BASE_URL": "https://aimeeting.mobile.skhynix.com/m",
   "MOBILE_SERVER_URL": "https://aimeeting.mobile.skhynix.com/m",
   "ALERT_ON_RECORDING_START": true,
-  "APP_OS": "",
+  "APP_OS": "AOS",
   "LOG_SERVER_ENABLED": true,
   "LOG_SERVER_URL": "https://aimeeting.mobile.skhynix.com/m/api/pcapp/log",
   "LOG_SERVER_MIN_LEVEL": "info",

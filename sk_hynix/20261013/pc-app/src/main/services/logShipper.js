@@ -4,8 +4,10 @@
 // - 서버가 죽어 있어도 앱은 그대로 동작해야 한다. 실패분은 메모리에 쌓아 두었다가 다시 보내고,
 //   너무 많이 쌓이면 오래된 것부터 버린다(파일 로그에는 그대로 남아 있다).
 // - 이 모듈의 실패는 logger 로 남기지 않는다. 남기면 그 로그를 또 보내려다 실패하는 고리가 생긴다.
+// - 다른 API 와 같이 apiService 로 보낸다 → Authorization(Bearer)·timblo-App-* 헤더가 자동으로 붙는다.
+//   서버(게이트웨이)가 토큰 없는 요청을 막아서, 로그인 전에는 보내지 않고 모아 두었다가 로그인 후 보낸다.
+//   401 을 받아도 토큰 갱신·세션 종료는 하지 않는다(skipRefresh). 로그 때문에 로그아웃되면 안 된다.
 
-const axios = require('axios');
 const config = require('../config');
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
@@ -21,7 +23,7 @@ const enabled = config.getBool('LOG_SERVER_ENABLED', true);
 const url = config.get('LOG_SERVER_URL', 'https://aimeeting.mobile.skhynix.com/m/api/pcapp/log');
 const minLevel = LEVELS[String(config.get('LOG_SERVER_MIN_LEVEL', 'info')).toLowerCase()] || LEVELS.info;
 
-const http = axios.create({ timeout: 5000 });
+const SEND_TIMEOUT_MS = 5000;
 let queue = [];
 let dropped = 0;
 let sending = false;
@@ -65,15 +67,30 @@ function enqueue(entry) {
   if (queue.length >= BATCH_SIZE) flush();
 }
 
+// 순환 require 를 피하려고 쓸 때 불러온다(apiService → authService → logger).
+function api() {
+  return {
+    client: require('./apiService').client,
+    authService: require('./authService'),
+  };
+}
+
 async function flush() {
   if (sending || queue.length === 0 || Date.now() < backoffUntil) return;
+  const { client, authService } = api();
+  // 로그인 전(토큰 없음)에는 보내지 않는다. 큐에 그대로 두었다가 로그인 후 다음 주기에 보낸다.
+  if (!authService.getAccessToken()) return;
   sending = true;
   const batch = queue.slice(0, BATCH_SIZE);
   if (dropped > 0) {
     batch.push({ ...getContext(), level: 'warn', process: 'main', message: 'log_shipper_dropped', count: dropped });
   }
   try {
-    await http.post(url, { logs: batch });
+    await client.post(url, { logs: batch }, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: SEND_TIMEOUT_MS,
+      skipRefresh: true,
+    });
     queue = queue.slice(Math.min(BATCH_SIZE, batch.length));
     dropped = 0;
     backoffMs = FLUSH_INTERVAL_MS;
