@@ -1,0 +1,174 @@
+.summarize-container {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  width: 100vw;
+  height: 100vh;
+  
+  background-color: var(--popup-bg-color);
+}
+
+.summarize-header{
+  font-size: 20px;
+  font-weight: 600;
+  padding: 10px 14px 12px 14px;
+}
+
+.select-area{
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: top;
+  justify-content: stretch;
+  border-top: 1px solid var(--dark-gray-500);
+  border-bottom: 1px solid var(--dark-gray-500);
+  flex-grow: 1;
+  min-height: 0;
+}
+
+/* 제목 입력 (팝업 타이틀 바로 아래) */
+.title-input-area {
+  padding: 0 14px 12px 14px;
+}
+#titleInput {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 15px;
+  color: #ffffff;
+  background-color: var(--dark-gray-500);
+  border: 1px solid var(--dark-gray-400);
+  border-radius: 6px;
+  outline: none;
+}
+#titleInput:focus {
+  border-color: #1C6EFF;
+}
+
+/* 왼쪽: 언어 + 발화자수, 오른쪽: 템플릿 */
+.left-select, .template-select {
+  width: 50%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.left-select {
+  border-right: 1px solid var(--dark-gray-500);
+}
+.speaker-select .select-title {
+  margin-top: 6px;
+}
+.template-select .item-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  justify-content: flex-start;
+}
+
+.select-title{
+  font-size: 16px;
+  font-weight: 500;
+  height: 40px;
+  margin-bottom: 4px;
+  background-color: var(--dark-gray-500);
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: left;
+}
+
+
+.item-container{
+  font-size: 16px;
+  font-weight: 400;
+  padding-left: 10px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: left;
+  justify-content: center;
+}
+
+/* btn-area */
+
+.btn-area{
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: right;
+  padding: 14px;
+  gap: 10px;
+  border-top: 1px solid var(--dark-gray-500);
+}
+#uploadBtn {
+  width: 170px;
+  height: 48px;
+  font-weight: 600;
+  background-color: #1C6EFF;
+  border: 1px solid #1C6EFF;
+}
+
+/* custom radio (summarize window) */
+.summarize-container .item-container > div {
+  display: flex;
+  align-items: center;
+}
+
+.summarize-container input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.summarize-container .item-container label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1; /* tighten line-height to center text with the circle */
+  cursor: pointer;
+  user-select: none;
+  padding: 7px 12px 7px 44px; /* a bit more gap between circle and text */
+}
+
+.summarize-container .item-container label::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: calc(50% + 1px); /* nudge down to visually center with text */
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--dark-gray-400);
+  box-sizing: border-box;
+  background: transparent;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.summarize-container .item-container label::after {
+  content: "";
+  position: absolute;
+  left: calc(8px + (20px - 10px) / 2); /* center inner dot inside 20px circle */
+  top: calc(50% + 1px); /* keep in sync with ::before */
+  transform: translateY(-50%) scale(0);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #0a84ff; /* primary blue */
+  transition: transform 0.15s ease;
+}
+
+.summarize-container input[type="radio"]:checked + label::before {
+  border-color: #0a84ff;
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+}
+
+.summarize-container input[type="radio"]:checked + label::after {
+  transform: translateY(-50%) scale(1);
+}
+
+.summarize-container .item-container label:hover::before {
+  border-color: #b6bbc0;
+}

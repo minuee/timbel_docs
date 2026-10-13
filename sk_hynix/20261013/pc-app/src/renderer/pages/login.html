@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>로그인</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100;300;400;500;700;900&display=swap"
+    />
+    <link rel="stylesheet" href="../styles/index.css" />
+    <link rel="stylesheet" href="../styles/login.css" />
+  </head>
+
+  <body>
+    <div class="title-area">
+      <div class="title-left">
+        <div class="title-text">AI 회의록 녹음기</div>
+      </div>
+      <div class="title-right">
+        <button id="minimizeBtn">
+          <img src="../assets/icons/minalizeBtn.svg" alt="" />
+        </button>
+        <button id="closeBtn">
+          <img src="../assets/icons/closeBtn.svg" alt="" />
+        </button>
+      </div>
+    </div>
+
+    <main class="login-wrap">
+      <div class="login-heading">로그인</div>
+
+      <!-- 사번 직접 로그인. authConfig.EMPNO_LOGIN_ENABLED 가 false 면 숨긴다. -->
+      <form id="empnoForm" class="login-form" hidden autocomplete="off">
+        <input id="empnoInput" class="login-input" type="text" placeholder="사번" maxlength="20" />
+        <input id="passwordInput" class="login-input" type="password" placeholder="비밀번호" maxlength="64" />
+        <button id="empnoSubmitBtn" class="login-btn primary" type="submit">로그인</button>
+        <div class="login-divider" id="loginDivider"><span>또는</span></div>
+      </form>
+
+      <button id="ssoBtn" class="login-btn sso" type="button">MyAccess 로그인</button>
+
+      <!-- 테스트용: SSO 협조 전에 녹음→업로드를 시험하기 위해 웹에서 받은 토큰으로 바로 로그인.
+           authConfig.MANUAL_LOGIN_ENABLED 가 false 면 숨긴다. -->
+      <details id="manualLogin" class="manual-login" hidden>
+        <summary>테스트 로그인 (토큰 직접 입력)</summary>
+        <form id="manualForm" class="login-form" autocomplete="off">
+          <input id="manualName" class="login-input" type="text" placeholder="이름" maxlength="40" />
+          <input id="manualEmpno" class="login-input" type="text" placeholder="사번" maxlength="20" />
+          <input id="manualToken" class="login-input" type="password" placeholder="accessToken" />
+          <input id="manualEndpoint" class="login-input" type="text" placeholder="서버 주소 (비우면 기본값)" />
+          <button id="manualSubmitBtn" class="login-btn secondary" type="submit">토큰으로 로그인</button>
+        </form>
+      </details>
+
+      <div id="loginMessage" class="login-message" role="status" aria-live="polite"></div>
+    </main>
+
+    <script src="../scripts/login.js"></script>
+  </body>
+</html>

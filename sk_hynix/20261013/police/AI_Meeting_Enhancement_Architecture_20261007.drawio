@@ -1,0 +1,358 @@
+<mxfile host="Electron" agent="Claude" pages="2">
+  <diagram id="ai-arch" name="1. 전체 구성도 (고도화 반영)">
+    <mxGraphModel dx="1880" dy="1265" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1750" pageHeight="1270" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="a_title" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=26;fontStyle=1;align=left;verticalAlign=middle;fontColor=#1A1A1A;" value="AI회의록 고도화 구성도 — 화자 자동 인식 · 회의 Context 반영" vertex="1">
+          <mxGeometry height="40" width="1300" x="40" y="18" as="geometry" />
+        </mxCell>
+        <mxCell id="a_subtitle" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=13;align=left;verticalAlign=middle;fontColor=#757575;" value="기존 AI회의록 구성 위에 이번 고도화 모듈(주황 테두리)이 추가되는 구조  ·  (후보) = 기술 확정 전" vertex="1">
+          <mxGeometry height="26" width="1650" x="40" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="a_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="① 접속 단말" vertex="1">
+          <mxGeometry height="130" width="1670" x="40" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="a_s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="② 게이트웨이" vertex="1">
+          <mxGeometry height="90" width="1670" x="40" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="a_s3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="③ 회의록 서비스" vertex="1">
+          <mxGeometry height="190" width="1670" x="40" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="a_s4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="④ AI 처리" vertex="1">
+          <mxGeometry height="275" width="1670" x="40" y="570" as="geometry" />
+        </mxCell>
+        <mxCell id="a_s5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="⑤ LLM · 결과" vertex="1">
+          <mxGeometry height="115" width="1670" x="40" y="860" as="geometry" />
+        </mxCell>
+        <mxCell id="a_s6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="⑥ 저장소" vertex="1">
+          <mxGeometry height="130" width="1670" x="40" y="990" as="geometry" />
+        </mxCell>
+        <mxCell id="a_mobile" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#D6E4F7;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="모바일 앱&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;회의 녹음 · 파일 업로드&lt;/span&gt;" vertex="1">
+          <mxGeometry height="70" width="240" x="90" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="a_web" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#D6E4F7;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="회의록 사이트 (Web)&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;회의록 조회 · 첨부 파일 업로드 · 화면 공유 캡처 (기능 추가)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="70" width="420" x="360" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="a_voiceui" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="성문 등록 화면 [신규]&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;모바일 앱 권장 · 동의 + 음성 녹음&lt;/span&gt;" vertex="1">
+          <mxGeometry height="70" width="300" x="990" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="a_gw" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="L4 · Nginx · API Gateway &lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;(기존)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="50" width="500" x="520" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="a_ctxapi" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="컨텍스트 수집 API [신규]&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;첨부 문서 · 화면 캡처 이미지 수신&lt;/span&gt;" vertex="1">
+          <mxGeometry height="90" width="360" x="60" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="a_main" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFF9C4;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="Main API Server&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;업로드 · STT 요청 · 회의록 생성&lt;/span&gt;" vertex="1">
+          <mxGeometry height="90" width="230" x="450" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="a_auth" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFF9C4;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="Auth API Server&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;로그인 · 인증&lt;/span&gt;" vertex="1">
+          <mxGeometry height="90" width="180" x="700" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="a_merge" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFF9C4;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="다수 녹음 병합 (기존)&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;휴대폰 여러 대 녹음 · 비프음 싱크&lt;/span&gt;" vertex="1">
+          <mxGeometry height="90" width="200" x="900" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="a_voiceapi" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="성문 등록·관리 API [신규]&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;동의 이력 · 성문 등록/삭제&lt;/span&gt;" vertex="1">
+          <mxGeometry height="90" width="270" x="1420" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="a_ctxbox" parent="1" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#E65100;strokeWidth=3;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontSize=14;fontStyle=1;fontColor=#BF360C;" value="문서 · 화면 컨텍스트 처리 [신규]" vertex="1">
+          <mxGeometry height="225" width="360" x="60" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="a_docparse" parent="a_ctxbox" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="문서 파서 &lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;PDF·PPT 텍스트 → 키워드 자동 추출&lt;/span&gt;" vertex="1">
+          <mxGeometry height="52" width="330" x="15" y="42" as="geometry" />
+        </mxCell>
+        <mxCell id="a_ocr" parent="a_ctxbox" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="화면 인식 &lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;OCR 또는 멀티모달 LLM (후보)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="52" width="330" x="15" y="104" as="geometry" />
+        </mxCell>
+        <mxCell id="a_align" parent="a_ctxbox" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="타임라인 정렬 · 자료별 발화 태깅 &lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;자료 열람 시점 ↔ STT 시간 매칭&lt;/span&gt;" vertex="1">
+          <mxGeometry height="52" width="330" x="15" y="166" as="geometry" />
+        </mxCell>
+        <mxCell id="a_haiv" parent="1" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#1A1A1A;strokeWidth=3;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontSize=14;fontStyle=1;fontColor=#555555;" value="HAIV STT 엔진 (기존)" vertex="1">
+          <mxGeometry height="225" width="650" x="450" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="a_hmaster" parent="a_haiv" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="Master" vertex="1">
+          <mxGeometry height="70" width="140" x="15" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a_hkafka" parent="a_haiv" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="Kafka" vertex="1">
+          <mxGeometry height="70" width="140" x="175" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a_hworker" parent="a_haiv" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="Worker" vertex="1">
+          <mxGeometry height="70" width="140" x="335" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a_hdecoder" parent="a_haiv" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="Decoder&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;(Whisper)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="70" width="140" x="495" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a_term" parent="a_haiv" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="키워드 부스팅 (기존) &lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;문서 키워드를 STT 요청에 함께 전달&lt;/span&gt;" vertex="1">
+          <mxGeometry height="55" width="300" x="335" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="a_diar" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="화자분리 + 성문 매칭 [신규]&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;3rd-party 화자 임베딩 모델 (후보)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="90" width="250" x="1180" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="a_llm" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="LLM (chatGPT / sLLM)&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;용어 후보정 · 요약(선택) — 정리·요약·Action Item은 하이닉스 로컬 에이전트가 처리 가능&lt;/span&gt;" vertex="1">
+          <mxGeometry height="65" width="650" x="450" y="890" as="geometry" />
+        </mxCell>
+        <mxCell id="a_result" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#D6E4F7;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="고도화된 회의록&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;실명 화자 · 용어 보정 · 자료별 발화 태깅 · 요약(선택)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="65" width="360" x="60" y="890" as="geometry" />
+        </mxCell>
+        <mxCell id="a_mariadb" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="MariaDB&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;회의록 · 메타데이터&lt;/span&gt;" vertex="1">
+          <mxGeometry height="70" width="300" x="60" y="1035" as="geometry" />
+        </mxCell>
+        <mxCell id="a_objstore" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="Object Storage (S3)&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;음성 · 첨부 문서 · 캡처 이미지&lt;br&gt;보존 기간(현행 7일)에 따라 보관 · 전량 영구 보관 불필요&lt;/span&gt;" vertex="1">
+          <mxGeometry height="70" width="460" x="450" y="1035" as="geometry" />
+        </mxCell>
+        <mxCell id="a_voicedb" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=14;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="성문 저장소 [신규]&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;화자 임베딩 · 암호화 보관&lt;/span&gt;" vertex="1">
+          <mxGeometry height="70" width="270" x="1420" y="1035" as="geometry" />
+        </mxCell>
+        <mxCell id="a_legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#BDBDBD;" value="" vertex="1">
+          <mxGeometry height="80" width="1670" x="40" y="1150" as="geometry" />
+        </mxCell>
+        <mxCell id="a_lgt" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;fontColor=#555555;" value="범례" vertex="1">
+          <mxGeometry height="24" width="100" x="55" y="1156" as="geometry" />
+        </mxCell>
+        <mxCell id="a_lg_old" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="기존 구성" vertex="1">
+          <mxGeometry height="34" width="200" x="55" y="1186" as="geometry" />
+        </mxCell>
+        <mxCell id="a_lg_new" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="이번 고도화 (신규)" vertex="1">
+          <mxGeometry height="34" width="200" x="275" y="1186" as="geometry" />
+        </mxCell>
+        <mxCell id="a_lg_note" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=13;align=left;verticalAlign=middle;fontColor=#555555;" value="MCP 연동은 이번 범위에서 제외  ·  휴대폰 여러 대 녹음 병합은 기존 기능(싱크 보정 포함)" vertex="1">
+          <mxGeometry height="40" width="1170" x="515" y="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e1" edge="1" parent="1" source="a_mobile" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=0.100;entryY=0.000;entryDx=0;entryDy=0;" target="a_gw" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e2" edge="1" parent="1" source="a_web" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=0.300;entryY=0.000;entryDx=0;entryDy=0;" target="a_gw" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e3" edge="1" parent="1" source="a_voiceui" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=0.900;entryY=0.000;entryDx=0;entryDy=0;" target="a_gw" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e4" edge="1" parent="1" source="a_gw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.050;exitY=1.000;exitDx=0;exitDy=0;entryX=0.800;entryY=0.000;entryDx=0;entryDy=0;" target="a_ctxapi" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e5" edge="1" parent="1" source="a_gw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.200;exitY=1.000;exitDx=0;exitDy=0;entryX=0.500;entryY=0.000;entryDx=0;entryDy=0;" target="a_main" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e6" edge="1" parent="1" source="a_gw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.450;exitY=1.000;exitDx=0;exitDy=0;entryX=0.500;entryY=0.000;entryDx=0;entryDy=0;" target="a_auth" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e7" edge="1" parent="1" source="a_gw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.950;exitY=1.000;exitDx=0;exitDy=0;entryX=0.500;entryY=0.000;entryDx=0;entryDy=0;" target="a_voiceapi" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e8" edge="1" parent="1" source="a_main" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=0.250;entryY=0.000;entryDx=0;entryDy=0;" target="a_haiv" value="STT 요청">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e9" edge="1" parent="1" source="a_merge" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=0.750;entryY=0.000;entryDx=0;entryDy=0;" target="a_haiv" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e10" edge="1" parent="1" source="a_ctxapi" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=0.500;entryY=0.000;entryDx=0;entryDy=0;" target="a_ctxbox" value="첨부 문서 · 캡처 이미지">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e11" edge="1" parent="1" source="a_ocr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=0.500;entryY=0.000;entryDx=0;entryDy=0;" target="a_align" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e12" edge="1" parent="1" source="a_docparse" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="a_term" value="키워드 목록">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="435" y="668" />
+              <mxPoint x="435" y="777" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_e13" edge="1" parent="1" source="a_term" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.770;exitY=0.000;exitDx=0;exitDy=0;entryX=0.500;entryY=1.000;entryDx=0;entryDy=0;" target="a_hdecoder" value="STT 변환에 참고">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e14" edge="1" parent="1" source="a_hdecoder" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="a_diar" value="STT 결과">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e15" edge="1" parent="1" source="a_voiceapi" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.700;exitY=1.000;exitDx=0;exitDy=0;entryX=0.700;entryY=0.000;entryDx=0;entryDy=0;" target="a_voicedb" value="성문 저장">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e16" edge="1" parent="1" source="a_diar" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;startArrow=block;startFill=1;exitX=0.900;exitY=1.000;exitDx=0;exitDy=0;entryX=0.200;entryY=0.000;entryDx=0;entryDy=0;" target="a_voicedb" value="성문 조회">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e17" edge="1" parent="1" source="a_diar" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=1.000;entryY=0.500;entryDx=0;entryDy=0;" target="a_llm" value="실명 라벨 대본">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e18" edge="1" parent="1" source="a_ctxbox" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E65100;strokeWidth=3;endArrow=block;fontSize=12;fontColor=#BF360C;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.900;exitY=1.000;exitDx=0;exitDy=0;entryX=0.100;entryY=0.000;entryDx=0;entryDy=0;" target="a_llm" value="문서 맥락 · 화면 용어">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e19" edge="1" parent="1" source="a_llm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.000;exitY=0.500;exitDx=0;exitDy=0;entryX=1.000;entryY=0.500;entryDx=0;entryDy=0;" target="a_result" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_e20" edge="1" parent="1" source="a_result" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=0.700;exitY=1.000;exitDx=0;exitDy=0;entryX=0.700;entryY=0.000;entryDx=0;entryDy=0;" target="a_mariadb" value="저장">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="ai-flow" name="2. 3건 상세 플로우">
+    <mxGraphModel dx="1746" dy="1174" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1750" pageHeight="960" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="b_title" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=26;fontStyle=1;align=left;verticalAlign=middle;fontColor=#1A1A1A;" value="이번 고도화 3건 상세 플로우" vertex="1">
+          <mxGeometry height="40" width="1300" x="40" y="18" as="geometry" />
+        </mxCell>
+        <mxCell id="b_subtitle" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=13;align=left;verticalAlign=middle;fontColor=#757575;" value="주황 = 이번에 새로 추가되는 단계  ·  회색 = 기존 기능을 그대로 사용하는 단계  ·  (후보) = 기술 확정 전" vertex="1">
+          <mxGeometry height="26" width="1650" x="40" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="b_l1_bg" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="" vertex="1">
+          <mxGeometry height="330" width="1650" x="40" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="b_l1_lb" parent="1" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1A1A1A;strokeWidth=2;fontSize=16;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="① 화자 자동 인식&lt;br&gt;(성문 매칭)" vertex="1">
+          <mxGeometry height="300" width="200" x="55" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="b_l1_ph1" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=13;fontStyle=1;align=left;verticalAlign=middle;fontColor=#BF360C;" value="[사전 등록 — 참석자별 최초 1회]" vertex="1">
+          <mxGeometry height="22" width="500" x="290" y="112" as="geometry" />
+        </mxCell>
+        <mxCell id="b_p1" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="1. 성문 등록 요청&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;본인 스마트폰 앱 권장 · 동의 + 10~30초 음성&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="290" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="b_p2" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="2. 화자 임베딩 추출&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;3rd-party 모델 (후보)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="520" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="b_p3" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="3. 성문 저장&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;암호화 보관 · 이후 재사용&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="750" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="b_l1_ph2" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=13;fontStyle=1;align=left;verticalAlign=middle;fontColor=#BF360C;" value="[회의 처리 — 업로드된 녹음 기준]" vertex="1">
+          <mxGeometry height="22" width="500" x="290" y="262" as="geometry" />
+        </mxCell>
+        <mxCell id="b_q1" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="1. 음성 업로드&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;등록한 스마트폰으로 녹음 권장&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="290" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="b_q2" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="2. STT + 화자분리&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;HAIV (Whisper)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="520" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="b_q3" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="3. 화자별 임베딩 추출&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;구간마다 벡터 생성&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="750" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="b_q4" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="4. 등록 성문과 비교&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;참석자만 후보 · 임계값 적용&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="980" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="b_q5" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="5. 실명 라벨 부여&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;미매칭은 &#39;화자N&#39;으로 유지&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="1210" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="b_q6" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="6. 화자 표기 회의록&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;실명 대본 생성&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="1440" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="b_l2_bg" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="" vertex="1">
+          <mxGeometry height="190" width="1650" x="40" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="b_l2_lb" parent="1" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#1A1A1A;strokeWidth=2;fontSize=16;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="② 회의 Context A&lt;br&gt;(사전 첨부 파일)" vertex="1">
+          <mxGeometry height="160" width="200" x="55" y="465" as="geometry" />
+        </mxCell>
+        <mxCell id="b_a1" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="1. 회의 전 문서 첨부&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;PDF · PPT 업로드&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="290" y="495" as="geometry" />
+        </mxCell>
+        <mxCell id="b_a2" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="2. 텍스트·용어 추출&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;문서 파서&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="520" y="495" as="geometry" />
+        </mxCell>
+        <mxCell id="b_a3" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="3. 키워드 목록 생성&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;회의별 자동 생성&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="750" y="495" as="geometry" />
+        </mxCell>
+        <mxCell id="b_a4" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="4. STT 요청에 키워드 전달&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;기존 키워드 부스팅 활용&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="980" y="495" as="geometry" />
+        </mxCell>
+        <mxCell id="b_a5" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="5. LLM 후보정&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;문서 맥락 융합 (프롬프트 확장)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="1210" y="495" as="geometry" />
+        </mxCell>
+        <mxCell id="b_a6" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="6. 요약 회의록 (선택)&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;문서 맥락 반영&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="1440" y="495" as="geometry" />
+        </mxCell>
+        <mxCell id="b_l3_bg" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#BDBDBD;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=14;fontStyle=1;fontColor=#9E9E9E;" value="" vertex="1">
+          <mxGeometry height="190" width="1650" x="40" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="b_l3_lb" parent="1" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=16;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="③ 회의 Context B&lt;br&gt;(화면 캡처 + 화면 인식)" vertex="1">
+          <mxGeometry height="160" width="200" x="55" y="675" as="geometry" />
+        </mxCell>
+        <mxCell id="b_b1" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="1. 화면 캡처&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;회의록 사이트 화면 공유 · 캡처 시각 기록&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="290" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="b_b2" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="2. 서버 전송&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;녹음과 같은 기준 시각 사용&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="520" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="b_b3" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="3. 화면 텍스트 추출&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;한국어 OCR 또는 멀티모달 LLM (후보)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="750" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="b_b4" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="4. 자료별 발화 태깅&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;자료 열람 시점 ↔ STT 시간 매칭&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="980" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="b_b5" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="5. 회의 후 용어 보정&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;LLM이 STT 오류 용어 교정&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="1210" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="b_b6" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="6. 타임라인 노출&lt;br&gt;&lt;span style=&quot;font-weight:normal;font-size:12px;color:#444444;&quot;&gt;화면 텍스트 · 자료별 발화 표시&lt;/span&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="1440" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="b_lg_old" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#1A1A1A;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="기존 기능 사용" vertex="1">
+          <mxGeometry height="34" width="200" x="55" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="b_lg_new" parent="1" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#E65100;strokeWidth=3;fontSize=13;fontStyle=1;fontColor=#1A1A1A;verticalAlign=middle;align=center;" value="이번에 추가" vertex="1">
+          <mxGeometry height="34" width="200" x="275" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="b_lg_note" parent="1" style="text;html=1;fillColor=none;strokeColor=none;fontSize=13;align=left;verticalAlign=middle;fontColor=#555555;" value="MCP 연동은 범위 제외  ·  성문은 생체정보라 동의·보관 정책 필요  ·  음성·캡처 이미지는 보존 기간(현행 7일)에 따라 보관" vertex="1">
+          <mxGeometry height="40" width="1150" x="500" y="877" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e1" edge="1" parent="1" source="b_p1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_p2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e2" edge="1" parent="1" source="b_p2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_p3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e3" edge="1" parent="1" source="b_q1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_q2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e4" edge="1" parent="1" source="b_q2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_q3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e5" edge="1" parent="1" source="b_q3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_q4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e6" edge="1" parent="1" source="b_q4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_q5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e7" edge="1" parent="1" source="b_q5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_q6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e8" edge="1" parent="1" source="b_p3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9E9E9E;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;dashed=1;exitX=0.500;exitY=1.000;exitDx=0;exitDy=0;entryX=0.500;entryY=0.000;entryDx=0;entryDy=0;" target="b_q4" value="저장된 성문 조회">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="845" y="262" />
+              <mxPoint x="1075" y="262" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="b_e9" edge="1" parent="1" source="b_a1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_a2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e10" edge="1" parent="1" source="b_a2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_a3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e11" edge="1" parent="1" source="b_a3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_a4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e12" edge="1" parent="1" source="b_a4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_a5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e13" edge="1" parent="1" source="b_a5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_a6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e14" edge="1" parent="1" source="b_b1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_b2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e15" edge="1" parent="1" source="b_b2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_b3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e16" edge="1" parent="1" source="b_b3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_b4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e17" edge="1" parent="1" source="b_b4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_b5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="b_e18" edge="1" parent="1" source="b_b5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;strokeWidth=2;endArrow=block;fontSize=12;fontColor=#222222;labelBackgroundColor=#FFFFFF;jettySize=auto;orthogonalLoop=1;exitX=1.000;exitY=0.500;exitDx=0;exitDy=0;entryX=0.000;entryY=0.500;entryDx=0;entryDy=0;" target="b_b6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 요약 준비하기</title>
+  <link rel="stylesheet" href="../styles/summarizeWindow.css">
+  <link rel="stylesheet" href="../styles/index.css">
+</head>
+<body>
+  <div class="title-area"></div>
+  <div class="summarize-container">
+    <div class="summarize-header">AI 요약 준비하기</div>
+
+    <!-- 회의록 제목 (선택, 비워도 됨) — 업로드 때 title 로 보낸다 -->
+    <div class="title-input-area">
+      <input type="text" id="titleInput" maxlength="100" placeholder="회의록 제목을 입력해 주세요. (선택)" autocomplete="off">
+    </div>
+
+    <div class="select-area">
+      <div class="left-select">
+        <div class="language-select">
+          <div class="select-title">요약 언어 선택<span class="red-star">*</span></div>
+          <div class="item-container">
+            <div>
+              <input type="radio" name="language" id="language1" value="ko" checked>
+              <label for="language1">한국어</label>
+            </div>
+            <div>
+              <input type="radio" name="language" id="language2" value="en">
+              <label for="language2">영어</label>
+            </div>
+          </div>
+        </div>
+        <div class="speaker-select">
+          <div class="select-title">발화자수 선택<span class="red-star">*</span></div>
+          <div class="item-container">
+            <div>
+              <input type="radio" name="speaker" id="speaker1" value="0" checked>
+              <label for="speaker1">1~2명</label>
+            </div>
+            <div>
+              <input type="radio" name="speaker" id="speaker2" value="1">
+              <label for="speaker2">3~6명</label>
+            </div>
+            <div>
+              <input type="radio" name="speaker" id="speaker3" value="2">
+              <label for="speaker3">7~10명</label>
+            </div>
+            <div>
+              <input type="radio" name="speaker" id="speaker4" value="3">
+              <label for="speaker4">11명 이상</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="template-select">
+        <div class="select-title">템플릿 선택<span class="red-star">*</span></div>
+        <!-- 템플릿 목록은 summarizeWindow.js 가 templateAPI 로 채운다 -->
+        <div class="item-container" id="templateList"></div>
+      </div>
+    </div>
+
+    <div class="btn-area">
+      <button id="closeBtn" class="btn btn-cancel">닫기</button>
+      <button id="uploadBtn" class="btn btn-confirm">AI요약 시작</button>
+    </div>
+  </div>
+
+  <script src="../scripts/summarizeWindow.js"></script>
+</body>
+</html>

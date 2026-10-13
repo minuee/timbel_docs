@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 회의록 녹음기</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+    />
+    <link rel="stylesheet" href="../styles/index.css" />
+    <link rel="stylesheet" href="../styles/recordingWindow.css" />
+  </head>
+  <body>
+    <div class="title-area">
+      <div class="title-left">
+        <div class="title-text" id="titleText">AI 회의록 녹음기</div>
+        <button class="setting-btn" id="settingBtn">
+          <img src="../assets/icons/settingBtn.svg" alt="" />
+        </button>
+      </div>
+
+      <!-- 버튼 근처에 떠 있는 메뉴 -->
+      <div id="settings-menu" class="settings-menu" hidden>
+        <button class="menu-item" id="alwaysOnTab">항상 위</button>
+        <button class="menu-item" id="muteTab">음소거</button>
+        <div class="menu-item" id="versionInfoTab">버전 정보
+          <span id="versionInfoText">v1.0.0</span>
+        </div>
+        <button class="menu-item" id="closeAppBtn">앱 종료</button>
+      </div>
+      <!-- 항상 위 세부옵션 -->
+      <div id="settings-aot-items" class="settings-detail" hidden>
+        <button class="aot-item" id="aot-item-1">항상 위 켜기</button>
+        <button class="aot-item" id="aot-item-2">항상 위 끄기</button>
+      </div>
+      <!-- 음소거 세부옵션 -->
+      <div id="settings-mute-items" class="settings-detail" hidden>
+        <button class="mute-item" id="mute-item-1">음소거 설정</button>
+        <button class="mute-item" id="mute-item-2">음소거 해제</button>
+      </div>
+
+      <div class="title-right">
+        <button id="topBtn" aria-label="항상 위">
+          <img src="../assets/icons/aotNoActiveBtn.svg" alt="" />
+        </button>
+        <button id="minimizeBtn" aria-label="최소화">
+          <img src="../assets/icons/minalizeBtn.svg" alt="" />
+        </button>
+      </div>
+    </div>
+
+    <div class="main-section">
+      <div class="recording-info">
+        <div class="left-info">
+          <div class="sound-group">
+            <div class="mic-group">
+              <div class="sound-group-icon mic-icon" id="micIcon">
+                <span class="material-icons">mic</span>
+              </div>
+              <div class="level-meter" id="micMeter">
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+              </div>
+            </div>
+            <div class="sys-group">
+              <div class="sound-group-icon sys-icon" id="sysIcon">
+                <span class="material-icons">volume_up</span>
+              </div>
+              <div class="level-meter" id="sysMeter">
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+                <div class="level-box"></div>
+              </div>
+            </div>
+          </div>
+          <div class="remain-time">
+            <div class="remain-time-meter">
+              <div class="remain-time-bar" id="remainTimeBar"></div>
+            </div>
+            <div class="remain-time-text">
+              <p>남은 시간</p>
+              <p>03:00:00</p>
+            </div>
+          </div>
+        </div>
+        <div class="right-info">
+          <div class="progress-time">
+            <div class="recording-status-circle hidden"></div>
+            <div class="recording-time">00 : 00 : 00</div>
+          </div>
+          <button class="upload-list-btn" id="upload-list-btn">
+            <img src="../assets/icons/uploadListBtn.svg" alt="" />
+          </button>
+        </div>
+      </div>
+
+      <!-- 녹음 중 웨이브: 헬퍼 level 이벤트로 그린다(recording.js 웨이브). 일시정지하면 멈추고 회색 -->
+      <div class="wave-section">
+        <canvas id="waveCanvas" aria-hidden="true"></canvas>
+        <div class="segment-info hidden"></div>
+      </div>
+
+      <div class="audio-area">
+        <div class="noti-area">
+          <div class="noti">
+            <span><img src="../assets/icons/noti.svg" alt="" />녹음 중인 대화입니다. 반드시 상대방의 동의를 받으세요.</span>
+            
+          </div>
+        </div>
+        <div class="audio-components">
+          <div class="record-control" id="recordCancelBtn">녹음 취소</div>
+          <button id="pause-btn">
+            <img src="../assets/icons/pause_small.svg" alt="" />
+          </button>
+          <div class="record-control" id="recordCompleteBtn">녹음 종료</div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../scripts/recording.js"></script>
+  </body>
+</html>
