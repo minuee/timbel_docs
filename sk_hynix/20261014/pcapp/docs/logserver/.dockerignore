@@ -1,0 +1,6 @@
+# 빌드 컨텍스트에서 뺀다. 특히 dist/ 의 예전 tar 가 들어가면 빌드가 수백 MB 를 복사한다.
+dist/
+runtime/
+deploy/
+*.md
+.git

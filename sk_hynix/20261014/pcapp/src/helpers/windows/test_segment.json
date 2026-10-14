@@ -1,0 +1,3 @@
+{"cmd":"set_output_dir","directory":"test_segments"}
+{"cmd":"set_segment_config","encryption_enabled":"true"}
+{"cmd":"start","mode":"MicPlusSystem","mic":"default","max_ms":"400000"}
