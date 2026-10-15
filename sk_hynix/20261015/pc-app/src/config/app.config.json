@@ -1,0 +1,21 @@
+{
+  "APP_DISPLAY_NAME": "SKHynixRecApp",
+  "RECORDING_FILE_PREFIX": "A.Biz_pcapp_rec_",
+  "SSO_LOGIN_URL": "https://amdev.skhynix.com/sso/m/login.jsp?TYPE=XX&REALMOID=XX&GUID=XX",
+  "HMP_BASE_URL": "https://aimeeting.mobile.skhynix.com/m",
+  "HMP_LOGIN_PATH": "/api/auth/sso/hmp",
+  "HMP_PASSWORD_FIELD": "",
+  "EMPNO_LOGIN_ENABLED": true,
+  "REFRESH_PATH": "/api/auth/refresh",
+  "REFRESH_METHOD": "put",
+  "MANUAL_LOGIN_ENABLED": true,
+  "DEFAULT_API_BASE_URL": "https://aimeeting.mobile.skhynix.com/m",
+  "MOBILE_SERVER_URL": "https://aimeeting.mobile.skhynix.com/m",
+  "ALERT_ON_RECORDING_START": true,
+  "APP_OS": "AOS",
+  "LOG_SERVER_ENABLED": true,
+  "LOG_SERVER_URL": "https://aimeeting.mobile.skhynix.com/m/api/pcapp/log",
+  "LOG_SERVER_MIN_LEVEL": "info",
+  "UPDATE_ENABLED": true,
+  "UPDATE_SERVER_URL": ""
+}

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 보안 정책(CSP): 앱 안의 파일만 실행. 없으면 Electron 이 "Insecure Content-Security-Policy" 경고를 콘솔에 남긴다(로그 서버 warn).
+         style-src unsafe-inline: HTML 의 style="" 속성용. 구글 폰트: 인터넷이 안 되면 안 받아질 뿐 동작엔 영향 없음 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>업데이트</title>
+    <link rel="stylesheet" href="../styles/index.css" />
+    <style>
+      .update-wrap {
+        width: 100%;
+        flex: 1;
+        padding: 32px 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 14px;
+      }
+      .update-heading {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .update-desc {
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--dark-gray-400);
+        white-space: pre-line;
+      }
+      .update-desc.error {
+        color: #f9463b;
+      }
+      .update-bar {
+        height: 8px;
+        border-radius: 4px;
+        background: var(--dark-gray-500);
+        overflow: hidden;
+      }
+      .update-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: #f9463b;
+        transition: width 0.3s ease;
+      }
+      .update-percent {
+        font-size: 12px;
+        color: var(--dark-gray-400);
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="title-area">
+      <div class="title-left">
+        <div class="title-text">AI 회의록 녹음기</div>
+      </div>
+    </div>
+
+    <!-- 강제 업데이트라 닫기/최소화 버튼을 두지 않는다. 창을 강제로 닫으면 다음 실행 때 다시 시도한다. -->
+    <main class="update-wrap">
+      <div class="update-heading" id="updateHeading">업데이트를 준비하고 있습니다</div>
+      <div class="update-desc" id="updateDesc">새 버전을 내려받는 중입니다.
+잠시만 기다려 주세요.</div>
+      <div class="update-bar"><div class="update-bar-fill" id="updateBarFill"></div></div>
+      <div class="update-percent" id="updatePercent">0%</div>
+    </main>
+
+    <script src="../scripts/update.js"></script>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <!-- 보안 정책(CSP): 앱 안의 파일만 실행. 없으면 Electron 이 "Insecure Content-Security-Policy" 경고를 콘솔에 남긴다(로그 서버 warn).
+       style-src unsafe-inline: HTML 의 style="" 속성용. 구글 폰트: 인터넷이 안 되면 안 받아질 뿐 동작엔 영향 없음 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>업로드 리스트</title>
+  <link rel="stylesheet" href="../styles/uploadList.css">
+  <link rel="stylesheet" href="../styles/index.css">
+</head>
+<body>
+  <div class="title-area">
+    <div class="title-left">
+      <div class="title-text">업로드 리스트</div>
+    </div>
+    <div class="title-right">
+      <button class="close-button" id="closeButton">
+        <img src="../assets/icons/closeBtn.svg" alt="">
+      </button>
+    </div>
+  </div>
+  <div class="upload-list">
+    <div class="upload-list-header">
+      <div style="color: #292A2B;">S</div>
+      <div>회의명</div>
+      <div>회의시간</div>
+      <div>상태</div>
+      <div>삭제</div>
+    </div>
+    <div class="upload-list-body">
+      <div class="upload-list-item">
+        <div class="item-status-icon">
+          <img src="../assets/icons/upload_fail_icon.svg" alt="">
+        </div>
+        <div class="item-title">프로덕트 개선 회의</div>
+        <div class="item-time">2025.07.29 11:30</div>
+        <div class="item-status">업로드 중...</div>
+        <div class="item-delete">
+          <button class="item-delete" aria-label="삭제">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+              <path d="M10 11v6"></path>
+              <path d="M14 11v6"></path>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    
+    </div>
+  </div>
+
+  <script src="../scripts/uploadList.js"></script>
+</body>
+</html>
