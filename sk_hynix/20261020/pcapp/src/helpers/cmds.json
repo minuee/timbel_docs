@@ -1,0 +1,3 @@
+{"cmd":"set_output_dir","directory":"test_recordings"}
+{"cmd":"set_debug_files","enabled":"true"}
+{"cmd":"start","mode":"SystemOnly","mic":"default","max_ms":"20000"}

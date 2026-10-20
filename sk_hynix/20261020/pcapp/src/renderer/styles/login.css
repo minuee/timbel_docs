@@ -1,0 +1,120 @@
+.login-wrap {
+  width: 100%;
+  flex: 1;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.login-heading {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.login-form[hidden] {
+  display: none;
+}
+
+.login-input {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--dark-gray-500);
+  background: #19191a;
+  color: var(--white);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+.login-input:focus {
+  border-color: var(--dark-gray-400);
+}
+
+.login-btn {
+  height: 42px;
+  border-radius: 8px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.login-btn:hover {
+  opacity: 0.85;
+}
+.login-btn:active {
+  transform: scale(0.98);
+}
+.login-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.login-btn.primary {
+  background: #f9463b;
+  color: var(--white);
+}
+.login-btn.sso {
+  background: var(--white);
+  color: var(--black);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dark-gray-400);
+  font-size: 12px;
+  margin: 4px 0;
+}
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--dark-gray-500);
+}
+
+.login-message {
+  min-height: 36px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--dark-gray-400);
+  white-space: pre-line;
+}
+.login-message.error {
+  color: #f9463b;
+}
+.login-btn.secondary {
+  background: var(--dark-gray-500);
+  color: var(--white);
+}
+
+.manual-login {
+  margin-top: 4px;
+}
+.manual-login summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--dark-gray-400);
+  padding: 4px 0;
+  user-select: none;
+}
+.manual-login .login-form {
+  margin-top: 8px;
+}
+.manual-login .login-input {
+  height: 34px;
+  font-size: 13px;
+}
+.manual-login .login-btn {
+  height: 36px;
+  font-size: 14px;
+}
