@@ -30,6 +30,8 @@
   "login.msg_network_error": "Cannot connect to the server.\nCheck your company network connection.",
   "login.msg_rejected": "Sign-in was rejected. (code {code})",
   "login.msg_invalid_response": "The sign-in response is not valid.\nPlease try again.",
+  "login.remember_empno": "Remember ID",
+  "login.keep_login": "Keep me signed in",
   "mic_test.title": "Microphone Test",
   "mic_test.capture_mode": "Record",
   "mic_test.capture_mode_help": "Choose <strong>Meeting audio only</strong> to leave out your own voice and record <strong>only the other participants</strong> from Zoom, Webex, Teams, etc. Use it when several participants' recordings will be merged later.",

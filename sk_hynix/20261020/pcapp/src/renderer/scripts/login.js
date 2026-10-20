@@ -1,5 +1,7 @@
 // 로그인 화면
 // - 사번 로그인: authAPI.loginWithEmpno → 성공하면 메인 프로세스가 index.html 로 넘긴다.
+// - 체크박스: "사번 저장"(사번 폼이 보일 때), "로그인 유지"(SESSION_PERSIST_ENABLED 가 true 일 때).
+//   바꿀 때마다 메인 프로세스에 저장한다(loginPrefs.js) — SSO 는 딥링크로 돌아오므로 미리 있어야 한다.
 // - MyAccess 로그인: 브라우저를 열고 기다린다. 웹이 딥링크를 호출하면 메인 프로세스가
 //   토큰을 교환하고 index.html 로 넘긴다. 실패하면 auth-exchanged 로 사유가 온다.
 
@@ -17,6 +19,11 @@ const manualToken = document.getElementById("manualToken");
 const manualEndpoint = document.getElementById("manualEndpoint");
 const manualSubmitBtn = document.getElementById("manualSubmitBtn");
 const languageSelectWrap = document.getElementById("languageSelectWrap");
+const loginOptions = document.getElementById("loginOptions");
+const rememberEmpnoLabel = document.getElementById("rememberEmpnoLabel");
+const rememberEmpnoCheck = document.getElementById("rememberEmpnoCheck");
+const keepLoginLabel = document.getElementById("keepLoginLabel");
+const keepLoginCheck = document.getElementById("keepLoginCheck");
 
 const WINDOW_WIDTH = 380;
 const WINDOW_MIN_HEIGHT = 300;
@@ -99,6 +106,7 @@ empnoForm.addEventListener("submit", async (event) => {
 
   setBusy(true);
   showMessage(() => t("login.msg_in_progress"));
+  await saveLoginOptions();
   try {
     const result = await window.authAPI.loginWithEmpno(empno, passwordInput.value);
     if (result && result.success) {
@@ -115,7 +123,19 @@ empnoForm.addEventListener("submit", async (event) => {
   }
 });
 
+function saveLoginOptions() {
+  return window.authAPI
+    .setLoginOptions({
+      rememberEmpno: !rememberEmpnoLabel.hidden && rememberEmpnoCheck.checked,
+      keepLogin: !keepLoginLabel.hidden && keepLoginCheck.checked,
+    })
+    .catch(() => {});
+}
+rememberEmpnoCheck.addEventListener("change", saveLoginOptions);
+keepLoginCheck.addEventListener("change", saveLoginOptions);
+
 ssoBtn.addEventListener("click", async () => {
+  await saveLoginOptions();
   const result = await window.authAPI.openSso();
   if (result && result.success) {
     showMessage(() => t("login.msg_sso_waiting"));
@@ -172,6 +192,19 @@ window.i18n.onChange(() => {
   applyWindowSize();
 });
 
+// 체크박스 표시와 마지막 값. 저장해 둔 사번이 있으면 채워 둔다.
+function renderLoginOptions(status) {
+  const prefs = (status && status.loginPrefs) || {};
+  rememberEmpnoLabel.hidden = empnoForm.hidden;
+  keepLoginLabel.hidden = !(status && status.keepLoginEnabled);
+  loginOptions.hidden = rememberEmpnoLabel.hidden && keepLoginLabel.hidden;
+  rememberEmpnoCheck.checked = !!prefs.rememberEmpno;
+  keepLoginCheck.checked = !!prefs.keepLogin;
+  if (!empnoForm.hidden && prefs.rememberEmpno && prefs.empno) empnoInput.value = prefs.empno;
+  // 사번 폼이 숨겨져 있으면 "로그인 유지" 줄을 MyAccess 버튼 위로 옮긴다
+  if (empnoForm.hidden && !loginOptions.hidden) ssoBtn.before(loginOptions);
+}
+
 async function init() {
   renderEndpointPlaceholder();
   const status = await window.authAPI.getStatus();
@@ -186,7 +219,8 @@ async function init() {
     defaultEndpoint = status.defaultEndpoint;
     renderEndpointPlaceholder();
   }
-  if (!empnoForm.hidden) empnoInput.focus();
+  renderLoginOptions(status);
+  if (!empnoForm.hidden) (empnoInput.value ? passwordInput : empnoInput).focus();
   // 메인 화면에서 돌아온 경우 창 크기 제약이 남아 있을 수 있어 다시 맞춘다.
   applyWindowSize();
 }

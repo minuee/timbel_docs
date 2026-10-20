@@ -37,6 +37,18 @@
       <form id="empnoForm" class="login-form" hidden autocomplete="off">
         <input id="empnoInput" class="login-input" type="text" placeholder="사번" data-i18n-placeholder="login.empno" maxlength="20" />
         <input id="passwordInput" class="login-input" type="password" placeholder="비밀번호" data-i18n-placeholder="login.password" maxlength="64" />
+        <!-- 사번 저장: 사번 폼이 보일 때만. 로그인 유지: SESSION_PERSIST_ENABLED 가 true 일 때만 보이고 MyAccess 로그인에도 적용된다.
+             사번 폼이 숨겨지면 login.js 가 이 줄을 MyAccess 버튼 위로 옮긴다. -->
+        <div id="loginOptions" class="login-options" hidden>
+          <label class="login-check" id="rememberEmpnoLabel" hidden>
+            <input id="rememberEmpnoCheck" type="checkbox" />
+            <span data-i18n="login.remember_empno">사번 저장</span>
+          </label>
+          <label class="login-check" id="keepLoginLabel" hidden>
+            <input id="keepLoginCheck" type="checkbox" />
+            <span data-i18n="login.keep_login">로그인 유지</span>
+          </label>
+        </div>
         <button id="empnoSubmitBtn" class="login-btn primary" type="submit" data-i18n="login.submit">로그인</button>
         <div class="login-divider" id="loginDivider"><span data-i18n="login.or">또는</span></div>
       </form>

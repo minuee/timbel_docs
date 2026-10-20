@@ -30,6 +30,8 @@
   "login.msg_network_error": "无法连接到服务器。\n请检查公司内网连接状态。",
   "login.msg_rejected": "登录被拒绝。（code {code}）",
   "login.msg_invalid_response": "登录响应不正确。\n请重试。",
+  "login.remember_empno": "保存工号",
+  "login.keep_login": "保持登录",
   "mic_test.title": "麦克风测试",
   "mic_test.capture_mode": "录音对象",
   "mic_test.capture_mode_help": "选择<strong>仅会议声音</strong>时，不录制您自己的声音，只录制 Zoom、Webex、Teams 等播放的<strong>对方声音</strong>。适用于之后将多位参会者的录音合并为一个的情况。",

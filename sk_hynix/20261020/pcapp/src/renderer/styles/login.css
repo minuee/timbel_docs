@@ -38,6 +38,32 @@
   border-color: var(--dark-gray-400);
 }
 
+.login-options {
+  display: flex;
+  gap: 16px;
+  margin: -2px 0 2px;
+}
+.login-options[hidden],
+.login-check[hidden] {
+  display: none;
+}
+.login-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--dark-gray-400);
+  cursor: pointer;
+  user-select: none;
+}
+.login-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #f9463b;
+  cursor: pointer;
+}
+
 .login-btn {
   height: 42px;
   border-radius: 8px;

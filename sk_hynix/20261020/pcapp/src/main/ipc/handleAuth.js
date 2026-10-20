@@ -14,6 +14,8 @@ const authService = require('../services/authService');
 const authConfig = require('../services/authConfig');
 const userService = require('../services/userService');
 const templateService = require('../services/templateService');
+const sessionStore = require('../services/sessionStore');
+const loginPrefs = require('../services/loginPrefs');
 
 const INDEX_PAGE = path.join(__dirname, '../../renderer/index.html');
 const LOGIN_PAGE = path.join(__dirname, '../../renderer/pages/login.html');
@@ -76,13 +78,28 @@ function registerAuthIpc(options) {
   });
 
   // profile 에는 토큰이 없다(이름·사번·이메일·워크스페이스만).
+  // loginPrefs: 로그인 화면 체크박스("사번 저장", "로그인 유지")의 마지막 값과 저장해 둔 사번.
+  // keepLoginEnabled 가 false(SESSION_PERSIST_ENABLED=false)면 "로그인 유지" 체크박스를 숨긴다.
   ipcMain.handle('auth:get-status', () => ({
     authenticated: authService.isAuthenticated(),
     empnoLoginEnabled: authConfig.EMPNO_LOGIN_ENABLED,
     manualLoginEnabled: authConfig.MANUAL_LOGIN_ENABLED,
+    keepLoginEnabled: sessionStore.isEnabled(),
+    loginPrefs: loginPrefs.get(),
     defaultEndpoint: authConfig.DEFAULT_API_BASE_URL,
     profile: authService.getProfile(),
   }));
+
+  // 로그인 화면 체크박스가 바뀔 때마다 저장한다. SSO 는 브라우저 → 딥링크로 돌아오므로
+  // 로그인 버튼을 누르기 전에 값이 메인 프로세스에 있어야 한다(세션 저장 여부는 sessionStore 가 이 값을 본다).
+  ipcMain.handle('auth:set-login-options', (_event, payload) => {
+    const input = payload || {};
+    loginPrefs.setOptions({
+      rememberEmpno: input.rememberEmpno === true,
+      keepLogin: input.keepLogin === true,
+    });
+    return { success: true };
+  });
 
   // "MyAccess 로그인" → 기본 브라우저로 SSO 페이지를 연다.
   // 로그인이 끝나면 웹이 timbloRecApp://connect 딥링크를 호출하고, main.js 의 processDeepLink 가 이어받는다.
@@ -109,7 +126,11 @@ function registerAuthIpc(options) {
     try { logger.logUserAction('login_attempt', { method: 'empno', empno }); } catch (_) {}
     const result = await authService.loginWithEmpno(empno, password);
     logLoginResult('empno', result, { empno });
-    if (result.success) await onAuthenticated();
+    if (result.success) {
+      // "사번 저장" 이 켜져 있으면 다음 로그인 화면에 채워 둔다(꺼져 있으면 지운다). 비밀번호는 저장하지 않는다.
+      loginPrefs.rememberEmpno(empno);
+      await onAuthenticated();
+    }
     return result;
   });
 

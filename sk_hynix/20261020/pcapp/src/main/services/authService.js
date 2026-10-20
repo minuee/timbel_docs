@@ -3,7 +3,8 @@
 //   외부에서는 apiService 를 통해 요청만 보내고, 헤더 부착은 apiService 가 처리한다.
 // - 세션은 기본적으로 메모리에만 둔다. 앱을 끄면 사라지고, 다시 켜면 로그인부터 한다.
 //   (디스크에 남기지 않으므로 PC를 같이 쓰는 사람이 토큰을 꺼내 갈 수 없다)
-//   SESSION_PERSIST_ENABLED 가 true 면 암호화해서 저장해 두고 다음 실행 때 복원한다(sessionStore.js).
+//   SESSION_PERSIST_ENABLED 가 true 이고 사용자가 "로그인 유지"를 체크했으면 암호화해서 저장해 두고
+//   다음 실행 때 복원한다(sessionStore.js, loginPrefs.js).
 // - 로그인 경로는 두 가지다.
 //   1) MyAccess(SSO) → 딥링크 timbloRecApp://connect 로 받은 code 교환  : exchangeToken()
 //   2) 사번 직접 입력 → HMP API                                       : loginWithEmpno()
@@ -67,7 +68,7 @@ function clearSession() {
   events.emit('changed', { authenticated: false });
 }
 
-// 로그인 유지가 켜져 있으면 지금 세션을 저장한다. refreshToken 이 없는 세션(수동 로그인)은 sessionStore 가 건너뛴다.
+// 로그인 유지가 켜져 있으면 지금 세션을 저장한다(꺼져 있으면 저장 파일을 지운다). refreshToken 이 없는 세션(수동 로그인)은 sessionStore 가 건너뛴다.
 function persistSession() {
   sessionStore.save({ accessToken, refreshToken, endpoint, profile });
 }

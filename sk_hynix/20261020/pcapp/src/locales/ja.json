@@ -30,6 +30,8 @@
   "login.msg_network_error": "サーバーに接続できません。\n社内ネットワークの接続状態を確認してください。",
   "login.msg_rejected": "ログインが拒否されました。（code {code}）",
   "login.msg_invalid_response": "ログインの応答が正しくありません。\nもう一度お試しください。",
+  "login.remember_empno": "社員番号を保存",
+  "login.keep_login": "ログインしたままにする",
   "mic_test.title": "マイクテスト",
   "mic_test.capture_mode": "録音対象",
   "mic_test.capture_mode_help": "<strong>相手の音声のみ</strong>を選ぶと自分の声は含めず、Zoom・Webex・Teamsなどから流れる<strong>相手の声だけ</strong>を録音します。複数の参加者の録音を後で1つにまとめるときに使います。",

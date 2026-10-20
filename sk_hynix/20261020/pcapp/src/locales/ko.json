@@ -30,6 +30,8 @@
   "login.msg_network_error": "서버에 연결할 수 없습니다.\n사내망 연결 상태를 확인해 주세요.",
   "login.msg_rejected": "로그인이 거절되었습니다. (code {code})",
   "login.msg_invalid_response": "로그인 응답이 올바르지 않습니다.\n다시 시도해 주세요.",
+  "login.remember_empno": "사번 저장",
+  "login.keep_login": "로그인 유지",
   "mic_test.title": "마이크 테스트",
   "mic_test.capture_mode": "녹음 대상",
   "mic_test.capture_mode_help": "<strong>회의 소리만</strong>을 고르면 내 목소리는 빼고, Zoom·Webex·Teams 등에서 나오는 <strong>상대방 목소리만</strong> 녹음합니다. 여러 참석자의 녹음을 나중에 하나로 합칠 때 사용하세요.",

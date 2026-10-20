@@ -205,6 +205,8 @@ contextBridge.exposeInMainWorld('authAPI', {
   openSso: () => ipcRenderer.invoke('auth:open-sso'),
   loginWithEmpno: (empno, password) => ipcRenderer.invoke('auth:login-empno', { empno, password }),
   loginManual: (fields) => ipcRenderer.invoke('auth:login-manual', fields),
+  // 로그인 화면 체크박스 { rememberEmpno, keepLogin }
+  setLoginOptions: (options) => ipcRenderer.invoke('auth:set-login-options', options),
   // 로그아웃 → 로그인 화면. 업로드 중이면 { success:false, error:'uploading' }
   logout: () => ipcRenderer.invoke('auth:logout'),
 });
