@@ -1,0 +1,134 @@
+{
+  "info": {
+    "name": "머지 → STT → LLM 테스트",
+    "description": "recog 서버에서 비프 기준 머지 → 결과 파일을 master-api 에 업로드해 STT·LLM 실행 → 전사 결과 확인. 사용법은 POSTMAN_GUIDE.md 참고.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "recogUrl", "value": "http://<recog서버>:<포트>" },
+    { "key": "masterApiUrl", "value": "http://<웹주소>/api" },
+    { "key": "token", "value": "<브라우저에서 복사한 x-timblo-token>" },
+    { "key": "jobId", "value": "" },
+    { "key": "contentId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. recog (머지)",
+      "item": [
+        {
+          "name": "1-1 헬스체크",
+          "request": { "method": "GET", "url": "{{recogUrl}}/health" }
+        },
+        {
+          "name": "1-2 머지 요청 (샘플 3개 업로드)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.jobId) {",
+                  "  pm.collectionVariables.set('jobId', body.jobId);",
+                  "  console.log('jobId 저장:', body.jobId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{recogUrl}}/v1/merge/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "files", "type": "file", "src": "", "description": "phone_A.flac" },
+                { "key": "files", "type": "file", "src": "", "description": "phone_B.flac" },
+                { "key": "files", "type": "file", "src": "", "description": "phone_C.flac" },
+                { "key": "beepSource", "value": "leader", "type": "text" },
+                { "key": "roomNo", "value": "TEST-BEEP-001", "type": "text" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "1-3 머지 상태 조회 (DONE 될 때까지 반복)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "console.log('status:', body.status);",
+                  "if (body.alignment) {",
+                  "  const a = body.alignment;",
+                  "  console.log('mode:', a.mode, '| trimmedMs:', a.trimmedMs);",
+                  "  (a.tracks || []).forEach(t => console.log(t.participantId, 'offsetMs:', t.offsetMs));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": "{{recogUrl}}/v1/merge/{{jobId}}" }
+        },
+        {
+          "name": "1-4 머지 결과 다운로드 (Send and Download)",
+          "request": { "method": "GET", "url": "{{recogUrl}}/v1/merge/{{jobId}}/download" }
+        }
+      ]
+    },
+    {
+      "name": "2. master-api (STT · LLM)",
+      "item": [
+        {
+          "name": "2-1 머지 파일 업로드 → STT·LLM 자동 실행",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const id = body?.content?.contentId ?? body?.data?.content?.contentId;",
+                  "if (id) {",
+                  "  pm.collectionVariables.set('contentId', id);",
+                  "  console.log('contentId 저장:', id);",
+                  "} else {",
+                  "  console.log('contentId 를 못 찾음. 응답 본문을 직접 확인:', JSON.stringify(body));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-timblo-token", "value": "{{token}}" }],
+            "url": "{{masterApiUrl}}/contents/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "contentType": "audio/flac", "description": "1-4 에서 받은 머지 결과 .flac" },
+                { "key": "lang", "value": "ko", "type": "text" },
+                { "key": "attendeeNum", "value": "3", "type": "text" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2-2 STT·LLM 결과 조회 (반복)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-timblo-token", "value": "{{token}}" }],
+            "url": "{{masterApiUrl}}/contents/{{contentId}}?tab=segments,speakerInfo,aiResult"
+          }
+        },
+        {
+          "name": "2-3 (선택) LLM 요약 다시 실행",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-timblo-token", "value": "{{token}}" }],
+            "url": "{{masterApiUrl}}/contents/{{contentId}}/reSummary"
+          }
+        }
+      ]
+    }
+  ]
+}
