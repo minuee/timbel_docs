@@ -1,0 +1,201 @@
+.login-wrap {
+  width: 100%;
+  flex: 1;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.login-heading {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.login-form[hidden] {
+  display: none;
+}
+
+.login-input {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--dark-gray-500);
+  background: #19191a;
+  color: var(--white);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+.login-input:focus {
+  border-color: var(--dark-gray-400);
+}
+
+.login-options {
+  display: flex;
+  gap: 16px;
+  margin: -2px 0 2px;
+}
+.login-options[hidden],
+.login-check[hidden] {
+  display: none;
+}
+.login-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--dark-gray-400);
+  cursor: pointer;
+  user-select: none;
+}
+.login-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #f9463b;
+  cursor: pointer;
+}
+
+.login-btn {
+  height: 42px;
+  border-radius: 8px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.login-btn:hover {
+  opacity: 0.85;
+}
+.login-btn:active {
+  transform: scale(0.98);
+}
+.login-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.login-btn.primary {
+  background: #f9463b;
+  color: var(--white);
+}
+.login-btn.sso {
+  background: var(--white);
+  color: var(--black);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dark-gray-400);
+  font-size: 12px;
+  margin: 4px 0;
+}
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--dark-gray-500);
+}
+
+.login-message {
+  min-height: 36px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--dark-gray-400);
+  white-space: pre-line;
+}
+.login-message.error {
+  color: #f9463b;
+}
+.login-btn.secondary {
+  background: var(--dark-gray-500);
+  color: var(--white);
+}
+
+.manual-login {
+  margin-top: 4px;
+}
+.manual-login summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--dark-gray-400);
+  padding: 4px 0;
+  user-select: none;
+}
+.manual-login .login-form {
+  margin-top: 8px;
+}
+.manual-login .login-input {
+  height: 34px;
+  font-size: 13px;
+}
+.manual-login .login-btn {
+  height: 36px;
+  font-size: 14px;
+}
+
+/* 약관 미동의 안내 팝업. 타이틀 바(최소화·닫기)는 가리지 않는다. */
+.terms-modal {
+  position: fixed;
+  top: 40px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.72);
+  z-index: 100;
+}
+.terms-modal[hidden] {
+  display: none;
+}
+.terms-box {
+  width: 100%;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--dark-gray-500);
+  background: #19191a;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.terms-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.terms-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dark-gray-400);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.terms-link {
+  color: var(--white);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.terms-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.terms-actions .login-btn {
+  flex: 1;
+  height: 38px;
+  font-size: 14px;
+}
