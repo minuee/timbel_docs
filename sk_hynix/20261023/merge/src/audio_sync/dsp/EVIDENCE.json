@@ -1,0 +1,30 @@
+{
+  "task": "task-3 DSP lane",
+  "status": "completed",
+  "artifacts": [
+    "src/audio_sync/dsp/__init__.py",
+    "src/audio_sync/dsp/alignment.py",
+    "src/audio_sync/dsp/canonicalize.py",
+    "src/audio_sync/dsp/drift.py",
+    "src/audio_sync/dsp/models.py",
+    "src/audio_sync/dsp/README.md",
+    "tests/dsp/test_alignment.py",
+    "tests/dsp/test_canonicalize.py",
+    "tests/dsp/test_drift.py",
+    "src/audio_sync/dsp/ffmpeg_filters.py",
+    "tests/dsp/test_filters.py"
+  ],
+  "verification": [
+    {
+      "command": "env PYTHONPATH=$PWD/src:$PWD python3 -m unittest discover -s tests/dsp -v",
+      "result": "PASS",
+      "details": "17 tests OK"
+    },
+    {
+      "command": "python3 -m py_compile src/audio_sync/dsp/__init__.py src/audio_sync/dsp/alignment.py src/audio_sync/dsp/canonicalize.py src/audio_sync/dsp/drift.py src/audio_sync/dsp/ffmpeg_filters.py src/audio_sync/dsp/models.py tests/dsp/test_alignment.py tests/dsp/test_canonicalize.py tests/dsp/test_drift.py tests/dsp/test_filters.py",
+      "result": "PASS"
+    }
+  ],
+  "integration_note": "Runtime execution remains in src/recog/audio.py; this lane intentionally extracted reusable primitives without changing API/storage surfaces.",
+  "constraint": "Workspace is not a git repository, so commit step was unavailable."
+}

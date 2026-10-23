@@ -1,0 +1,30 @@
+# mobile-sync-server — 망분리 서버 안에서 "소스만" 바꿔 새 이미지를 만든다.
+#
+# 서버에서 rebuild.sh 가 실행한다. 직접 docker build 를 치지 말 것.
+#
+# 베이스는 Docker Hub 의 python 이미지가 아니라, 서버에 이미 적재되어 있는
+# 우리 이미지(예: mobile-sync-server:0.0.3)다. 그 안에 python 과 ffmpeg 가
+# 이미 들어 있으므로 네트워크를 전혀 타지 않는다. 바뀌는 건 /app/src 와 VERSION 뿐이다.
+#
+# ENTRYPOINT / CMD / ENV / HEALTHCHECK / 실행 계정은 베이스에서 그대로 물려받는다.
+#
+# ffmpeg 나 python 버전을 바꿔야 하면 이 방법으로는 안 된다.
+# 인터넷 되는 PC 에서 deploy/build.sh 로 처음부터 다시 만들 것.
+
+# 실제 값은 rebuild.sh 가 .env 의 IMAGE_VERSION 을 읽어 넘긴다.
+ARG BASE_IMAGE=mobile-sync-server:0.0.3
+FROM ${BASE_IMAGE}
+
+USER root
+
+# 덮어쓰기만 하면 새 소스에서 지운 파일이 이전 이미지에서 살아남는다.
+# 비우고 새로 넣는다.
+RUN rm -rf /app/src
+
+COPY --chown=recog:recog VERSION ./VERSION
+COPY --chown=recog:recog src/ ./src/
+
+# 서버에서는 compose 의 user: 로 임의의 uid 가 돈다. 누구든 읽을 수 있게.
+RUN chmod -R a+rX /app/src /app/VERSION
+
+USER recog
