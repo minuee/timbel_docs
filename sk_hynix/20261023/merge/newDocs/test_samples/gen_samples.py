@@ -25,6 +25,14 @@ OUT = Path(sys.argv[2])
 WORK = Path(sys.argv[3])
 # "--no-beep": same meeting with no beep, to hear what an unaligned merge sounds like
 WITH_BEEP = "--no-beep" not in sys.argv[4:]
+# "--guide": app order with the guide voice on — start "음성녹음을 시작합니다" -> beep,
+# end beep -> "녹음을 종료합니다", recorder stops END_HOLD after the end beep starts
+GUIDE = "--guide" in sys.argv[4:]
+if GUIDE:
+    SPEECH_AT = 8.0
+END_GAP = 1.5      # last line end -> end beep
+VOICE_GAP = 0.2    # app loads the next file between guide voice and beep
+END_HOLD = 5.0     # app _endSyncHold
 WORK.mkdir(parents=True, exist_ok=True)
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -34,6 +42,8 @@ PHONES = {
     "B": (0.85, "park"),
     "C": (1.60, "lee"),
 }
+# --guide: RECORDING_STOP reaches each phone a little later than the leader's stop
+STOP_LAG = {"A": 0.10, "B": 0.45, "C": 0.80}
 # Yuna is the only natural-sounding Korean voice; the male Korean voices
 # (Eddy/Rocko) sound foreign. So every line is read by Yuna at ~5 syllables/s
 # and the two men are made by lowering formants (asetrate, tempo restored) and
@@ -104,6 +114,9 @@ for i, (who, text) in enumerate(SCRIPT):
     lines.append((t, who, samples))
     t += len(samples) / SR + GAP
 room_len = t + END_PAD
+if GUIDE:
+    END_AT = t - GAP + END_GAP
+    room_len = END_AT + END_HOLD + max(STOP_LAG.values())
 
 # ground truth for checking STT: when each line is spoken, in room time
 NAMES = {"kim": "김 팀장", "park": "박 책임", "lee": "이 선임"}
@@ -115,6 +128,16 @@ with open(OUT / "timeline.tsv", "w", encoding="utf-8") as f:
 beep_wav = WORK / "beep16k.wav"
 to16k(REPO / "newDocs/assets/sync_beep.wav", beep_wav)
 beep = read_wav(beep_wav)
+if GUIDE:
+    SND = REPO / "newDocs/assets/sync_sounds"
+    guide_start = WORK / "voice16k.wav"
+    guide_end = WORK / "voice_end16k.wav"
+    to16k(SND / "2_voice.wav", guide_start)
+    to16k(SND / "2_voice_end.wav", guide_end)
+    guide_start, guide_end = read_wav(guide_start), read_wav(guide_end)
+    VOICE_AT = BEEP_AT
+    BEEP_AT = VOICE_AT + len(guide_start) / SR + VOICE_GAP
+    END_VOICE_AT = END_AT + len(beep) / SR + VOICE_GAP
 
 # --- one buffer per phone, in room time ----------------------------------
 rng = random.Random(42)
@@ -132,10 +155,14 @@ for phone, (lag, owner) in PHONES.items():
             buf[j] += v * gain
 
     # beep from the leader phone: loud on A itself, quieter across the room
-    if WITH_BEEP and phone == "A":
-        add(beep, BEEP_AT, 0.9, 0.3)
-    elif WITH_BEEP:
-        add(beep, BEEP_AT, 0.22, 5.0)
+    gain, delay = (0.9, 0.3) if phone == "A" else (0.22, 5.0)
+    if WITH_BEEP:
+        add(beep, BEEP_AT, gain, delay)
+    if GUIDE:
+        add(guide_start, VOICE_AT, gain, delay)
+        if WITH_BEEP:
+            add(beep, END_AT, gain, delay)
+        add(guide_end, END_VOICE_AT, gain, delay)
     # each phone carries only its owner's lines; the merge assembles the dialogue
     for at, who, samples in lines:
         if who == owner:
@@ -146,7 +173,8 @@ for phone, (lag, owner) in PHONES.items():
 
     # recorder started LAG seconds late: drop the head
     start = int(lag * SR)
-    out = array("h", (max(-32768, min(32767, int(v))) for v in buf[start:]))
+    stop = int((END_AT + END_HOLD + STOP_LAG[phone]) * SR) if GUIDE else total
+    out = array("h", (max(-32768, min(32767, int(v))) for v in buf[start:stop]))
     wav_out = WORK / f"phone_{phone}.wav"
     with wave.open(str(wav_out), "wb") as w:
         w.setnchannels(1)
@@ -157,6 +185,7 @@ for phone, (lag, owner) in PHONES.items():
     run("ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_out), "-c:a", "flac", str(flac))
     expected[phone] = round((BEEP_AT - lag) * 1000)
     print(f"phone_{phone}.flac  lag={lag:.2f}s  beep_in_file={BEEP_AT - lag:.2f}s  "
-          f"len={len(out) / SR:.1f}s")
+          f"len={len(out) / SR:.1f}s"
+          + (f"  end_beep_in_file={END_AT - lag:.2f}s" if GUIDE else ""))
 
 print("room length", round(room_len, 1))
