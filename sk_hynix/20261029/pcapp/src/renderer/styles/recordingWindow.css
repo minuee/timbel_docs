@@ -1,0 +1,567 @@
+/* title area */
+
+.title-left {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.title-right {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.title-left button,
+.title-right button,
+.upload-list {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.setting-btn:hover {
+  background: #292a2b;
+}
+.setting-btn:active {
+  transform: scale(0.98);
+}
+
+.title-right button:hover {
+  background: #292a2b;
+}
+.title-right button:active {
+  transform: scale(0.98);
+}
+
+.upload-list:hover {
+  background: #292a2b;
+}
+.upload-list:active {
+  transform: scale(0.98);
+}
+
+/* topbar button tooltips */
+.title-right button[data-tooltip] {
+  position: relative;
+}
+.title-right button[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%; /* 기본: 중앙 정렬 */
+  transform: translateX(-50%) scale(0.98);
+  background: #292a2b;
+  color: #cfd3d6;
+  border: 1px solid #323234;
+  padding: 6px 8px;
+  border-radius: 6px;
+  white-space: nowrap; /* 줄바꿈 없음 */
+  width: max-content; /* 내용 길이에 맞춤 */
+  max-width: calc(100vw - 16px); /* 뷰포트 안으로 제한 */
+  overflow: hidden; /* 넘침 숨김 */
+  text-overflow: ellipsis; /* 길면 말줄임 처리 */
+  font-size: 12px;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 10001;
+}
+.title-right button[data-tooltip][data-align="right"]::after {
+  left: auto;
+  right: 0; /* 예외: 넘어갈 때만 오른쪽 정렬 */
+  transform: scale(0.98);
+}
+.title-right button[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+.title-right button[data-tooltip][data-align="right"]:hover::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* main-section */
+.main-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-around;
+  width: 100vw;
+  height: 100vh;
+}
+/* recordingWindow.css */
+
+/* 설정 메뉴 */
+.settings-menu {
+  position: absolute;
+  /* 글자 길이에 맞춰 넓어진다(영어·일본어). 창 밖으로 나가면 recording.js positionMenu 가 안쪽으로 당긴다 */
+  min-width: 138px;
+  white-space: nowrap;
+  padding: 3px;
+  background: #19191a;
+  border: 1px solid #19191a;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+}
+.settings-menu[hidden] {
+  display: none;
+}
+.settings-menu .menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #a9afb3;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+.settings-menu .menu-item:hover {
+  background: #292a2b;
+}
+/* display:flex 가 hidden 속성을 이기므로 따로 숨긴다(언어 메뉴: MULTI_LANG_ENABLED 가 false 면 숨김) */
+.settings-menu .menu-item[hidden] {
+  display: none;
+}
+
+
+/* settings-menu 개선: 우측 화살표/우측 텍스트 정렬 */
+.settings-menu .menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
+}
+
+/* 1뎁스 메뉴의 현재 상태 꼬리표(켜짐/꺼짐/일부) — 화살표 바로 앞 */
+.settings-menu .menu-state {
+  margin-left: auto;
+  font-size: 12px;
+  color: #6c7277;
+}
+.settings-menu .menu-state.on {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* 서브메뉴 보유 항목 우측 화살표 표시 */
+.settings-menu #alwaysOnTab::after,
+.settings-menu #muteTab::after,
+.settings-menu #languageTab::after {
+  content: '\203A'; /* › */
+  color: #6c7277;
+  font-size: 16px;
+  line-height: 1;
+  margin-left: 10px;
+}
+
+/* 버전 텍스트 우측 정렬/톤 다운 */
+/* 버전 정보: "버전 정보" 아래에 앱 / 헬퍼 두 줄 */
+.settings-menu #versionInfoTab {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  cursor: default;
+}
+.version-lines {
+  display: flex;
+  flex-direction: column;
+  color: #c0c5c9;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* 세부 설정 패널 (서브메뉴) */
+.settings-detail {
+  position: absolute;
+  min-width: 168px;
+  white-space: nowrap;
+  padding: 3px;
+  background: #19191a;
+  border: 1px solid #19191a;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10000; /* 메인 메뉴보다 위 */
+}
+
+.settings-detail[hidden] {
+  display: none;
+}
+
+/* 서브메뉴 항목 기본 스타일 (공통 버튼) */
+.settings-detail button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #a9afb3;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+.settings-detail button:hover {
+  background: #292a2b;
+}
+
+/* 현재 상태(선택된 옵션): 밝은 글씨 + 굵게 + 배경으로 한눈에 보이게 */
+.settings-detail button.selected {
+  color: #ffffff;
+  font-weight: 700;
+  background: #3a3c3e;
+}
+
+/* 선택된 옵션 체크 아이콘 */
+.settings-detail button.selected::after {
+  content: '\2713'; /* ✓ */
+  color: #ffffff;
+  font-size: 16px;
+  line-height: 1;
+}
+
+
+
+/*=============== 
+  녹음 정보 영역
+================*/
+.recording-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100vw;
+  padding: 5px;
+}
+
+.left-info {
+  width: 50vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: left;
+}
+
+.right-info {
+  padding-right: 10px;
+  width: 50vw;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: right;
+  gap: 15px;
+}
+
+.sound-group {
+  width: 100%;
+  padding: 5px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+}
+
+.mic-group,
+.sys-group {
+  width: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.sound-group-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #4d5256;
+  border-radius: 4px;
+  background-color: transparent;
+  cursor: pointer;
+}
+
+.sound-group-icon .material-icons {
+  font-size: 14px;
+}
+
+.mic-icon {
+  color: #1c6eff;
+}
+
+.sys-icon {
+  color: #fcc735;
+}
+
+/* 사운드 레벨 미터 */
+.level-meter {
+  width: 50px;
+  height: 12px;
+  background: #000000;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  gap: 1px;
+}
+
+.level-box {
+  flex: 1;
+  height: 100%;
+  background-color: #4d5256;
+  transition: background-color 0.1s ease;
+}
+
+.level-box.active {
+  background-color: #1c6eff;
+}
+
+#sysMeter .level-box.active {
+  background-color: #fcc735;
+}
+
+.level-bar {
+  display: none;
+}
+
+
+.remain-time {
+  width: 100%;
+  font-size: 12px;
+  color: #878d91;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: left;
+  gap: 5px;
+}
+.remain-time-meter {
+  width: 40px;
+  height: 4px;
+  background: #4d5256;
+  overflow: hidden;
+  position: relative;
+  border-radius: 12px;
+  margin-left: 10px;
+}
+.remain-time-bar {
+  height: 100%;
+  width: 100%;
+  transition: width 0.1s ease, background-color 0.2s ease;
+}
+#remainTimeBar {
+  background-color: #1c6eff;
+}
+/* 남은 시간 경고 단계 색상 */
+#remainTimeBar.ok {
+  /* 30분 이상 */
+  background-color: #1c6eff;
+}
+#remainTimeBar.warn {
+  /* 10~30분 */
+  background-color: #fcc735;
+}
+#remainTimeBar.danger {
+  /* 10분 미만 */
+  background-color: #f9463b;
+}
+
+.remain-time-text {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 400;
+  font-style: Regular;
+  font-size: 12px;
+  line-height: 14px;
+  letter-spacing: 0%;
+  vertical-align: middle;
+  margin-right: 10px;
+}
+
+/* right info */
+
+.progress-time {
+  display: flex;
+  font-size: 18px;
+  font-weight: 600;
+  align-items: center;
+  gap: 3px;
+}
+
+.recording-status-circle {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #ff4242;
+}
+.upload-list {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 녹음 중 웨이브 (메모 영역이 있던 자리) */
+.wave-section {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 16px;
+  display: flex;
+  align-items: center;
+}
+
+#waveCanvas {
+  width: 100%;
+  height: 64px;
+  display: block;
+}
+
+.audio-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+}
+
+.noti-area {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+}
+
+.noti {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #878d91;
+}
+
+.noti>span{
+  display: flex;
+  align-items: center;
+  height: 16px;
+}
+.noti>span:first-child>img{
+  margin-right: 2px;
+  width: 14px;
+  height: 14px;
+} 
+
+
+.warning {
+  color: #FF4242;
+  font-weight: 600;
+}
+
+.audio-components {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 500;
+  justify-content: space-evenly;
+  width: 100vw;
+  margin-bottom: 20px;
+}
+
+.record-control {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  width: 144px;
+  height: 48px;
+  user-select: none;
+}
+
+.record-control.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none; /* 클릭 방지 */
+}
+
+.record-control:hover {
+  background-color: #292a2b;
+  color: #ffffff;
+  border-radius: 10px;
+}
+
+.record-control:active {
+  background-color: #292a2b;
+  opacity: 0.8;
+  scale: 0.98;
+  color: #ffffff;
+  border-radius: 10px;
+}
+
+#pause-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 1px solid #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+#pause-btn img {
+  width: 20px;
+  height: 20px;
+}
+
+#pause-btn:hover {
+  opacity: 0.8;
+}
+
+#pause-btn:active {
+  scale: 0.98;
+  opacity: 1;
+}
+
+#pause-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.muted {
+  color: #878d91;
+}
