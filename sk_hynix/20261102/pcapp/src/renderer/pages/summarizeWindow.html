@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <!-- 보안 정책(CSP): 앱 안의 파일만 실행. 없으면 Electron 이 "Insecure Content-Security-Policy" 경고를 콘솔에 남긴다(로그 서버 warn).
+       style-src unsafe-inline: HTML 의 style="" 속성용. 구글 폰트: 인터넷이 안 되면 안 받아질 뿐 동작엔 영향 없음 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="summarize.title">AI 요약 준비하기</title>
+  <link rel="stylesheet" href="../styles/summarizeWindow.css">
+  <link rel="stylesheet" href="../styles/index.css">
+</head>
+<body>
+  <div class="summarize-container">
+    <!-- 창 테두리가 없으므로 이 제목 줄을 잡고 창을 옮긴다(drag 영역) -->
+    <div class="summarize-header" data-i18n="summarize.title">AI 요약 준비하기</div>
+
+    <!-- 회의록 제목 (선택, 비워도 됨) — 업로드 때 title 로 보낸다 -->
+    <div class="title-input-area">
+      <input type="text" id="titleInput" maxlength="100" placeholder="회의록 제목을 입력해 주세요. (선택)" data-i18n-placeholder="summarize.title_placeholder" autocomplete="off">
+    </div>
+
+    <div class="select-area">
+      <div class="left-select">
+        <div class="language-select">
+          <div class="select-title"><span data-i18n="summarize.language">요약 언어 선택</span><span class="red-star">*</span></div>
+          <div class="item-container language-items">
+            <div>
+              <input type="radio" name="language" id="language1" value="ko" checked>
+              <label for="language1" data-i18n="summarize.language_ko">한국어</label>
+            </div>
+            <div>
+              <input type="radio" name="language" id="language2" value="en">
+              <label for="language2" data-i18n="summarize.language_en">영어</label>
+            </div>
+            <div>
+              <input type="radio" name="language" id="language3" value="ja">
+              <label for="language3" data-i18n="summarize.language_ja">일본어</label>
+            </div>
+            <div>
+              <input type="radio" name="language" id="language4" value="zh">
+              <label for="language4" data-i18n="summarize.language_zh">중국어</label>
+            </div>
+          </div>
+        </div>
+        <div class="speaker-select">
+          <div class="select-title"><span data-i18n="summarize.speakers">발화자수 선택</span><span class="red-star">*</span></div>
+          <div class="item-container">
+            <div>
+              <input type="radio" name="speaker" id="speaker1" value="0" checked>
+              <label for="speaker1" data-i18n="summarize.speakers_1">1~2명</label>
+            </div>
+            <div>
+              <input type="radio" name="speaker" id="speaker2" value="1">
+              <label for="speaker2" data-i18n="summarize.speakers_2">3~6명</label>
+            </div>
+            <div>
+              <input type="radio" name="speaker" id="speaker3" value="2">
+              <label for="speaker3" data-i18n="summarize.speakers_3">7~10명</label>
+            </div>
+            <div>
+              <input type="radio" name="speaker" id="speaker4" value="3">
+              <label for="speaker4" data-i18n="summarize.speakers_4">11명 이상</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="template-select">
+        <div class="select-title"><span data-i18n="summarize.template">템플릿 선택</span><span class="red-star">*</span></div>
+        <!-- 템플릿 목록은 summarizeWindow.js 가 templateAPI 로 채운다 -->
+        <div class="item-container" id="templateList"></div>
+      </div>
+    </div>
+
+    <div class="btn-area">
+      <button id="closeBtn" class="btn btn-cancel" data-i18n="common.close">닫기</button>
+      <button id="uploadBtn" class="btn btn-confirm" data-i18n="summarize.start">AI요약 시작</button>
+    </div>
+  </div>
+
+  <script src="../scripts/summarizeWindow.js"></script>
+</body>
+</html>

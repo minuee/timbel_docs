@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1200px; background: #fff; font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; color: #1f2937; padding: 36px 40px 40px; }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { font-size: 14px; color: #6b7280; margin-bottom: 28px; }
+  .lanes { display: grid; grid-template-columns: 140px 1fr; row-gap: 14px; }
+  .lane { font-size: 14px; font-weight: 700; color: #374151; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: #f3f4f6; }
+  .row { display: flex; align-items: center; gap: 12px; min-height: 92px; }
+  .box { border: 2px solid #d1d5db; border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.5; background: #fff; }
+  .box b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .box code { font-family: Menlo, Consolas, monospace; font-size: 12.5px; background: #f3f4f6; padding: 1px 4px; border-radius: 4px; }
+  .web { border-color: #3b82f6; }
+  .app { border-color: #ef4444; }
+  .ok { border-color: #16a34a; background: #f0fdf4; }
+  .ng { border-color: #f59e0b; background: #fffbeb; }
+  .arrow { font-size: 22px; color: #9ca3af; }
+  .num { display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #1f2937; color: #fff; font-size: 12px; text-align: center; line-height: 22px; margin-right: 6px; }
+  .split { display: flex; flex-direction: column; gap: 10px; }
+  .note { margin-top: 26px; font-size: 13px; color: #4b5563; line-height: 1.7; border-top: 1px solid #e5e7eb; padding-top: 14px; }
+</style>
+</head>
+<body>
+  <h1>[PC앱으로 녹음] 클릭 → 설치 확인 흐름</h1>
+  <div class="sub">브라우저는 PC에 설치된 프로그램을 직접 조회할 수 없다. 앱 주소(timbloRecApp://)를 열어 보고 브라우저 반응으로 판단한다.</div>
+
+  <div class="lanes">
+    <div class="lane">회의록 웹</div>
+    <div class="row">
+      <div class="box web"><b><span class="num">1</span>[녹음] 클릭</b>선택창 표시<br>[웹에서 녹음] | [PC앱으로 녹음]</div>
+      <div class="arrow">→</div>
+      <div class="box web"><b><span class="num">2</span>1회용 code 발급</b>지금의 "앱 연결"과 같은 방식</div>
+      <div class="arrow">→</div>
+      <div class="box web"><b><span class="num">3</span>앱 주소 열기</b><code>timbloRecApp://connect?code=…&amp;host=…</code><br>+ 2초 타이머 시작</div>
+    </div>
+
+    <div class="lane">브라우저</div>
+    <div class="row">
+      <div class="split">
+        <div class="box ok"><b><span class="num">4</span>설치됨</b>"SKHynixRecApp을(를) 여시겠습니까?" 창이 뜨거나 앱이 바로 열림<br>→ 웹 페이지가 포커스를 잃음(<code>blur</code> / <code>visibilitychange</code>) → 타이머 취소</div>
+        <div class="box ng"><b><span class="num">4</span>설치 안 됨</b>브라우저가 아무 반응 없음 → 2초 지남<br>→ 웹이 안내창 표시: "PC앱 설치가 필요합니다" [설치 파일 받기] [이미 설치했어요 · 다시 열기]</div>
+      </div>
+    </div>
+
+    <div class="lane">PC앱</div>
+    <div class="row">
+      <div class="box app"><b><span class="num">5</span>앱 실행 · 앞으로 가져오기</b>이미 실행 중이면 그 창을 앞으로</div>
+      <div class="arrow">→</div>
+      <div class="box app"><b><span class="num">6</span>code 교환</b><code>GET {host}/api/auth/recorder/exchange/{code}</code></div>
+      <div class="arrow">→</div>
+      <div class="box app"><b><span class="num">7</span>로그인된 상태로 첫 화면</b>마이크 선택 → 녹음 시작은 사용자가</div>
+    </div>
+  </div>
+
+  <div class="note">
+    · 4번 판단은 100% 정확하지 않다(예: 브라우저 "항상 열기"를 켠 경우 포커스 변화가 약할 수 있음). 그래서 미설치 안내창에 [다시 열기]를 꼭 둔다.<br>
+    · 앱 쪽(5~7번)은 이미 구현되어 있다. 웹은 1~4번만 만들면 된다.
+  </div>
+</body>
+</html>
