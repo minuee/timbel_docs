@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <!-- 보안 정책(CSP): 앱 안의 파일만 실행. 없으면 Electron 이 "Insecure Content-Security-Policy" 경고를 콘솔에 남긴다(로그 서버 warn).
+       style-src unsafe-inline: HTML 의 style="" 속성용. 구글 폰트: 인터넷이 안 되면 안 받아질 뿐 동작엔 영향 없음 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>팝업 윈도우</title>
+  <link rel="stylesheet" href="../styles/index.css">
+  <link rel="stylesheet" href="../styles/popupWindow.css">
+</head>
+<body>
+  <div class="title-area"></div>
+  <div class="popup-container">
+    <!-- 공통 영역 -->
+    <div class="popup-text-area">
+      <div class="popup-title">팝업이 열렸습니다.</div>
+      <div class="popup-subtitle">팝업 내용이 여기에 표시됩니다.</div>
+      <div class="popup-warning hidden">경고 내용이 여기에 표시됩니다.</div>
+    </div>
+    <!-- 프로그레스 바 영역 -->
+    <div class="progress-area hidden">
+      <div class="progress-bar-area">
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" style="width:0%"></div>
+        </div>
+        <div class="progress-bar-percent">0%</div>
+      </div>
+      <div class="progress-text">전송 속도: 5.3MB/초</div>
+    </div>
+    <!-- 버튼 영역 -->
+    <div class="popup-content">
+      <button class="btn btn-cancel" id="cancelBtn">취소</button>
+      <button class="btn btn-confirm" id="confirmBtn">확인</button>
+    </div>
+  </div>
+
+  <script src="../scripts/popupWindow.js"></script>
+</body>
+
+</html>

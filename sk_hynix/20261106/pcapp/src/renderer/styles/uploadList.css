@@ -1,0 +1,202 @@
+.upload-list{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  font-size: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  
+}
+
+.upload-list-header{
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  gap: 5px;
+  width: 100%;
+  background-color: #292A2B;
+  padding: 7px 0;
+  color: #A9AFB3;
+}
+
+.upload-list-header div{
+  width: 100%;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+
+.upload-list-body{
+  flex: 1 1 auto;
+  margin-top: 5px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: start;
+  gap: 5px;
+  overflow-y: auto;
+  height: 100%;
+  
+}
+
+.upload-list-body::-webkit-scrollbar {
+  width: 8px;
+}
+.upload-list-body::-webkit-scrollbar-track {
+  background: #000000;
+  border-radius: 8px;
+}
+.upload-list-body::-webkit-scrollbar-thumb {
+  background: #4D5256;
+  border-radius: 8px;
+  border: 1px solid #000000; /* 트랙과 자연스럽게 */
+}
+.upload-list-body::-webkit-scrollbar-thumb:hover {
+  background: #878D91;
+}
+
+.upload-list-item{
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  gap: 5px;
+  padding: 3px 0;
+  width: 100%;
+}
+
+.upload-list-item div{
+  width: 100%;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-list-item div:nth-child(1), .upload-list-header div:nth-child(1){  
+  width: 10%;
+}
+.upload-list-item div:nth-child(2), .upload-list-header div:nth-child(2){
+  width: 40%;
+}
+.upload-list-item div:nth-child(3), .upload-list-header div:nth-child(3){
+  width: 25%;
+}
+.upload-list-item div:nth-child(4), .upload-list-header div:nth-child(4){
+  width: 15%;
+}
+.upload-list-item div:nth-child(5), .upload-list-header div:nth-child(5){
+  width: 10%;
+}
+
+
+
+.item-delete{
+  width: 100%;
+}
+
+.item-delete > button.item-delete{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #A9AFB3;
+  cursor: pointer;
+}
+
+.item-delete > button.item-delete:hover{
+  background: #2f3132;
+  opacity: 0.8;
+  color: #fff;
+}
+
+.item-delete > button.item-delete:active{
+  scale: 0.98;
+  opacity: 1;
+}
+
+.item-delete > button.item-delete svg{
+  width: 20px;
+  height: 20px;
+}
+
+.retry-btn{
+  width: 80%;
+  height: 100%;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  background-color: #1C6EFF;
+  color: #fff;
+  padding: 5px 0;
+  cursor: pointer;
+}
+
+.retry-btn:hover{
+  background-color: #1C6EFF;
+  opacity: 0.8;
+  color: #fff;
+}
+
+.retry-btn:active{
+  scale: 0.98;
+  opacity: 1;
+}
+
+/* 업로드 상태 스피너 */
+.spinner{
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.25);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate{
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 업로드 중... 점 애니메이션 */
+.uploading{
+  color: #A9AFB3;
+}
+
+.ellipsis{
+  display: inline-flex;
+  align-items: center;
+  justify-content: left;
+  width: 1ch; /* 최대 '...' 길이 */
+}
+
+
+.ellipsis::after{
+  content: '.'; /* 1개 시작 */
+  animation: dotPingPong 1.2s steps(4) infinite; /* 1,2,3,2, 반복 */
+}
+
+@keyframes dotPingPong{
+  0%   { content: '...'; }
+  25%  { content: '..'; }
+  50%  { content: '.'; }
+  75%  { content: '..'; }
+  100% { content: '...'; }
+}
+/* 제목 줄 오른쪽(닫기 버튼 영역)은 통째로 드래그 제외.
+   Windows 에서 드래그 영역 안의 버튼 클릭이 창 이동으로 먹히는 경우를 막는다. */
+.title-area .title-right,
+.title-area .title-right button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
