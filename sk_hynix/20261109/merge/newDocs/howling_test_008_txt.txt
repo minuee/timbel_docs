@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+#
+# howling_test_008.sh — 0.0.8(순간마다 폰 하나만 쓰기) 하울링 재시험. 한 번 실행으로 여러 경우를 만든다.
+#
+# 만드는 결과 (회의마다):
+#   select.flac           0.0.8 기본. 순간마다 가장 가까운 폰 하나만 (HOLD 300ms, SWITCH 3dB)
+#   select_steady.flac    같은 방식, 폰을 덜 자주 바꿈 (HOLD 1000ms, SWITCH 6dB)
+#   single_<파일명>.flac  폰 1대 원본을 비프음 기준으로 자르기만 한 것 (합치기 없음) — "원음 수준" 기준
+#
+# 공통 조건: 음량 맞추기 끔(MERGE_LEVEL=off), 오토믹서 켬. 나머지 설정은 지금 .env 그대로.
+#
+# 사용법 (회사 서버에서, 0.0.8 설치 후):
+#   ./howling_test_008.sh <시험 폴더>
+#
+#   회의 한 건: 시험 폴더에 그 회의의 폰별 원본 flac 을 바로 넣는다.
+#     /data/timbel/howling_test/meet_20261105/A.Biz_m_~~~.flac ...
+#   회의 여러 건: 회의마다 하위 폴더.
+#
+#   예) ./howling_test_008.sh /data/timbel/howling_test/meet_20261105
+#
+#   결과는 시험 폴더의 results_008_<시각>/<회의>/ 에 쌓인다.
+#
+# 환경변수 (필요할 때만):
+#   INSTALL_DIR   서버 설치 경로     (기본 /data/timblo/mobile-sync-server)
+#   SYNC_SOUND    앱이 쓴 싱크음     (기본 beep. beep / voice / jingle 만 가능)
+#   BEEP_SOURCE   누가 비프를 울렸나 (기본 all. leader / all)
+#   SOUND_LANG    안내 음성 언어     (기본 ko. ko / en)
+#
+# 안전장치: 시작할 때 .env 를 백업하고, 끝나거나 중간에 멈춰도(Ctrl+C 포함)
+# 원래 .env 로 되돌리고 서버를 다시 띄운다. 서버 재기동은 모두 3번(설정 2가지 + 복구).
+#
+set -euo pipefail
+shopt -s nocaseglob  # 확장자 대소문자 무관 (.flac / .FLAC)
+
+SRC_DIR="${1:-}"
+[[ -n "$SRC_DIR" && -d "$SRC_DIR" ]] || { echo "사용법: $0 <시험 폴더>"; exit 1; }
+SRC_DIR="$(cd "$SRC_DIR" && pwd)"
+INSTALL_DIR="${INSTALL_DIR:-/data/timblo/mobile-sync-server}"
+SYNC_SOUND="${SYNC_SOUND:-beep}"
+BEEP_SOURCE="${BEEP_SOURCE:-all}"
+SOUND_LANG="${SOUND_LANG:-ko}"
+CONTAINER="mobile-sync-server"
+
+case "$SYNC_SOUND" in
+    beep|voice|jingle) ;;
+    *) echo "ERROR: SYNC_SOUND=${SYNC_SOUND} 는 틀린 값이다. beep / voice / jingle 중 하나 (비프음이면 beep)"; exit 1 ;;
+esac
+case "$BEEP_SOURCE" in
+    leader|all) ;;
+    *) echo "ERROR: BEEP_SOURCE=${BEEP_SOURCE} 는 틀린 값이다. leader / all 중 하나"; exit 1 ;;
+esac
+
+ENV_FILE="${INSTALL_DIR}/.env"
+[[ -f "$ENV_FILE" ]] || { echo "ERROR: ${ENV_FILE} 가 없다. INSTALL_DIR 을 확인할 것."; exit 1; }
+
+count_flac() { local n=0 f; for f in "$1"/*.flac; do [[ -f "$f" ]] && n=$((n + 1)); done; echo "$n"; }
+
+MEETINGS=()
+if (( $(count_flac "$SRC_DIR") >= 2 )); then
+    MEETINGS=("$SRC_DIR")
+else
+    for d in "$SRC_DIR"/*/; do
+        [[ -d "$d" ]] || continue
+        d="${d%/}"
+        [[ "$(basename "$d")" == results_* ]] && continue
+        n=$(count_flac "$d")
+        if (( n >= 2 )); then
+            MEETINGS+=("$d")
+        elif (( n == 1 )); then
+            echo "건너뜀: $(basename "$d") — flac 이 1개뿐이다 (폰별 원본이 2개 이상 필요)"
+        fi
+    done
+fi
+(( ${#MEETINGS[@]} >= 1 )) || { echo "ERROR: 폰별 원본 flac 이 2개 이상 든 회의 폴더가 없다."; exit 1; }
+
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE=(docker-compose)
+else
+    echo "ERROR: docker compose 가 없다."; exit 1
+fi
+
+PORT="$(grep -E '^HOST_PORT=' "$ENV_FILE" | tail -1 | cut -d= -f2 | tr -d '[:space:]')"
+API="http://127.0.0.1:${PORT:-9995}"
+OUT_DIR="${SRC_DIR}/results_008_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$OUT_DIR"
+BACKUP="${INSTALL_DIR}/.env.before_howling_test"
+cp "$ENV_FILE" "$BACKUP"
+
+log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$OUT_DIR/run.log"; }
+
+restart() {
+    ( cd "$INSTALL_DIR" && "${COMPOSE[@]}" --env-file .env up -d >/dev/null 2>&1 )
+    for _ in $(seq 1 60); do
+        curl -fs "$API/health" >/dev/null 2>&1 && return 0
+        sleep 2
+    done
+    log "ERROR: 서버가 2분 안에 뜨지 않았다. docker logs --tail 50 ${CONTAINER} 확인"
+    return 1
+}
+
+restore() {
+    cp "$BACKUP" "$ENV_FILE"
+    restart || true
+    log "원래 .env 로 되돌리고 서버를 다시 띄웠다"
+}
+trap restore EXIT
+
+# 시험 조건만 바꾸고 나머지 설정은 그대로. 업로드 한도는 시험 중에만 4GB.
+apply_env() {  # $1 HOLD_MS  $2 SWITCH_DB
+    grep -v -E '^(MERGE_LEVEL|MERGE_AUTOMIX|AUTOMIX_MODE|AUTOMIX_HOLD_MS|AUTOMIX_SWITCH_DB|MERGE_UPLOAD_MAX_BYTES)=' \
+        "$BACKUP" > "$ENV_FILE"
+    printf 'MERGE_LEVEL=off\nMERGE_AUTOMIX=1\nAUTOMIX_MODE=select\nAUTOMIX_HOLD_MS=%s\nAUTOMIX_SWITCH_DB=%s\nMERGE_UPLOAD_MAX_BYTES=4294967296\n' \
+        "$1" "$2" >> "$ENV_FILE"
+}
+
+# 병합 1건: $1 결과 폴더  $2 결과 이름  나머지 = 올릴 flac 파일들
+run_one() {
+    local out="$1" name="$2" body job f
+    shift 2
+    local args=()
+    for f in "$@"; do args+=(-F "files=@${f}"); done
+    body="$(curl -s -X POST "$API/v1/merge/upload" "${args[@]}" \
+        -F align=none -F "syncSound=${SYNC_SOUND}" -F "beepSource=${BEEP_SOURCE}" \
+        -F "soundLang=${SOUND_LANG}" -F automix=true)"
+    job="$(printf '%s' "$body" | grep -o 'mrg_[0-9a-f]*' | head -1 || true)"
+    if [[ -z "$job" ]]; then
+        log "    ${name}: 요청 실패 — ${body}"
+        return 0
+    fi
+    until curl -s "$API/v1/merge/$job" | grep -q -E '"status": "(DONE|ERROR)"'; do sleep 5; done
+    curl -s "$API/v1/merge/$job" > "$out/${name}.json"
+    if grep -q '"status": "DONE"' "$out/${name}.json"; then
+        curl -s -o "$out/${name}.flac" "$API/v1/merge/$job/download"
+        log "    ${name}: 완료 (${job})"
+    else
+        log "    ${name}: 병합 실패 — ${name}.json 참조"
+    fi
+    docker logs "$CONTAINER" 2>&1 | grep "$job" \
+        | grep -E 'merge_alignment|merge_refine|merge_drift|merge_automix' > "$out/${name}.log" || true
+}
+
+check_008() {  # $1 json — 여러 폰 병합 결과에 0.0.8 기록이 있는지
+    grep -q '"automixMode": "select"' "$1" \
+        || log "    주의: 결과에 select 기록이 없다. 서버가 0.0.8 인지 확인할 것 (1-④)"
+}
+
+log "회의 ${#MEETINGS[@]}건. 경우 3가지: select / select_steady / single(폰 1대씩)"
+for m in "${MEETINGS[@]}"; do
+    log "  $(basename "$m"): $(cd "$m" && ls *.flac | tr '\n' ' ')"
+done
+log "syncSound=${SYNC_SOUND} beepSource=${BEEP_SOURCE} soundLang=${SOUND_LANG}"
+log "결과 폴더: ${OUT_DIR}"
+
+# ---- 설정 1: select 기본값 → select + single ----------------------------------
+log "[설정 1/2] AUTOMIX_MODE=select HOLD=300 SWITCH=3 — 서버 다시 띄우는 중"
+apply_env 300 3
+restart
+for m in "${MEETINGS[@]}"; do
+    out="$OUT_DIR/$(basename "$m")"
+    mkdir -p "$out"
+    log "  $(basename "$m")"
+    files=("$m"/*.flac)
+    run_one "$out" select "${files[@]}"
+    [[ -f "$out/select.json" ]] && check_008 "$out/select.json"
+    for f in "${files[@]}"; do
+        base="$(basename "$f")"
+        run_one "$out" "single_${base%.*}" "$f"
+    done
+done
+
+# ---- 설정 2: select_steady ------------------------------------------------------
+log "[설정 2/2] AUTOMIX_MODE=select HOLD=1000 SWITCH=6 — 서버 다시 띄우는 중"
+apply_env 1000 6
+restart
+for m in "${MEETINGS[@]}"; do
+    out="$OUT_DIR/$(basename "$m")"
+    log "  $(basename "$m")"
+    files=("$m"/*.flac)
+    run_one "$out" select_steady "${files[@]}"
+done
+
+# ---- 듣기표 ---------------------------------------------------------------------
+for m in "${MEETINGS[@]}"; do
+    out="$OUT_DIR/$(basename "$m")"
+    {
+        echo "# 듣기표 — $(basename "$m")"
+        echo
+        echo "| 파일 | 울림 (없음/약함/심함) | 말 끊김·출렁임 (없음/가끔/자주) | 처음 5분 | 중간 | 마지막 5분 |"
+        echo "|---|---|---|---|---|---|"
+        for f in "$out"/single_*.flac "$out"/select.flac "$out"/select_steady.flac; do
+            [[ -f "$f" ]] && echo "| $(basename "$f") | | | | | |"
+        done
+        echo
+        echo "## 폰별 들린 비율 (merge_automix)"
+        echo
+        i=1
+        for f in "$m"/*.flac; do
+            echo "- f${i} = $(basename "$f")"
+            i=$((i + 1))
+        done
+        echo
+        for n in select select_steady; do
+            [[ -f "$out/$n.log" ]] || continue
+            echo "- ${n}: $(grep -o '"heardPct": {[^}]*}, "switches": [0-9]*' "$out/$n.log" | head -1)"
+        done
+    } > "$out/듣기표.md"
+done
+
+log "끝. 결과 ${OUT_DIR} — 회의 폴더마다 flac / .json / .log 와 듣기표.md"
