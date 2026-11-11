@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily recog-backend cleanup + reconciliation
+Documentation=https://github.com/skhynix/recog/blob/main/docs/implementation/recording-cleanup-streaming-history-plan.md
+
+[Timer]
+# 04:00 KST every day. Host TZ is expected to be Asia/Seoul; if the host is UTC,
+# change to OnCalendar=*-*-* 19:00:00 (equivalent to 04:00 KST).
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+Unit=recog-cleanup.service
+
+[Install]
+WantedBy=timers.target

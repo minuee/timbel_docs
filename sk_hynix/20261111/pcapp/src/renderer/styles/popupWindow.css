@@ -1,0 +1,99 @@
+.popup-container {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+.popup-text-area{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0 10px;
+  
+}
+
+.popup-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 5px;
+  text-align: center;
+}
+
+.popup-subtitle {
+  font-size: 14px;
+  font-weight: 400;
+  color: #A9AFB3;
+  text-align: center;
+}
+.popup-warning{
+  font-size: 14px;
+  color: #FF4242;
+}
+
+.popup-content {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: row;
+  padding: 0 15px;
+  gap: 10px;
+  width: 100%;
+  justify-content: center;
+}
+
+#confirmBtn {
+  width: 100%;
+}
+
+.progress-area {
+  width: 100%;
+  max-width: 300px;
+}
+
+.progress-bar-area {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: #E5E7EB;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  width: 0%;
+  height: 100%;
+  background: #0A84FF;
+  transition: width 0.15s ease;
+}
+.progress-area.indeterminate .progress-bar {
+  position: relative;
+  width: 100%;
+  background: linear-gradient(90deg, #0A84FF 25%, #60A5FA 50%, #0A84FF 75%);
+  background-size: 200% 100%;
+  animation: popup-progress-shimmer 1.1s linear infinite;
+}
+@keyframes popup-progress-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.progress-bar-percent {
+  font-size: 14px;
+  color: #0a84ff;
+  font-weight: 600;
+  
+}
+.progress-text {
+  font-size: 12px;
+  color: #6B7280;
+  font-weight: 600;
+  text-align: left;
+}

@@ -1,0 +1,68 @@
+{
+  "schema_version": "audio-sync-platform/v1",
+  "session": {
+    "session_id": "sess_20260409_abcd1234",
+    "room_id": "room_7f23b2",
+    "host_id": "host_user_1",
+    "protocol_version": "recording-protocol/v1",
+    "start_strategy": "server_authoritative_beep",
+    "anchor_policy": "beep_required",
+    "created_at": "2026-04-09T09:00:00Z"
+  },
+  "participant": {
+    "participant_id": "participant_03",
+    "display_name": "speaker_03",
+    "role": "member"
+  },
+  "recording": {
+    "recording_id": "rec_03_20260409",
+    "filename": "participant_03.wav",
+    "container": "wav",
+    "codec": "pcm_s16le",
+    "duration_seconds": 3598.12,
+    "pause_resume_events": []
+  },
+  "device": {
+    "device_id": "device_hash_abc123",
+    "device_model": "iPhone15,2",
+    "os_type": "ios",
+    "os_version": "19.0",
+    "app_version": "0.1.0",
+    "mic_route": "bluetooth",
+    "audio_processing_flags": {
+      "agc": false,
+      "noise_suppression": false,
+      "echo_cancellation": false
+    }
+  },
+  "timing": {
+    "server_time_offset_ms": -12.4,
+    "round_trip_ms": 41.8,
+    "sync_quality_bucket": "good",
+    "start_command_issued_at": "2026-04-09T09:10:00.000Z",
+    "start_command_received_at": "2026-04-09T09:10:00.071Z",
+    "recording_started_at": "2026-04-09T09:10:00.192Z",
+    "local_monotonic_started_at_ms": 8822341.22
+  },
+  "audio": {
+    "sample_rate": 48000,
+    "channels": 1,
+    "bit_depth": 16,
+    "format_profile": "research_baseline_wav_mono_48k"
+  },
+  "anchor": {
+    "anchor_type": "beep",
+    "anchor_expected_at": "2026-04-09T09:10:00.100Z",
+    "anchor_expected_offset_ms_from_start_command": 100,
+    "anchor_repeat_policy": "start_only",
+    "anchor_spec_version": "sync-beep/v1",
+    "beep_duration_ms": 120,
+    "beep_frequency_hz": 1750
+  },
+  "upload": {
+    "upload_started_at": "2026-04-09T10:10:00Z",
+    "upload_completed_at": "2026-04-09T10:10:12Z",
+    "sha256": "abc123",
+    "filesize_bytes": 34567890
+  }
+}

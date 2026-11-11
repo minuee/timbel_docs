@@ -1,0 +1,43 @@
+# recog systemd service unit for backend API deployment on 192.168.0.146
+#
+# Purpose:
+#   Runs the audio sync merge service (recog) as a systemd service with automatic
+#   restart on failure and standardized logging via systemd journal.
+#
+# Installation:
+#   1. Copy this file to /etc/systemd/system/recog.service on the deploy host
+#   2. Adjust User, WorkingDirectory, and Environment variables as needed
+#   3. Run: sudo systemctl daemon-reload
+#   4. Run: sudo systemctl enable --now recog.service
+#
+# Verification:
+#   systemctl status recog.service          # Check service status
+#   journalctl -u recog.service -n 50       # View recent logs
+#   curl http://192.168.0.146:8080/health   # Test API health endpoint
+#
+# Logs:
+#   All output is captured by systemd journal; view with:
+#   journalctl -u recog.service -f           # Follow live logs
+#
+
+[Unit]
+Description=Audio Sync Merge Service (recog)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=recog
+# adjust to deploy user on 192.168.0.146 (e.g., ubuntu, root, etc.)
+WorkingDirectory=/opt/recog
+Environment=PYTHONPATH=/opt/recog/src
+Environment=RECOG_HOST=0.0.0.0
+Environment=RECOG_PORT=8080
+ExecStart=/usr/bin/python3 -m recog --data-root /var/lib/recog/runtime serve
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

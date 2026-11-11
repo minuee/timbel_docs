@@ -1,0 +1,362 @@
+/* 마이크 테스트 화면(index.html)만 이 파일을 쓴다.
+   body 가 flex + height:100vh 라서 공간이 모자라면 자식이 줄어든다(녹음 시작 버튼이 찌그러짐).
+   줄어들지 않게 하고, 창을 화면 끝까지 키워도 모자라면 스크롤로 본다.
+   창 높이는 index.js 의 applyWindowSize 가 콘텐츠에 맞춘다. */
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+body > * {
+  flex-shrink: 0;
+}
+
+.mic-test-title {
+  font-size: 20px;
+  font-weight: 600;
+  padding: 8px;
+}
+
+.sound-section {
+  width: 100%;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.sound-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.device-select-wrap,
+.sound-text-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  flex: 1;
+  max-width: 270px;
+}
+
+.sound-text {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+}
+
+.help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+/* Tooltip */
+.help-icon {
+  position: relative;
+}
+
+.tooltip {
+  position: fixed; /* 화면 기준 */
+  left: 50%;
+  top: 0; /* 실제 Y는 JS로 설정 (아이콘 위로 계산) */
+  z-index: 10;
+  width: 341px;
+  height: 82px;
+  padding: 8px 12px;
+  color: #ffffff;
+  background: #292A2B;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  line-height: 1.5;
+  font-size: 13px;
+  opacity: 0;
+  transform: translate(-50%, 4px); /* 가로 중앙 정렬, 위에서 슬쩍 내려오는 효과 */
+  pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+/* 말풍선 꼬리 */
+.tooltip::after {
+  content: "";
+  position: absolute;
+  bottom: -6px; /* 툴팁 하단에 꼬리 */
+  left: calc(50% + var(--arrow-offset, 0px)); /* JS로 주입되는 오프셋 */
+  width: 12px;
+  height: 12px;
+  background: #292A2B;
+  transform: translateX(-50%) rotate(45deg);
+  box-shadow: -2px -2px 4px rgba(0,0,0,0.05);
+}
+
+/* 호버/포커스 시 표시 (접근성 포함) */
+.help-icon[data-open="true"] .tooltip,
+.help-icon:hover .tooltip,
+.help-icon:focus .tooltip,
+.help-icon:focus-within .tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+/* 스크린리더 숨김 처리와 동기화 */
+.tooltip[aria-hidden="true"] { opacity: 0; }
+.help-icon[data-open="true"] .tooltip[aria-hidden="true"],
+.help-icon:hover .tooltip[aria-hidden="true"],
+.help-icon:focus-within .tooltip[aria-hidden="true"] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.device-select {
+  border-radius: 6px;
+  text-overflow: ellipsis;
+  background-color: #19191a;
+  color: #ffffff;
+  height: 30px;
+  padding: 0 5px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.device-select:hover {
+  border-color: #4d5256;
+  background: #1e1f21;
+}
+
+.device-select:focus {
+  outline: none;
+  border-color: #5a91ff;
+  box-shadow: 0 0 0 2px rgba(28, 110, 255, 0.25);
+}
+
+.device-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sound-text {
+  font-size: 14px;
+  font-weight: 400;
+  padding-left: 8px;
+}
+
+.device-select {
+  width: calc(100% - 30px); /* 아이콘 크기와 간격을 제외한 나머지 공간 */
+  min-width: 140px;
+  max-width: 500px;
+}
+
+.sound-text {
+  width: calc(100% - 30px); /* 아이콘 크기와 간격을 제외한 나머지 공간 */
+  min-width: 140px;
+  max-width: 240px;
+}
+
+.check-text {
+  color: #fcc735;
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 600;
+  font-style: SemiBold;
+  font-size: 14px;
+  line-height: 22px;
+  letter-spacing: 0%;
+  vertical-align: middle;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.check-text .material-icons {
+  font-size: 16px;
+  color: #fcc735;
+}
+
+/* 사운드 레벨 미터 */
+.level-meter {
+  width: 100px;
+  height: 20px;
+  background: #000000;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  gap: 2px;
+}
+
+.level-box {
+  flex: 1;
+  height: 100%;
+  background-color: #4d5256;
+  transition: background-color 0.1s ease;
+}
+
+.level-box.active {
+  background-color: #1c6eff;
+}
+
+#sysMeter .level-box.active {
+  background-color: #fcc735;
+}
+
+#micLevel {
+  background-color: #1c6eff;
+}
+
+#sysLevel {
+  background-color: #fcc735;
+}
+
+/* check section */
+.check-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0px;
+  width: 100%;
+  padding: 8px 12px;
+}
+
+.check-text-group {
+  width: 100%;
+  padding: 8px 0px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.check-text-detail {
+  width: 100%;
+  padding: 12px 21px;
+  font-size: 12px;
+  background-color: #19191a;
+  border-radius: 5px;
+}
+
+.check-text-detail p {
+  font-family: "Noto Sans KR", sans-serif;
+  font-weight: 500;
+  font-style: Medium;
+  font-size: 12px;
+  line-height: 100%;
+  letter-spacing: 0%;
+  vertical-align: middle;
+  margin: 0;
+}
+
+.check-box-group {
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+/* 동그란 체크박스 스타일 */
+.check-box-group input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #4d5256;
+  border-radius: 50%;
+  background-color: #ffffff;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.check-box-group input[type="checkbox"]:hover {
+  border-color: #0a84ff;
+}
+
+.check-box-group input[type="checkbox"]:checked {
+  background-color: #0a84ff;
+  border-color: #0a84ff;
+}
+
+.check-box-group input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.check-box-group label {
+  cursor: pointer;
+  user-select: none;
+}
+
+#start-recording-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin-top: 10px;
+  border: 2px solid #ffffff;
+  background-color: #f9463b;
+}
+
+/* 녹음 버튼 비활성화 시 표시 */
+
+#start-recording-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+#start-recording-btn:disabled:hover {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#start-recording-btn:hover {
+  opacity: 0.8;
+}
+
+#start-recording-btn:active {
+  scale: 0.98;
+  opacity: 1;
+}
+
+/* 녹음 대상(캡처 모드) 선택 */
+.mode-select {
+  max-width: 240px;
+  flex: 1;
+}
+
+/* 모드별 안내 문구 (예: SystemOnly 선택 시 스피커 일치 안내) */
+.mode-hint {
+  width: 100%;
+  padding: 6px 8px 0 8px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #a9b0b6;
+}
+
+.mode-hint[hidden] {
+  display: none;
+}
+
+/* .sound-group의 display:flex가 UA의 [hidden]{display:none}을 이기므로 명시적으로 눌러준다.
+   (스피커 선택 행은 macOS에서 항상 숨겨져야 한다) */
+.sound-group[hidden] {
+  display: none;
+}

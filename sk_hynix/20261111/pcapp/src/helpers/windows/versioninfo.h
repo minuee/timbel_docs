@@ -1,0 +1,44 @@
+#pragma once
+
+// AudioHelper 버전 정보
+#define AUDIOHELPER_VERSION_MAJOR 0
+#define AUDIOHELPER_VERSION_MINOR 4
+#define AUDIOHELPER_VERSION_PATCH 3
+#define AUDIOHELPER_VERSION_BUILD 0
+
+// 버전 문자열 매크로
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+
+#define AUDIOHELPER_VERSION_STRING \
+    TOSTRING(AUDIOHELPER_VERSION_MAJOR) "." \
+    TOSTRING(AUDIOHELPER_VERSION_MINOR) "." \
+    TOSTRING(AUDIOHELPER_VERSION_PATCH) "." \
+    TOSTRING(AUDIOHELPER_VERSION_BUILD)
+
+// 간단한 버전 문자열 (Major.Minor.Patch)
+#define AUDIOHELPER_VERSION_SHORT \
+    TOSTRING(AUDIOHELPER_VERSION_MAJOR) "." \
+    TOSTRING(AUDIOHELPER_VERSION_MINOR) "." \
+    TOSTRING(AUDIOHELPER_VERSION_PATCH)
+
+// 기능 플래그
+// WebRTC 라이브러리를 링크한 빌드(build.bat: CMake 가 WEBRTC_APM_AVAILABLE 정의)일 때만 1.
+// 예전엔 1 고정이라 AEC 없이 빌드해도 화면에 "WebRTC AEC" 가 떴다.
+#ifdef WEBRTC_APM_AVAILABLE
+#define AUDIOHELPER_HAS_WEBRTC_AEC 1
+#else
+#define AUDIOHELPER_HAS_WEBRTC_AEC 0
+#endif
+#define AUDIOHELPER_HAS_NOISE_SUPPRESSION 0  // 현재 비활성화됨
+#define AUDIOHELPER_HAS_GAIN_CONTROL 0       // 현재 비활성화됨
+
+// 빌드 정보
+#define AUDIOHELPER_BUILD_DATE __DATE__
+#define AUDIOHELPER_BUILD_TIME __TIME__
+
+// 제품 정보
+#define AUDIOHELPER_PRODUCT_NAME "Meeting Recorder Audio Helper"
+#define AUDIOHELPER_DESCRIPTION "Audio capture helper with WebRTC AEC support"
+#define AUDIOHELPER_COPYRIGHT "Copyright (C) 2025"
+
