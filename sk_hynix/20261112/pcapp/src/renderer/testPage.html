@@ -1,0 +1,119 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Recorder</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>회의 녹음 시스템</h1>
+            <div class="status" id="status">준비중...</div>
+        </header>
+
+        <main>
+            <!-- 권한 및 초기화 설정 섹션 -->
+            <section id="setup-section" class="section">
+                <h2>1. 시스템 준비</h2>
+                <button id="init-btn" class="btn primary">오디오 시스템 초기화</button>
+                <div id="setup-status" class="status-text"></div>
+            </section>
+
+            <!-- 디바이스 선택 섹션 -->
+            <section id="devices-section" class="section" style="display: none;">
+                <h2>2. 디바이스 선택</h2>
+                <div class="device-group">
+                    <label for="mic-select">마이크:</label>
+                    <select id="mic-select" class="device-select">
+                        <option value="">디바이스를 선택하세요..</option>
+                    </select>
+                </div>
+                <div class="device-group">
+                    <label for="mode-select">녹음 모드:</label>
+                    <select id="mode-select" class="device-select">
+                        <option value="MicOnly">마이크만</option>
+                        <option value="MicPlusSystem">마이크 + 시스템 오디오</option>
+                        <option value="SystemOnly">시스템 오디오만 (마이크 비활성화)</option>
+                    </select>
+                </div>
+                <button id="test-btn" class="btn secondary">테스트</button>
+            </section>
+
+            <!-- 레벨 미터 및 테스트 섹션 -->
+            <section id="test-section" class="section" style="display: none;">
+                <h2>3. 오디오 테스트</h2>
+                <div class="meters">
+                    <div class="meter-group">
+                        <label>마이크 레벨:</label>
+                        <div class="level-meter">
+                            <div id="mic-level" class="level-bar"></div>
+                        </div>
+                        <span id="mic-level-text">-∞ dB</span>
+                    </div>
+                    <div class="meter-group">
+                        <label>시스템 레벨:</label>
+                        <div class="level-meter">
+                            <div id="sys-level" class="level-bar"></div>
+                        </div>
+                        <span id="sys-level-text">-∞ dB</span>
+                    </div>
+                </div>
+                
+                <div class="waveform-container">
+                    <canvas id="waveform" width="800" height="100"></canvas>
+                </div>
+
+                <div class="test-controls">
+                    <button id="start-test-btn" class="btn secondary">테스트 시작</button>
+                    <button id="stop-test-btn" class="btn secondary" disabled>테스트 중지</button>
+                    <button id="proceed-btn" class="btn primary" disabled>녹음 준비</button>
+                </div>
+            </section>
+
+            <!-- 녹음 제어 섹션 -->
+            <section id="recording-section" class="section" style="display: none;">
+                <h2>4. 녹음</h2>
+                <div class="recording-info">
+                    <div class="time-display">
+                        <span>녹음 시간: </span>
+                        <span id="recording-time">00:00:00</span>
+                    </div>
+                    <div class="segment-info">
+                        <span>현재 세그먼트: </span>
+                        <span id="segment-info">#1</span>
+                    </div>
+                </div>
+
+                <div class="recording-controls">
+                    <button id="start-recording-btn" class="btn primary">녹음 시작</button>
+                    <button id="pause-recording-btn" class="btn secondary" disabled>일시정지</button>
+                    <button id="resume-recording-btn" class="btn secondary" disabled style="display: none;">재개</button>
+                    <button id="stop-recording-btn" class="btn danger" disabled>녹음 중지</button>
+                </div>
+
+                <div class="memo-section">
+                    <h3>메모 및 마킹</h3>
+                    <div class="memo-input">
+                        <input type="text" id="memo-text" placeholder="메모를 입력하세요..">
+                        <button id="add-memo-btn" class="btn secondary">추가</button>
+                    </div>
+                    <div id="memo-list" class="memo-list"></div>
+                </div>
+            </section>
+
+            <!-- 로그 섹션 -->
+            <section id="log-section" class="section">
+                <h2>시스템 로그</h2>
+                <div id="log-container" class="log-container">
+                    <pre id="log-content"></pre>
+                </div>
+                <button id="clear-log-btn" class="btn secondary">로그 지우기</button>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
