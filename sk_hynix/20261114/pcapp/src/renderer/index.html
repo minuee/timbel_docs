@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 보안 정책(CSP): 앱 안의 파일만 실행. 없으면 Electron 이 "Insecure Content-Security-Policy" 경고를 콘솔에 남긴다(로그 서버 warn).
+         style-src unsafe-inline: HTML 의 style="" 속성용. 구글 폰트: 인터넷이 안 되면 안 받아질 뿐 동작엔 영향 없음 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="common.app_title">SKHynix AI 회의록</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100;300;400;500;700;900&display=swap"
+    />
+    <link rel="stylesheet" href="./styles/index.css" />
+    <link rel="stylesheet" href="./styles/micTest.css" />
+  </head>
+
+  <body>
+    <div class="title-area">
+      <div class="title-left">
+        <div class="title-text" id="titleText">SKHynix AI 회의록</div>
+      </div>
+      <div class="title-right">
+        <button id="minimizeBtn">
+          <img src="./assets/icons/minalizeBtn.svg" alt="" />
+        </button>
+        <button id="closeBtn">
+          <img src="./assets/icons/closeBtn.svg" alt="" />
+        </button>
+      </div>
+    </div>
+    <div class="mic-test-title" data-i18n="mic_test.title">마이크 테스트</div>
+
+    <section class="sound-section">
+      <div class="sound-group">
+        <div class="sound-text-wrap">
+          <div class="sound-text"><span data-i18n="mic_test.capture_mode">녹음 대상</span>
+            <span class="help-icon" tabindex="0" aria-describedby="captureModeHelp">
+              <img src="./assets/icons/help_icon.svg" alt="도움말" data-i18n-alt="common.help" />
+              <span id="captureModeHelp" role="tooltip" class="tooltip" aria-hidden="true" data-i18n-html="mic_test.capture_mode_help">
+                <strong>회의 소리만</strong>을 고르면 내 목소리는 빼고, Zoom·Webex·Teams 등에서 나오는 <strong>상대방 목소리만</strong> 녹음합니다. 여러 참석자의 녹음을 나중에 하나로 합칠 때 사용하세요.
+              </span>
+            </span>
+          </div>
+        </div>
+        <select id="mode-select" class="device-select mode-select">
+          <option value="MicPlusSystem" data-i18n="mic_test.mode_mic_plus_system">내 목소리 + 회의 소리</option>
+          <option value="MicOnly" data-i18n="mic_test.mode_mic_only">내 목소리만</option>
+          <option value="SystemOnly" data-i18n="mic_test.mode_system_only">회의 소리만 (상대방)</option>
+        </select>
+      </div>
+      <div class="mode-hint" id="modeHint" hidden></div>
+      <div class="sound-group">
+        <div class="device-select-wrap">
+          <img src="./assets/icons/micIcon_grey.svg" alt="" />
+          <select id="mic-select" class="device-select">
+            <option value="" data-i18n="mic_test.select_device">디바이스를 선택하세요..</option>
+          </select>
+        </div>
+        <div class="level-meter" id="micMeter">
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+        </div>
+      </div>
+      <div class="sound-group">
+        <div class="sound-text-wrap">
+          <img src="./assets/icons/sysIcon_grey.svg" alt="" />
+          <div class="sound-text"><span data-i18n="mic_test.system_sound">시스템 사운드</span>
+            <span class="help-icon" tabindex="0" aria-describedby="sysSoundHelp">
+              <img src="./assets/icons/help_icon.svg" alt="도움말" data-i18n-alt="common.help" />
+              <span id="sysSoundHelp" role="tooltip" class="tooltip" aria-hidden="true" data-i18n-html="mic_test.system_sound_help">
+                <strong>시스템 사운드</strong>는 Microsoft Teams, Google Meet, Zoom 등 온라인 화상 회의 시 PC(시스템)에서 나오는 상대방의 목소리를 녹음합니다.
+              </span>
+            </span>
+          </div>
+        </div>
+        <div class="level-meter" id="sysMeter">
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+          <div class="level-box"></div>
+        </div>
+      </div>
+      <!-- 캡처할 출력(스피커) 장치. Windows에서만 선택 가능하므로
+           Helper가 renderDevices를 보고할 때만 표시한다. macOS(ScreenCaptureKit)는
+           시스템 믹스를 통째로 캡처하므로 선택 개념이 없다. -->
+      <div class="sound-group" id="renderGroup" hidden>
+        <div class="device-select-wrap">
+          <img src="./assets/icons/sysIcon_grey.svg" alt="" />
+          <select id="render-select" class="device-select">
+            <option value="default" data-i18n="mic_test.default_output">기본 출력 장치</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="check-section">
+      <div class="check-text-group">
+        <div class="check-text">
+          <span class="material-icons">info_outline</span>
+          <span data-i18n="mic_test.notice_title">녹음 전 확인해주세요.</span>
+        </div>
+        <button id="checkCloseBtn">
+          <img src="./assets/icons/arrow_top.svg" alt="" />
+        </button>
+      </div>
+      <div class="check-text-detail">
+        <ul>
+          <li data-i18n="mic_test.notice_1">회의 전, 참석자에게 녹음 동의를 받아주세요.</li>
+          <li data-i18n="mic_test.notice_2">소리가 멀거나 주변이 시끄러우면 인식률이 낮아질 수 있어요.</li>
+          <li data-i18n="mic_test.notice_3">최대 녹음 시간은 3시간입니다.</li>
+          <li data-i18n="mic_test.notice_4">저장 공간이 부족할 시 녹음에 실패할 수 있어요.</li>
+        </ul>
+      </div>
+      <div class="check-box-group">
+        <input type="checkbox" name="check" id="check" />
+        <label for="check" data-i18n="mic_test.notice_agree">위 내용을 확인했습니다.</label>
+      </div>
+    </section>
+
+    <button id="start-recording-btn"></button>
+
+    <!-- 화면 언어. MULTI_LANG_ENABLED 가 true 일 때만 보인다(scripts/languageSelect.js) -->
+    <div class="language-select-wrap" id="languageSelectWrap" data-screen="mic_test" hidden>
+      <svg class="language-select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+      <select id="languageSelect" class="language-select" aria-label="언어" data-i18n-aria-label="common.language"></select>
+    </div>
+
+    <script src="scripts/languageSelect.js"></script>
+    <script src="index.js"></script>
+  </body>
+</html>
