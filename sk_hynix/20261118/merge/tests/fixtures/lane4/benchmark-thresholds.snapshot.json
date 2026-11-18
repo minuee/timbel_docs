@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "case_id": "pass",
+      "offset_error_ms": 4.0,
+      "expected_verdict": "pass"
+    },
+    {
+      "case_id": "degraded",
+      "offset_error_ms": 15.0,
+      "expected_verdict": "degraded"
+    },
+    {
+      "case_id": "fail",
+      "offset_error_ms": 35.0,
+      "expected_verdict": "fail"
+    }
+  ]
+}

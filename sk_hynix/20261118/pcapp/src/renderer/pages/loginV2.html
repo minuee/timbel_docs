@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 로그인 화면 ver2 — AM-Tray 전용 (설정 LOGIN_PAGE_VERSION=2). ver1(login.html)은 그대로 둔다. CSP 는 login.html 과 같다. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="login.title">로그인</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100;300;400;500;700;900&display=swap"
+    />
+    <link rel="stylesheet" href="../styles/index.css" />
+    <link rel="stylesheet" href="../styles/login.css" />
+    <link rel="stylesheet" href="../styles/loginV2.css" />
+  </head>
+
+  <body>
+    <div class="title-area">
+      <div class="title-left">
+        <div class="title-text" data-i18n="common.app_title">SKHynix AI 회의록</div>
+      </div>
+      <div class="title-right">
+        <button id="minimizeBtn">
+          <img src="../assets/icons/minalizeBtn.svg" alt="" />
+        </button>
+        <button id="closeBtn">
+          <img src="../assets/icons/closeBtn.svg" alt="" />
+        </button>
+      </div>
+    </div>
+
+    <main class="login-wrap">
+      <div class="login-heading" data-i18n="login.title">로그인</div>
+
+      <!-- AM-Tray 상태 카드. 글자·버튼은 loginV2.js 가 상태에 따라 바꾼다. -->
+      <section id="amCard" class="am-card" data-state="checking" aria-live="polite">
+        <div class="am-spinner" id="amSpinner" aria-hidden="true"></div>
+        <div id="amTitle" class="am-title"></div>
+        <p id="amDesc" class="am-desc"></p>
+        <p id="amNote" class="am-note" hidden></p>
+        <div class="am-actions">
+          <button id="amPrimaryBtn" class="login-btn primary" type="button" hidden></button>
+          <button id="amSecondaryBtn" class="login-btn secondary" type="button" hidden></button>
+        </div>
+      </section>
+
+      <!-- 테스트용: 개발 빌드(APP_ENV=dev)이고 MANUAL_LOGIN_ENABLED 일 때만 보인다. ver1 과 같은 토큰 직접 입력. -->
+      <details id="manualLogin" class="manual-login" hidden>
+        <summary data-i18n="login.manual_summary">테스트 로그인 (토큰 직접 입력)</summary>
+        <form id="manualForm" class="login-form" autocomplete="off">
+          <input id="manualName" class="login-input" type="text" placeholder="이름" data-i18n-placeholder="login.manual_name" maxlength="40" />
+          <input id="manualEmpno" class="login-input" type="text" placeholder="사번" data-i18n-placeholder="login.empno" maxlength="20" />
+          <input id="manualToken" class="login-input" type="password" placeholder="accessToken" />
+          <input id="manualEndpoint" class="login-input" type="text" placeholder="서버 주소 (비우면 기본값)" />
+          <button id="manualSubmitBtn" class="login-btn secondary" type="submit" data-i18n="login.manual_submit">토큰으로 로그인</button>
+        </form>
+      </details>
+
+      <div id="loginMessage" class="login-message" role="status" aria-live="polite"></div>
+      <div class="language-select-wrap" id="languageSelectWrap" data-screen="login" hidden>
+        <svg class="language-select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+        <select id="languageSelect" class="language-select" aria-label="언어" data-i18n-aria-label="common.language"></select>
+      </div>
+    </main>
+
+    <!-- 약관 미동의 안내 (ver1 과 같음) -->
+    <div id="termsModal" class="terms-modal" role="dialog" aria-modal="true" aria-labelledby="termsTitle" hidden>
+      <div class="terms-box">
+        <div id="termsTitle" class="terms-title" data-i18n="terms.title">약관 안내 메시지</div>
+        <p id="termsBody" class="terms-body"></p>
+        <p class="terms-note" data-i18n="terms.note">(이미 이전에 동의한 사용자도 재동의가 필요합니다.)</p>
+        <div class="terms-actions">
+          <button id="termsLogoutBtn" class="login-btn secondary" type="button" data-i18n="terms.logout">로그아웃</button>
+          <button id="termsQuitBtn" class="login-btn primary" type="button" data-i18n="terms.quit">앱 종료</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI회의록 이용 권한 없음 안내 (ver1 과 같음) -->
+    <div id="accessModal" class="terms-modal" role="dialog" aria-modal="true" aria-labelledby="accessTitle" hidden>
+      <div class="terms-box">
+        <div id="accessTitle" class="terms-title" data-i18n="access.title">권한 안내 메시지</div>
+        <p class="terms-body" data-i18n="access.body">AI회의록을 이용할 권한이 없으십니다. myAccess에 AI회의록 권한을 승인받은후 다시 시도해주십시요</p>
+        <div class="terms-actions">
+          <button id="accessOkBtn" class="login-btn primary" type="button" data-i18n="access.ok">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="../scripts/languageSelect.js"></script>
+    <script src="../scripts/loginV2.js"></script>
+  </body>
+</html>
