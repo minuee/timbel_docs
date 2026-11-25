@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+#
+# howling_test_103.sh — 같은 원본으로 1.0.3 새 기능을 켜고 끈 결과를 나란히 만들어 비교한다. (1.0.3 이미지 필요)
+#
+# 1.0.2 로 반복·하울링은 거의 사라졌고(2026-11-19 현장), 남은 것은
+#   ① 한 사람이 계속 말하는데 폰이 바뀔 때마다 크기가 파도처럼 오르내린다
+#   ② 처음 1분 정도만 울린다
+#   ③ 원본의 잡음 (에어컨·컴퓨터 팬)
+# 1.0.3 은 ① 폰이 바뀔 때 크기 이어 붙이기(AUTOMIX_LEVEL_MATCH) ② 처음 구간 다시 재기(ALIGN_HEAD_CHECK)
+# ③ 폰별 잡음 제거(MERGE_DENOISE) 를 넣었다. 이 도구는 경우별 결과를 한 번에 만든다.
+#
+# 101·102 와 같이 운영 서버를 건드리지 않는다. 경우마다 시험용 컨테이너(automix-test, 포트 19995)를
+#   잠깐 띄워 병합하고 지운다. 나머지 설정은 운영 .env 그대로 (목소리 맞추기 범위만 REFINE_MS 로 고정).
+#
+#   cd /data/timblo/mobile-sync-server
+#   ./howling_test_103.sh /data/timbel/howling_test
+#
+# 경우 (CASES, 하나 = 크기맞추기:잡음제거dB:처음재기). 기본 4개:
+#   0:0:0    1.0.2 와 같음 (비교 기준)
+#   1:0:1    1.0.3 기본값 — 크기 이어 붙이기 + 처음 구간 다시 재기
+#   1:12:1   + 잡음 제거 보통
+#   1:20:1   + 잡음 제거 강하게
+#   바꾸기:  CASES="1:0:1 1:8:1 1:16:1" ./howling_test_103.sh <시험 폴더>
+#     크기맞추기·처음재기 = 0 끔 / 1 켬,  잡음제거dB = 0 끔 ~ 40
+#
+# 하는 일 (회의마다):
+#   경우마다 병합 1건. 결과 이름 = 시험 컨테이너가 실제로 읽은 값
+#     예) L1_N12_H1.flac  — 이미 있으면 건너뜀, 다시 하려면 FORCE=1
+#   끝에 쌓인 결과 전체 요약 → 사진으로 찍어 오면 된다. 요약에 나오는 것:
+#     처음어긋남  폰별 회의 앞 2분, 20초마다 남은 어긋남(ms). 10 이상이 이어지면 앞부분이 어긋났던 것
+#     처음고침    앞부분만 옮겨 붙인 폰 (shiftMs = 옮긴 양, atSec = 그 폰 원본에서 이어 붙인 초)
+#     크기        폰이 바뀐 구간에 준 크기(dB) 최소/중간/최대, 말이 없어 폰 전체 값을 쓴 구간 수
+#     잡음크기    잡음 제거를 켠 경우, 폰마다 잰 잡음 크기(dBFS). -60 보다 작으면 원래 조용한 폰
+#     전환        오토믹서 폰 전환 횟수
+#     연결·최종   목소리 맞추기 결과 (102 와 같음)
+#
+# 환경변수 (필요할 때만):
+#   CASES         시험할 경우            (기본 0:0:0 1:0:1 1:12:1 1:20:1)
+#   REFINE_MS     목소리 맞추기 범위(ms) (기본 4000 — 운영 .env 가 200 이어도 시험은 4000 으로)
+#   INSTALL_DIR   서버 설치 경로         (기본 /data/timblo/mobile-sync-server)
+#   SYNC_SOUND    앱이 쓴 싱크음         (기본 beep. beep / voice / jingle 만 가능)
+#   BEEP_SOURCE   누가 비프를 울렸나     (기본 all. leader / all)
+#   SOUND_LANG    안내 음성 언어         (기본 ko. ko / en)
+#   TEST_PORT     시험 컨테이너 포트     (기본 19995, 운영 9995 와 겹치지 않게)
+#   IMAGE         시험할 이미지          (기본 .env 의 이미지. 운영 전이면 IMAGE=mobile-sync-server:1.0.3)
+#   FORCE=1       이미 있는 결과도 다시 병합
+#
+# 업로드 한도는 시험 컨테이너에만 4GB 로 열어 둔다 (운영 설정은 그대로).
+#
+set -euo pipefail
+shopt -s nocaseglob  # 확장자 대소문자 무관 (.flac / .FLAC)
+
+SRC_DIR="${1:-}"
+[[ -n "$SRC_DIR" && -d "$SRC_DIR" ]] || { echo "사용법: $0 <시험 폴더>"; exit 1; }
+SRC_DIR="$(cd "$SRC_DIR" && pwd)"
+INSTALL_DIR="${INSTALL_DIR:-/data/timblo/mobile-sync-server}"
+SYNC_SOUND="${SYNC_SOUND:-beep}"
+BEEP_SOURCE="${BEEP_SOURCE:-all}"
+SOUND_LANG="${SOUND_LANG:-ko}"
+TEST_NAME="automix-test"
+TEST_PORT="${TEST_PORT:-19995}"
+CASES="${CASES:-0:0:0 1:0:1 1:12:1 1:20:1}"
+REFINE_MS="${REFINE_MS:-4000}"
+
+case "$SYNC_SOUND" in
+    beep|voice|jingle) ;;
+    *) echo "ERROR: SYNC_SOUND=${SYNC_SOUND} 는 틀린 값이다. beep / voice / jingle 중 하나 (비프음이면 beep)"; exit 1 ;;
+esac
+case "$BEEP_SOURCE" in
+    leader|all) ;;
+    *) echo "ERROR: BEEP_SOURCE=${BEEP_SOURCE} 는 틀린 값이다. leader / all 중 하나"; exit 1 ;;
+esac
+for c in $CASES; do
+    [[ "$c" =~ ^[01]:[0-9]+:[01]$ ]] || { echo "ERROR: CASES 의 ${c} 는 틀린 값이다 (크기맞추기:잡음제거dB:처음재기, 예: 1:12:1)"; exit 1; }
+done
+[[ "$REFINE_MS" =~ ^[0-9]+$ ]] || { echo "ERROR: REFINE_MS=${REFINE_MS} 는 숫자가 아니다 (ms, 예: 4000)"; exit 1; }
+
+ENV_FILE="${INSTALL_DIR}/.env"
+[[ -f "$ENV_FILE" ]] || { echo "ERROR: ${ENV_FILE} 가 없다. INSTALL_DIR 을 확인할 것."; exit 1; }
+
+count_flac() { local n=0 f; for f in "$1"/*.flac; do [[ -f "$f" ]] && n=$((n + 1)); done; echo "$n"; }
+
+MEETINGS=()
+if (( $(count_flac "$SRC_DIR") >= 2 )); then
+    MEETINGS=("$SRC_DIR")
+else
+    for d in "$SRC_DIR"/*/; do
+        [[ -d "$d" ]] || continue
+        d="${d%/}"
+        [[ "$(basename "$d")" == results_* ]] && continue
+        n=$(count_flac "$d")
+        if (( n >= 2 )); then
+            MEETINGS+=("$d")
+        elif (( n == 1 )); then
+            echo "건너뜀: $(basename "$d") — flac 이 1개뿐이다 (폰별 원본이 2개 이상 필요)"
+        fi
+    done
+fi
+(( ${#MEETINGS[@]} >= 1 )) || { echo "ERROR: 폰별 원본 flac 이 2개 이상 든 회의 폴더가 없다."; exit 1; }
+
+# 줄이 없어도 멈추지 않게 (|| true). set -e 에서 grep 실패는 조용히 스크립트를 끝낸다.
+env_get() { { grep -E "^$1=" "$ENV_FILE" || true; } | tail -1 | cut -d= -f2- | tr -d '[:space:]'; }
+API="http://127.0.0.1:${TEST_PORT}"
+IMAGE="${IMAGE:-$(env_get IMAGE_NAME):$(env_get IMAGE_VERSION)}"
+[[ "$IMAGE" == ":"* ]] && IMAGE="mobile-sync-server${IMAGE}"
+IMAGE="${IMAGE%:}"
+docker image inspect "$IMAGE" >/dev/null 2>&1 \
+    || { echo "ERROR: 이미지 ${IMAGE} 가 없다. (docker images mobile-sync-server 로 확인)"; exit 1; }
+OUT_DIR="${SRC_DIR}/results_103"
+mkdir -p "$OUT_DIR"
+
+log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$OUT_DIR/run.log"; }
+
+stop_test() { docker rm -f "$TEST_NAME" >/dev/null 2>&1 || true; }
+trap stop_test EXIT
+
+# 시험 컨테이너 띄우기: 운영 .env 를 깔고 1.0.3 값만 덮어쓴다. 실제 읽은 값으로 NAME 을 만든다.
+start_test() {  # $1 크기맞추기  $2 잡음제거dB  $3 처음재기
+    stop_test
+    docker run -d --name "$TEST_NAME" --env-file "$ENV_FILE" \
+        -e RECOG_HOST=0.0.0.0 -e RECOG_PORT=8080 \
+        -e ALIGN_REFINE=1 -e ALIGN_REFINE_MAX_MS="$REFINE_MS" \
+        -e AUTOMIX_LEVEL_MATCH="$1" -e MERGE_DENOISE="$2" -e ALIGN_HEAD_CHECK="$3" \
+        -e MERGE_UPLOAD_MAX_BYTES=4294967296 -e MERGE_WORKERS=1 \
+        -p "127.0.0.1:${TEST_PORT}:8080" \
+        "$IMAGE" --data-root /var/lib/recog/runtime serve >/dev/null
+    local i
+    for i in $(seq 1 30); do
+        curl -fs --max-time 3 "$API/health" >/dev/null 2>&1 && break
+        sleep 1
+    done
+    curl -fs --max-time 3 "$API/health" >/dev/null 2>&1 \
+        || { docker logs --tail 30 "$TEST_NAME"; echo "ERROR: 시험 컨테이너가 뜨지 않았다."; exit 1; }
+    SETTINGS="$(docker exec "$TEST_NAME" python -c '
+from recog import refine, automix, merge_job
+new = hasattr(refine, "head_plan") and hasattr(automix, "match_levels")
+print(int(new), int(getattr(automix, "LEVEL_MATCH_DEFAULT", 0)), int(getattr(merge_job, "DENOISE_DB", 0)),
+      int(getattr(refine, "HEAD_CHECK", 0)), refine.MAX_MS, automix.HOLD_MS, int(automix.SWITCH_DB), automix.MODE)' 2>/dev/null || true)"
+    read -r NEW L N H MAXMS HOLD SWITCH MODE <<< "${SETTINGS:-0 ? ? ? ? ? ? ?}"
+    if [[ "$NEW" != "1" ]]; then
+        echo "ERROR: 이미지 ${IMAGE} 는 1.0.3 이전 버전이다. 1.0.3 이미지를 먼저 반입하고 IMAGE=mobile-sync-server:1.0.3 으로 돌릴 것."
+        exit 1
+    fi
+    NAME="L${L}_N${N}_H${H}"
+}
+
+for m in "${MEETINGS[@]}"; do
+    log "회의 $(basename "$m"): $(cd "$m" && ls *.flac | tr '\n' ' ')"
+done
+log "이미지: ${IMAGE}   경우: ${CASES}   목소리 맞추기 범위: ${REFINE_MS}ms"
+log "syncSound=${SYNC_SOUND} beepSource=${BEEP_SOURCE} soundLang=${SOUND_LANG}  결과 폴더: ${OUT_DIR}"
+
+# ---- 병합 1건 ---------------------------------------------------------------------
+run_one() {  # $1 결과 폴더  $2 결과 이름  나머지 = 올릴 flac 파일들
+    local out="$1" name="$2" body job f
+    shift 2
+    local args=()
+    for f in "$@"; do args+=(-F "files=@${f}"); done
+    log "    ${name}: 올리는 중 (파일 $#개)"
+    body="$(curl -s -X POST "$API/v1/merge/upload" "${args[@]}" \
+        -F align=none -F "syncSound=${SYNC_SOUND}" -F "beepSource=${BEEP_SOURCE}" \
+        -F "soundLang=${SOUND_LANG}" -F automix=true)"
+    job="$(printf '%s' "$body" | grep -o 'mrg_[0-9a-f]*' | head -1 || true)"
+    if [[ -z "$job" ]]; then
+        log "    ${name}: 요청 실패 — ${body}"
+        return 0
+    fi
+    local waited=0
+    log "    ${name}: 병합 중 (${job})"
+    until curl -s --max-time 10 "$API/v1/merge/$job" | grep -q -E '"status": "(DONE|ERROR)"'; do
+        sleep 5
+        waited=$((waited + 5))
+        if (( waited % 60 == 0 )); then log "    ${name}: ... 병합 기다리는 중 $((waited / 60))분"; fi
+    done
+    curl -s "$API/v1/merge/$job" > "$out/${name}.json"
+    if grep -q '"status": "DONE"' "$out/${name}.json"; then
+        curl -s -o "$out/${name}.flac" "$API/v1/merge/$job/download"
+        log "    ${name}: 완료 (${job})"
+    else
+        log "    ${name}: 병합 실패 — ${name}.json 참조"
+    fi
+    docker logs "$TEST_NAME" 2>&1 | grep "$job" \
+        | grep -E 'merge_alignment|merge_drift|merge_refine|merge_refine_head|merge_beep_scrub|merge_denoise|merge_automix|_failed' \
+        > "$out/${name}.log" || true
+}
+
+for c in $CASES; do
+    IFS=: read -r cl cn ch <<< "$c"
+    log "[경우 ${c}] 시험 컨테이너 띄우는 중"
+    start_test "$cl" "$cn" "$ch"
+    log "    실제 읽은 설정: 크기맞추기=${L} 잡음제거=${N}dB 처음재기=${H} 범위=${MAXMS}ms 방식=${MODE} 유지=${HOLD}ms 전환=${SWITCH}dB → ${NAME}"
+    if [[ "$MODE" != "select" ]]; then
+        log "    주의: 운영 .env 의 AUTOMIX_MODE 가 select 가 아니다 (${MODE}). 크기맞추기는 select 에서만 동작한다"
+    fi
+    for m in "${MEETINGS[@]}"; do
+        out="$OUT_DIR/$(basename "$m")"
+        mkdir -p "$out"
+        if [[ -f "$out/${NAME}.flac" && "${FORCE:-0}" != "1" ]]; then
+            log "    $(basename "$m"): ${NAME} 이미 있음 — 건너뜀 (다시 하려면 FORCE=1)"
+            continue
+        fi
+        log "    $(basename "$m"): ${NAME}"
+        run_one "$out" "$NAME" "$m"/*.flac
+    done
+    stop_test
+done
+
+# ---- 요약 (지금까지 쌓인 결과 전부) -------------------------------------------------
+pick() { grep -h "$1" "$3" 2>/dev/null | grep -o "$2" | head -1 | sed 's/^"[A-Za-z]*": //' || true; }
+{
+    echo
+    echo "================ 요약 (이 화면을 사진으로 찍어 오면 된다) ================"
+    for m in "${MEETINGS[@]}"; do
+        out="$OUT_DIR/$(basename "$m")"
+        echo "[$(basename "$m")]  $(cd "$m" && ls *.flac | tr '\n' ' ')"
+        for log_file in "$out"/L*.log; do
+            [[ -f "$log_file" ]] || continue
+            n="$(basename "$log_file" .log)"
+            echo "${n}:"
+            echo "    연결      $(pick merge_refine '"linked": \[[^]]*\]' "$log_file")   최종 $(pick merge_refine '"offsetMs": {[^}]*}' "$log_file")"
+            if [[ "$n" == *_H1 ]]; then
+                echo "    처음어긋남 $(pick merge_refine_head '"residualMs": {[^}]*}' "$log_file")"
+                echo "    처음고침  $(pick merge_refine_head '"fixed": {.*}, "shiftAll"' "$log_file" | sed 's/, "shiftAll"$//')"
+            fi
+            if [[ "$n" == L1_* ]]; then
+                echo "    크기      $(pick merge_automix '"gainDb": {[^}]*}' "$log_file")  말없음 $(pick merge_automix '"fallback": [0-9]*' "$log_file")"
+            fi
+            if [[ "$n" != *_N0_* ]]; then
+                echo "    잡음크기  $(pick merge_denoise '"floorDb": {[^}]*}' "$log_file")  (폰별 dBFS, 이 아래를 줄였다)"
+            fi
+            echo "    지운비프  $(pick merge_beep_scrub '"ranges": {[^}]*}' "$log_file")   전환 $(pick merge_automix '"switches": [0-9]*' "$log_file")"
+            mode="$(pick merge_alignment '"mode": "[a-z]*"' "$log_file")"
+            if [[ "$mode" != '"beep"' ]]; then
+                echo "    주의: 정렬 ${mode:-기록 없음} (beep 이 아니다)"
+            fi
+            if grep -q '_failed' "$log_file"; then
+                echo "    주의: 실패 기록 있음 — $(grep -o '"event": "[a-z_]*_failed"' "$log_file" | head -3 | tr '\n' ' ')"
+            fi
+        done
+    done
+    echo "==========================================================================="
+} | tee -a "$OUT_DIR/run.log"
+
+log "끝. 결과 ${OUT_DIR}/<회의>/L*.flac — 같은 구간을 들어보며 비교. 경우를 더 하려면 CASES 로 다시 돌리면 옆에 쌓인다"
