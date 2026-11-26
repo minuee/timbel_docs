@@ -1,0 +1,595 @@
+"""Gain-sharing automixer: in every instant, the phone closest to the talker wins.
+
+Field report (2026-10-22): in a small room every phone records every voice, so
+the plain sum plays each sentence N times -- once per phone, a little later and
+quieter each time -- which is heard as howling and as words repeating
+("5초뒤5초뒤5초뒤"). Perfect alignment would turn the repeats into a smear, not
+remove them; the copies themselves have to go.
+
+The classic conference-room answer (Dugan's gain sharing): every 10 ms, give
+each track the share of the total energy it carries. The talker's own phone
+holds most of it and stays near unity; the others, carrying the same voice
+10-20 dB down, fall away by about as much again. Shares always sum to one, so
+the overall level never pumps, and two people talking at once simply split it.
+
+Decisions are made on *normalised* energy -- each phone divided by its own
+typical speaking level -- because phones differ in mic gain and AGC by several
+dB, and on raw energy the hottest phone would win every frame. The gains are
+applied to the raw audio; this decides who is heard, not how loud.
+
+Since 0.0.8 that gain sharing is only the ``share`` mode; the default is
+``select`` (one phone at a time), see MODE below for why.
+
+Python only computes 100 gain values a second per track. ffmpeg does the
+per-sample work (``amultiply``), so an hour of audio stays cheap.
+"""
+
+from __future__ import annotations
+
+import math
+import os
+import wave
+from array import array
+from operator import mul
+from pathlib import Path
+
+from . import beep
+
+#: Master switch for requests that do not say (``options.automix``).
+AUTOMIX_DEFAULT = beep._env_bool("MERGE_AUTOMIX", True)
+FRAME_MS = 10
+#: Energy is averaged over this before deciding, so one plosive does not flip
+#: the winner.
+SMOOTH_MS = beep._env_int("AUTOMIX_SMOOTH_MS", 50)
+#: Least a track is ever turned down to. Not silence: a little of every phone
+#: keeps the room tone continuous, and switching into dead silence is audible.
+FLOOR_DB = beep._env_float("AUTOMIX_FLOOR_DB", -20.0)
+#: Gain follows a new talker within ATTACK and lets go over RELEASE; the slow
+#: release bridges the gaps between words so a speaker is not chopped.
+ATTACK_MS = beep._env_int("AUTOMIX_ATTACK_MS", 10)
+RELEASE_MS = beep._env_int("AUTOMIX_RELEASE_MS", 200)
+#: A phone's "typical speaking level" is this percentile of its frame energies.
+REFERENCE_PERCENTILE = 0.95
+
+#: How the tracks are combined (``AUTOMIX_MODE``), since 0.0.8.
+#:
+#: ``select`` -- at every instant exactly one phone is heard, the one closest to
+#: whoever is talking; the rest are fully off. Field test 2026-11-09: in one room
+#: every phone holds every voice, each a few ms later and with its own room
+#: echo, so *any* sum of them (even a perfectly aligned one, even gain-shared
+#: down to 20-50 %) is heard as a big-hall echo. Each original on its own sounds
+#: clean, so the merged file is built from originals only, one at a time. No
+#: speech is lost by switching: the chosen phone also hears the other talkers.
+#:
+#: ``share`` -- the 0.0.4-0.0.7 gain sharing above, kept to compare against.
+MODE_SELECT = "select"
+MODE_SHARE = "share"
+MODES = (MODE_SELECT, MODE_SHARE)
+MODE = os.environ.get("AUTOMIX_MODE", MODE_SELECT).strip().lower()
+if MODE not in MODES:
+    MODE = MODE_SELECT
+#: Once a phone is chosen it stays at least this long, so the voice does not
+#: flutter between phones inside one word. 1.0.0: 1000 (field test 2026-11-10:
+#: 300 ms switched ~4000 times and chopped the voice).
+HOLD_MS = beep._env_int("AUTOMIX_HOLD_MS", 1000)
+#: Another phone takes over only when it is this much louder (dB, on the
+#: normalised level) than the current one. 1.0.0: 6 dB (was 3).
+SWITCH_DB = beep._env_float("AUTOMIX_SWITCH_DB", 6.0)
+#: Hand-over length (ms): the old phone fades out while the new one fades in.
+FADE_MS = beep._env_int("AUTOMIX_FADE_MS", 30)
+#: Per-phone gain (``MERGE_TRACK_GAIN``, 1.0.0, off by default). select plays
+#: one phone at a time at that phone's own loudness, so the close phone is loud
+#: and the far ones are quiet, and the level jumps at every hand-over. When on,
+#: each phone is turned up or down once, by a fixed amount, so its speech sits
+#: at TRACK_GAIN_TARGET_DB. A fixed gain keeps each phone's voice-to-room ratio
+#: as recorded (unlike MERGE_LEVEL=dynamic, which lifts the pauses most).
+TRACK_GAIN_DEFAULT = beep._env_bool("MERGE_TRACK_GAIN", False)
+TRACK_GAIN_TARGET_DB = beep._env_float("MERGE_TRACK_GAIN_TARGET_DB", -20.0)
+#: At most this much up or down, so a near-silent phone does not become hiss.
+TRACK_GAIN_MAX_DB = beep._env_float("MERGE_TRACK_GAIN_MAX_DB", 12.0)
+#: A phone's speech level is this percentile of its 50 ms levels. High enough to
+#: be speech, low enough that a sync beep (seconds in an hour) cannot set it.
+TRACK_LEVEL_PERCENTILE = 0.9
+#: Below this normalised level (dB under the phone's typical speaking level)
+#: nobody is talking: keep the current phone instead of chasing room noise.
+SPEECH_DB = beep._env_float("AUTOMIX_SPEECH_DB", -20.0)
+#: Level matching at hand-overs (``AUTOMIX_LEVEL_MATCH``, 1.0.3, on by default).
+#: Field report 2026-11-19: with select one talker going on and on rose and fell
+#: "like waves" -- every hand-over to a phone at another distance steps the
+#: level, and MERGE_LEVEL=dynamic (a ~15 s window) only rounds the steps off.
+#: When on, every stretch one phone is heard gets its own fixed gain that brings
+#: that phone's speech *in that stretch* to TRACK_GAIN_TARGET_DB (+-
+#: TRACK_GAIN_MAX_DB), so the same voice keeps its level across a hand-over.
+#: A stretch is measured over at least LEVEL_MATCH_WINDOW_MS of its phone; one
+#: with no speech in it gets the phone's whole-meeting gain instead, so room
+#: noise is never pulled up.
+LEVEL_MATCH_DEFAULT = beep._env_bool("AUTOMIX_LEVEL_MATCH", True)
+LEVEL_MATCH_WINDOW_MS = max(1000, beep._env_int("AUTOMIX_LEVEL_MATCH_WINDOW_MS", 4000))
+#: Same-talker hold (``AUTOMIX_SAME_TALKER``, 1.0.4, on by default).
+#: Field report 2026-11-26: one person talking for 20 s still jumped in level
+#: when HOLD_MS ran out (at 10 s with HOLD 10000) -- the hold only delays a
+#: hand-over, it does not know the talker is the same. In one room every phone
+#: hears every voice, and the level *differences between the phones* are set by
+#: where the talker sits ("seat print": phone 2 is 8 dB under phone 1, phone 3
+#: 15 dB under ...). While the seat print stays the same, the talker is the same
+#: and the phone is kept whatever HOLD_MS says; when it changes by more than
+#: TALKER_DB for TALKER_CONFIRM_MS of speech, a new talker has started and the
+#: usual rule (SWITCH_DB, HOLD_MS) may hand over during the next TALKER_OPEN_MS.
+SAME_TALKER_DEFAULT = beep._env_bool("AUTOMIX_SAME_TALKER", True)
+#: How much the level difference between any two phones must change (dB) to
+#: count as another talker. Lower: a turned head already counts as a new talker.
+TALKER_DB = max(1.0, beep._env_float("AUTOMIX_TALKER_DB", 6.0))
+#: The seat print is measured over this much audio, so single syllables and
+#: plosives do not move it.
+TALKER_SMOOTH_MS = 300
+#: Only clearly spoken moments (this far under the phone's typical speaking
+#: level, normalised) are compared -- word tails and room echo are not.
+TALKER_SPEECH_DB = -10.0
+#: This much speech (ms) has to disagree before a new talker is believed.
+TALKER_CONFIRM_MS = 300
+#: After a new talker is found, hand-overs are allowed for this long (ms).
+TALKER_OPEN_MS = 1500
+#: The seat print follows a talker who moves slowly, over about this long (ms
+#: of speech).
+TALKER_FOLLOW_MS = 2000
+#: While one talker goes on, the phone is moved once more only when the
+#: averaged seat print puts another phone this much (dB) above the current one:
+#: the hand-over in the open window can pick the wrong phone, and a whole turn
+#: on it would be heard from the far side of the room.
+SETTLE_DB = 3.0
+#: Envelopes are written divided by this, so gains up to TRACK_GAIN_MAX_DB fit a
+#: 16-bit wav; the mix multiplies it back (``envelope_scale``).
+ENVELOPE_SCALE_MAX = 10 ** (24.0 / 20)
+
+
+def frame_energies(path: str | Path, frame_ms: int = FRAME_MS) -> list[float]:
+    """Mean square per frame of a mono 16-bit wav."""
+    sample_rate, samples = beep._load_mono16(path)
+    size = max(1, int(sample_rate * frame_ms / 1000))
+    out = []
+    for start in range(0, len(samples) - size + 1, size):
+        segment = samples[start : start + size]
+        out.append(sum(map(mul, segment, segment)) / size)
+    return out
+
+
+def _moving_average(values: list[float], width: int) -> list[float]:
+    if width <= 1:
+        return list(values)
+    out = []
+    running = 0.0
+    for index, value in enumerate(values):
+        running += value
+        if index >= width:
+            running -= values[index - width]
+        out.append(running / min(index + 1, width))
+    return out
+
+
+def _percentile(values: list[float], fraction: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(fraction * len(ordered)))]
+
+
+def compute_gains(energies: list[list[float]], delays_ms: list[int]) -> list[list[float]]:
+    """Per-track gain curves, one value per FRAME_MS, **in each track's own time**.
+
+    ``energies`` are per track in its own time; ``delays_ms`` are the offsets
+    the mix will apply. Shares are decided on the merged timeline, where the
+    tracks line up, then handed back unshifted so they can be applied before
+    the delay.
+    """
+    count = len(energies)
+    if count <= 1:
+        return [[1.0] * len(values) for values in energies]
+    shifts = [max(0, delay) // FRAME_MS for delay in delays_ms]
+    width = max(1, SMOOTH_MS // FRAME_MS)
+    normalised = []
+    for values in energies:
+        smoothed = _moving_average(values, width)
+        reference = _percentile(smoothed, REFERENCE_PERCENTILE) or 1.0
+        normalised.append([value / reference for value in smoothed])
+
+    length = max(shift + len(values) for shift, values in zip(shifts, normalised))
+    floor = 10 ** (FLOOR_DB / 20)
+    attack = 1 - math.exp(-FRAME_MS / max(1, ATTACK_MS))
+    release = 1 - math.exp(-FRAME_MS / max(1, RELEASE_MS))
+    current = [1.0 / count] * count
+    aligned = [[0.0] * length for _ in range(count)]
+    for frame in range(length):
+        powers = []
+        for track in range(count):
+            position = frame - shifts[track]
+            values = normalised[track]
+            powers.append(values[position] if 0 <= position < len(values) else 0.0)
+        total = sum(powers)
+        for track in range(count):
+            share = powers[track] / total if total > 0 else 1.0 / count
+            target = max(floor, share)
+            rate = attack if target > current[track] else release
+            current[track] += (target - current[track]) * rate
+            aligned[track][frame] = current[track]
+
+    return [
+        aligned[track][shifts[track] : shifts[track] + len(energies[track])]
+        for track in range(count)
+    ]
+
+
+def _seat_print_db(values: list[float], reference: float) -> list[float]:
+    """Per-frame level averaged over TALKER_SMOOTH_MS, in dB against the
+    phone's typical speaking level (``reference``), for the seat print."""
+    smoothed = _moving_average(values, max(1, TALKER_SMOOTH_MS // FRAME_MS))
+    base = 10 * math.log10(max(reference, 1.0))
+    return [10 * math.log10(max(value, 1.0)) - base for value in smoothed]
+
+
+def compute_select_gains(
+    energies: list[list[float]],
+    delays_ms: list[int],
+    same_talker: bool | None = None,
+    stats: dict | None = None,
+) -> list[list[float]]:
+    """``select`` mode: one phone at a time, the others fully off.
+
+    Same inputs and output layout as :func:`compute_gains`. The decision runs
+    on the merged timeline on normalised energy (each phone against its own
+    typical speaking level, so a hot mic does not win every frame):
+
+    * the loudest phone takes over only when it beats the current one by
+      SWITCH_DB and the current one has been held for HOLD_MS;
+    * in silence (everyone under SPEECH_DB) the current phone is kept;
+    * with ``same_talker`` (AUTOMIX_SAME_TALKER) a hand-over is only allowed
+      shortly after the seat print changed -- one talker keeps one phone;
+    * a phone that has no audio at that instant (not started / already ended)
+      is dropped at once;
+    * hand-overs are a FADE_MS linear cross-fade.
+
+    ``stats``, when given, gets ``talkerChanges`` (new talkers found).
+    """
+    count = len(energies)
+    if count <= 1:
+        return [[1.0] * len(values) for values in energies]
+    sticky = SAME_TALKER_DEFAULT if same_talker is None else same_talker
+    shifts = [max(0, delay) // FRAME_MS for delay in delays_ms]
+    width = max(1, SMOOTH_MS // FRAME_MS)
+    normalised = []
+    prints: list[list[float]] = []
+    for values in energies:
+        smoothed = _moving_average(values, width)
+        reference = _percentile(smoothed, REFERENCE_PERCENTILE) or 1.0
+        normalised.append([value / reference for value in smoothed])
+        if sticky:
+            prints.append(_seat_print_db(values, reference))
+
+    length = max(shift + len(values) for shift, values in zip(shifts, normalised))
+    hold = max(0, HOLD_MS // FRAME_MS)
+    switch_ratio = 10 ** (SWITCH_DB / 10)  # energies are power
+    speech = 10 ** (SPEECH_DB / 10)
+    clear_speech = 10 ** (TALKER_SPEECH_DB / 10)
+    confirm = max(1, TALKER_CONFIRM_MS // FRAME_MS)
+    open_frames = max(1, TALKER_OPEN_MS // FRAME_MS)
+    follow = FRAME_MS / max(FRAME_MS, TALKER_FOLLOW_MS)
+    step = 1.0 / max(1, FADE_MS // FRAME_MS)
+    current: int | None = None
+    held = 0
+    talker: dict[int, float] | None = None  # seat print of who is talking now
+    disagree = 0
+    open_left = 0
+    ahead, ahead_track = 0, None  # another phone ahead on the seat print, for how long
+    changes = 0
+    gains_now = [0.0] * count
+    aligned = [[0.0] * length for _ in range(count)]
+    for frame in range(length):
+        powers: list[float | None] = []
+        for track in range(count):
+            position = frame - shifts[track]
+            values = normalised[track]
+            powers.append(values[position] if 0 <= position < len(values) else None)
+        present = [track for track in range(count) if powers[track] is not None]
+        seat: dict[int, float] | None = None
+        if sticky and present and max(powers[track] for track in present) >= clear_speech:
+            seat = {track: prints[track][frame - shifts[track]] for track in present}
+            if talker is None:
+                talker, open_left = dict(seat), open_frames
+            else:
+                common = [track for track in present if track in talker]
+                diffs = [seat[track] - talker[track] for track in common]
+                moved = max(diffs) - min(diffs) if len(diffs) >= 2 else 0.0
+                if moved > TALKER_DB:
+                    disagree += 1
+                    if disagree >= confirm:
+                        talker, disagree, open_left = dict(seat), 0, open_frames
+                        changes += 1
+                else:
+                    disagree = 0
+                    for track in present:
+                        old = talker.get(track, seat[track])
+                        talker[track] = old + (seat[track] - old) * follow
+        opened = open_left > 0
+        open_left = max(0, open_left - 1)
+        if present:
+            best = max(present, key=lambda track: powers[track])
+            if current is None or powers[current] is None:
+                current, held = best, 0
+            elif not sticky:
+                if best != current and held >= hold and powers[best] >= speech:
+                    if powers[best] >= max(powers[current], 1e-12) * switch_ratio:
+                        current, held = best, 0
+            elif held < hold:
+                pass
+            elif opened and seat is not None and current in seat:
+                # A new talker: hand over on the seat print (TALKER_SMOOTH_MS),
+                # not on one 50 ms level, and only when the other phone stays
+                # ahead for TALKER_CONFIRM_MS -- a far phone's echo tail at the
+                # end of a word can be ahead for a moment.
+                near = max(seat, key=seat.__getitem__)
+                if near != current and seat[near] - seat[current] >= SWITCH_DB:
+                    ahead = ahead + 1 if near == ahead_track else 1
+                    ahead_track = near
+                    if ahead >= confirm:
+                        current, held, ahead, ahead_track = near, 0, 0, None
+                else:
+                    ahead, ahead_track = 0, None
+            elif talker is not None and current in talker:
+                # Same talker, wrong phone: the averaged seat print says another
+                # phone is clearly closer (the open window can miss it).
+                home = max((track for track in present if track in talker),
+                           key=talker.__getitem__, default=current)
+                if home != current and talker[home] - talker[current] >= SETTLE_DB:
+                    current, held = home, 0
+        held += 1
+        for track in range(count):
+            target = 1.0 if track == current else 0.0
+            if gains_now[track] < target:
+                gains_now[track] = min(target, gains_now[track] + step)
+            elif gains_now[track] > target:
+                gains_now[track] = max(target, gains_now[track] - step)
+            aligned[track][frame] = gains_now[track]
+
+    if stats is not None:
+        stats["sameTalker"] = sticky
+        if sticky:
+            stats["talkerChanges"] = changes
+    return [
+        aligned[track][shifts[track] : shifts[track] + len(energies[track])]
+        for track in range(count)
+    ]
+
+
+def selection_summary(gains: list[list[float]], delays_ms: list[int]) -> dict:
+    """Share of the merged time each track was the one heard (%) and how many
+    hand-overs happened -- for the response and the log."""
+    shifts = [max(0, delay) // FRAME_MS for delay in delays_ms]
+    length = max((shift + len(values) for shift, values in zip(shifts, gains)), default=0)
+    owner: list[int | None] = []
+    for frame in range(length):
+        best, best_gain = None, 0.5
+        for track, (shift, values) in enumerate(zip(shifts, gains)):
+            position = frame - shift
+            if 0 <= position < len(values) and values[position] > best_gain:
+                best, best_gain = track, values[position]
+        owner.append(best)
+    heard = [sum(1 for value in owner if value == track) for track in range(len(gains))]
+    switches = sum(
+        1 for previous, now in zip(owner, owner[1:])
+        if now is not None and previous is not None and now != previous
+    )
+    total = max(1, length)
+    return {
+        "heardPct": [round(100.0 * count / total, 1) for count in heard],
+        "switches": switches,
+    }
+
+
+def speech_level_db(energies: list[float], start_ms: int = 0, end_ms: int | None = None) -> float | None:
+    """Speech level (dBFS) of one track from its FRAME_MS energies, over
+    ``[start_ms, end_ms)`` of the track's own time. None when there is too
+    little audio to judge."""
+    first = max(0, start_ms // FRAME_MS)
+    last = len(energies) if end_ms is None else max(first, min(len(energies), end_ms // FRAME_MS))
+    smoothed = _moving_average(energies[first:last], max(1, SMOOTH_MS // FRAME_MS))
+    if len(smoothed) < 100:  # under a second
+        return None
+    level = _percentile(smoothed, TRACK_LEVEL_PERCENTILE)
+    if level <= 0:
+        return None
+    return 10 * math.log10(level / 32768.0 ** 2)
+
+
+#: A phone's noise floor is this percentile of its 50 ms levels: the pauses.
+NOISE_FLOOR_PERCENTILE = 0.1
+
+
+def noise_floor_db(energies: list[float]) -> float | None:
+    """Noise floor (dBFS) of one track from its FRAME_MS energies, for
+    ``audio.denoise_filter``. None when silent or too short to judge."""
+    smoothed = _moving_average(energies, max(1, SMOOTH_MS // FRAME_MS))
+    if len(smoothed) < 100:
+        return None
+    level = _percentile(smoothed, NOISE_FLOOR_PERCENTILE)
+    if level <= 0:
+        return None
+    return round(10 * math.log10(level / 32768.0 ** 2), 1)
+
+
+def track_gains_db(
+    tracks: list[Path],
+    delays_ms: list[int] | None,
+    trim_start_seconds: float | None,
+    trim_end_seconds: float | None,
+    target_db: float | None = None,
+    max_db: float | None = None,
+) -> tuple[list[float], list[float | None]]:
+    """Fixed gain per track that brings its speech level to ``target_db``,
+    clamped to +-``max_db``. Measured only over the part that ends up in the
+    result (after the start trim, before the end trim), so sync sounds and the
+    pre-meeting chatter do not count. Returns (gains, measured levels)."""
+    target = TRACK_GAIN_TARGET_DB if target_db is None else target_db
+    limit = TRACK_GAIN_MAX_DB if max_db is None else max_db
+    delays = list(delays_ms) if delays_ms is not None else [0] * len(tracks)
+    gains: list[float] = []
+    levels: list[float | None] = []
+    for path, delay in zip(tracks, delays):
+        # Merged time t is track time t - delay.
+        start = int((trim_start_seconds or 0) * 1000) - max(0, delay)
+        end = None
+        if trim_end_seconds and trim_end_seconds > 0:
+            end = int(trim_end_seconds * 1000) - max(0, delay)
+        level = speech_level_db(frame_energies(path), max(0, start), end)
+        levels.append(None if level is None else round(level, 1))
+        gain = 0.0 if level is None else max(-limit, min(limit, target - level))
+        gains.append(round(gain, 1))
+    return gains, levels
+
+
+def segments(gains: list[float], shift: int) -> list[tuple[int, int]]:
+    """Stretches (merged frames, end exclusive) where a track is the one heard."""
+    out: list[tuple[int, int]] = []
+    start = None
+    for index, value in enumerate(gains):
+        if value > 0.5 and start is None:
+            start = index
+        elif value <= 0.5 and start is not None:
+            out.append((shift + start, shift + index))
+            start = None
+    if start is not None:
+        out.append((shift + start, shift + len(gains)))
+    return out
+
+
+def match_levels(
+    energies: list[list[float]],
+    gains: list[list[float]],
+    delays_ms: list[int],
+    trim_start_seconds: float | None = None,
+    trim_end_seconds: float | None = None,
+    target_db: float | None = None,
+    max_db: float | None = None,
+    window_ms: int | None = None,
+) -> tuple[list[list[float]], dict]:
+    """Scale select gains so each heard stretch sits at ``target_db``.
+
+    ``energies`` and ``gains`` are per track in its own time (as
+    :func:`compute_select_gains` returns them). The gain of a stretch holds from
+    the fade into it to the fade out of it, so hand-overs stay FADE_MS
+    cross-fades between two already-matched levels. Returns the new gains and a
+    summary (stretches, how many fell back, spread of the applied gains)."""
+    target = TRACK_GAIN_TARGET_DB if target_db is None else target_db
+    limit = TRACK_GAIN_MAX_DB if max_db is None else max_db
+    half = max(1000, window_ms or LEVEL_MATCH_WINDOW_MS) // FRAME_MS // 2
+    width = max(1, SMOOTH_MS // FRAME_MS)
+    shifts = [max(0, delay) // FRAME_MS for delay in delays_ms]
+    full = 32768.0 ** 2
+    out: list[list[float]] = []
+    applied: list[float] = []
+    fallback = 0
+    for track, (values, curve) in enumerate(zip(energies, gains)):
+        smoothed = _moving_average(values, width)
+        shift = shifts[track]
+        # Whole-meeting gain of this phone, over the part that is kept.
+        start = int((trim_start_seconds or 0) * 1000) // FRAME_MS - shift
+        end = None
+        if trim_end_seconds and trim_end_seconds > 0:
+            end = int(trim_end_seconds * 1000) // FRAME_MS - shift
+        kept = smoothed[max(0, start):end] or smoothed
+        whole = _percentile(kept, TRACK_LEVEL_PERCENTILE)
+        whole_db = 10 * math.log10(whole / full) if whole > 0 else None
+        base = 0.0 if whole_db is None else max(-limit, min(limit, target - whole_db))
+        quiet = whole * 10 ** (SPEECH_DB / 10)
+        factor = [10 ** (base / 20)] * len(curve)
+        stretches = segments(curve, 0)
+        for first, last in stretches:
+            centre = (first + last) // 2
+            lo = max(0, min(first, centre - half))
+            hi = min(len(smoothed), max(last, centre + half))
+            level = _percentile(smoothed[lo:hi], TRACK_LEVEL_PERCENTILE)
+            if whole_db is None or level <= 0 or level < quiet:
+                gain_db = base
+                fallback += 1
+            else:
+                gain_db = max(-limit, min(limit, target - 10 * math.log10(level / full)))
+            applied.append(gain_db)
+            # Hold from where the previous stretch ended to where the next begins.
+            factor_value = 10 ** (gain_db / 20)
+            for index in range(first, last):
+                factor[index] = factor_value
+            # Fades on either side take this stretch's gain too.
+            tail = first - 1
+            while tail >= 0 and 0.0 < curve[tail] <= 0.5:
+                factor[tail] = factor_value
+                tail -= 1
+            head = last
+            while head < len(curve) and 0.0 < curve[head] <= 0.5:
+                factor[head] = factor_value
+                head += 1
+        out.append([g * f for g, f in zip(curve, factor)])
+    summary: dict = {"stretches": len(applied), "fallback": fallback}
+    if applied:
+        ordered = sorted(applied)
+        summary["gainDb"] = {
+            "min": round(ordered[0], 1),
+            "median": round(ordered[len(ordered) // 2], 1),
+            "max": round(ordered[-1], 1),
+        }
+    return out, summary
+
+
+def envelope_scale(gains: list[list[float]]) -> float:
+    """What the envelopes must be divided by to fit a 16-bit wav (>= 1)."""
+    peak = max((max(values, default=0.0) for values in gains), default=0.0)
+    return min(ENVELOPE_SCALE_MAX, max(1.0, peak))
+
+
+def write_envelope(path: str | Path, gains: list[float], scale: float = 1.0) -> Path:
+    """Gains as a mono 16-bit wav at 1000 / FRAME_MS Hz, for ffmpeg to upsample.
+    Written divided by ``scale``; the mix multiplies it back."""
+    # One extra frame: the track's last partial frame would otherwise fall off
+    # the end, since amultiply stops with its shorter input.
+    padded = list(gains) + gains[-1:]
+    values = array("h", (max(0, min(32767, int(round(g / scale * 32767)))) for g in padded))
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(1000 // FRAME_MS)
+        handle.writeframes(values.tobytes())
+    return Path(path)
+
+
+def build_envelopes(
+    tracks: list[Path],
+    delays_ms: list[int] | None,
+    work_dir: Path,
+    mode: str | None = None,
+    level_match: bool | None = None,
+    trim_start_seconds: float | None = None,
+    trim_end_seconds: float | None = None,
+) -> tuple[list[Path], dict]:
+    """Compute and write one gain envelope per track (``mode`` defaults to
+    AUTOMIX_MODE, ``level_match`` to AUTOMIX_LEVEL_MATCH, select only).
+    Returns their paths and a summary for the response; ``summary["scale"]``
+    is what the mix must multiply the envelopes by."""
+    mode = mode or MODE
+    match = LEVEL_MATCH_DEFAULT if level_match is None else level_match
+    delays = list(delays_ms) if delays_ms is not None else [0] * len(tracks)
+    energies = [frame_energies(path) for path in tracks]
+    if mode == MODE_SHARE:
+        gains = compute_gains(energies, delays)
+        summary = {"mode": MODE_SHARE}
+    else:
+        talk: dict = {}
+        gains = compute_select_gains(energies, delays, stats=talk)
+        summary = {"mode": MODE_SELECT, **selection_summary(gains, delays), **talk}
+        if match:
+            gains, matched = match_levels(energies, gains, delays,
+                                          trim_start_seconds, trim_end_seconds)
+            summary["levelMatch"] = matched
+    scale = envelope_scale(gains)
+    paths = [
+        write_envelope(work_dir / f"automix_{index}.wav", values, scale)
+        for index, values in enumerate(gains)
+    ]
+    summary["scale"] = round(scale, 4)
+    return paths, summary
