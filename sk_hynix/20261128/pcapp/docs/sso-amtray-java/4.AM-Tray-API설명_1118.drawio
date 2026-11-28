@@ -1,0 +1,13 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="4. AM-Tray API 설명" id="d1">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="c1" value="AM-Tray API 설명" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=top;fontSize=18;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="800" height="30" as="geometry"/></mxCell>
+        <mxCell id="c2" value="1) API 의 BOOL return 값은 AM-Tray Service 와의 통신 성공/실패 여부를 의미&lt;br&gt;&lt;br&gt;2) API 동작 결과는 응답코드 (변수명: lpReturnCode) 로 확인&lt;br&gt;&lt;br&gt;3) 연동 대상 시스템의 개발언어에 따라 cpp or C# dll 을 제공&lt;br&gt;&lt;br&gt;4) getSystemToken API 에서 SSO key 는 연동 대상 SSO 서버 설정값에 대한 정보이며&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;API 명세에 표기된 값을 고정으로 사용&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;ex) Prod_CASSO (운영), Dev_CASSO (개발)&lt;br&gt;&lt;br&gt;5) getSystemToken API 에서 strTraySID 는 AM-Tray 에서 시스템 식별을 위해 필요한 값으로&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;연동 시스템의 세션 등을 관리하기 위해 AM-Tray 내부에서 사용하기 위한 값 : 발급받음&lt;br&gt;&lt;br&gt;6) getSystemToken API 에서 strSystemCode 는 SSO 에서 연동 시스템 인가, 검증 수행을 위해 필요한 값 (발급받음)&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;└ myaccess 와 함께 연동 테스트 — AM 관리… 🔸" style="shape=note;size=14;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" vertex="1" parent="1"><mxGeometry x="0" y="45" width="820" height="300" as="geometry"/></mxCell>
+        <mxCell id="c3" value="손글씨(11-18, company_images/1000008661) 그대로 옮김. 🔸 = 글씨를 확실히 못 읽은 곳 — 고쳐 주세요." style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1"><mxGeometry x="0" y="360" width="820" height="20" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
